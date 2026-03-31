@@ -633,7 +633,7 @@ export default function App() {
 
     // AI mode
     const liveKey = localStorage.getItem("intake-apikey") || "";
-    if (!apiKey) {
+    if (!liveKey) {
       setAiError("No API key set. Go to ⚙ Settings and add your Anthropic API key.");
       return;
     }
@@ -649,7 +649,7 @@ export default function App() {
       const response = await Promise.race([
         fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: getApiHeaders(),
+          headers: getApiHeaders(liveKey),
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 3000,
