@@ -124,41 +124,22 @@ const PRODUCTS = ["Starter Kit Black", "Starter Kit Clear", "Mouth Tape", "Case"
 
 const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge", "Unboxing / First Impressions", "Lifestyle / Routine", "Before & After", "Storytelling / Testimonial", "ASMR / Satisfying"];
 
-const AUDIENCES = [
-  { label: "Young Adults (18–25) — TikTok native", value: "Men & women 18-25 on TikTok. Trend-driven, skeptical of ads, loves challenges and authentic reactions. They scroll fast and need a reason to stop." },
-  { label: "Adults (25–40) — Sleep & wellness", value: "Men & women 25-40 interested in sleep quality and wellness. They've tried nasal strips, mouth tape, or nothing. Open to new solutions but need proof it works." },
-  { label: "Athletes & Fitness", value: "Active men & women 18-40 who train regularly. They care about airflow, recovery, and performance. They've seen nose strips on athletes and are curious about something better." },
-  { label: "Snorers & Partners of Snorers", value: "Adults 30-50 who snore or share a bed with someone who does. They're frustrated, have tried everything, and are skeptical but desperate for something that actually works." },
-  { label: "Allergy Sufferers", value: "Adults 20-45 dealing with seasonal allergies and nasal congestion. They rely on meds but want a drug-free option that helps them breathe easier, especially at night." },
-  { label: "Mouth Breathers / Mouth Tape Curious", value: "Health-conscious adults 20-40 who've heard about the benefits of nasal breathing and mouth taping. They want to stop mouth breathing at night but need something that actually opens the nose." },
-  { label: "Custom", value: "" },
-];
-
-const PROBLEMS = [
-  { label: "Think it's one-size-fits-all / won't fit", value: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose." },
-  { label: "Think it's just a nasal strip", value: "People lump Intake in with flimsy nasal strips. They don't understand it uses magnets to physically hold the nose open from the outside — it's a completely different category." },
-  { label: "Skeptical it actually works", value: "They've seen it in their feed but think it's gimmicky. They need real reactions and real proof to believe a little magnetic band can actually change how they breathe." },
-  { label: "Don't know it's reusable", value: "People assume it's disposable like strips — use once, throw away. They don't realize the band is reusable and you only replace the cheap adhesive tabs." },
-  { label: "Embarrassed by how it looks", value: "They think it looks weird on their face. They need to see real people wearing it confidently — and the Clear option exists for people who want something invisible." },
-  { label: "Snoring — tried everything, nothing works", value: "They've tried strips, sprays, pillows, even mouth guards. Nothing sticks (literally). They're frustrated and skeptical that anything new will be different." },
-  { label: "Mouth breathing but don't know how to fix it", value: "They know mouth breathing is bad but can't seem to stop, especially at night. They need something that makes nasal breathing easy and automatic." },
-  { label: "Custom", value: "" },
-];
+const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"];
+const GENDERS = ["Men & Women", "Men", "Women"];
 
 const STAT_OPTIONS = [
   { id: "snoring", label: "88% reduced snoring", full: "88% of users reported reduced snoring (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "sleep", label: "87% deeper sleep", full: "87% of users reported deeper, more restful sleep (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "sinus", label: "92% sinus pressure relief", full: "92% of users reported sinus pressure relief (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "breathe", label: "96% easier breathing night one", full: "96% of users reported easier breathing from night one (SleepScore Labs, 840+ nights, Dec 2024)" },
+  { id: "sleep", label: "87% deeper sleep", full: "87% reported deeper, more restful sleep (SleepScore Labs, 840+ nights, Dec 2024)" },
+  { id: "sinus", label: "92% sinus pressure relief", full: "92% reported sinus pressure relief (SleepScore Labs, 840+ nights, Dec 2024)" },
+  { id: "breathe", label: "96% easier breathing night one", full: "96% reported easier breathing from night one (SleepScore Labs, 840+ nights, Dec 2024)" },
   { id: "congestion", label: "41% less nasal congestion", full: "41% reduction in perceived nasal congestion (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "expansion", label: "88%+ nasal passageway expansion", full: "Expands nasal passageway by over 88%" },
-  { id: "sizes", label: "4 sizes fit 90% of noses", full: "Fits 90% of noses with 4 included sizes" },
-  { id: "customers", label: "1,000,000+ customers", full: "Trusted by over 1,000,000 customers" },
-  { id: "fda", label: "FDA registered / Made in USA", full: "FDA registered, medical grade, hypoallergenic, latex-free, made in USA" },
-  { id: "athletes", label: "Built for motocross athletes", full: "Originally designed for professional motocross athletes" },
+  { id: "expansion", label: "Over 88% nasal passageway expansion", full: "Expands nasal passageway by over 88%" },
+  { id: "sizes", label: "4 sizes fit 90% of noses", full: "Starter Kit includes 4 sizes that fit 90% of noses" },
+  { id: "customers", label: "1,000,000+ customers", full: "Over 1,000,000 customers worldwide" },
+  { id: "fda", label: "FDA registered, made in USA", full: "FDA registered, medical grade, hypoallergenic, latex-free, made in USA" },
 ];
 
-const APPROVED_CLAIMS = ["Keeps my nose open all night", "Drug-free, nothing wears off", "Easier to breathe through my nose", "Helps me sleep through allergy season", "Physically opens your nasal passages", "Comes with 4 sizes to fit your nose", "Magnetic — stays on all night", "Sweat-proof, won't fall off", "Built for athletes, loved by everyone", "Reusable band, just replace the tabs", "90-day risk-free trial"];
+const APPROVED_CLAIMS = ["Keeps my nose open all night", "Drug-free, nothing wears off", "Easier to breathe through my nose", "Helps me sleep through allergy season", "Physically opens your nasal passages", "Comes with 4 sizes to fit your nose", "Magnetic — stays on all night", "Sweat-proof, won't fall off", "Built for athletes, loved by everyone", "Originally designed for professional motocross athletes", "Reusable band, just replace the tabs", "90-day risk-free trial"];
 const BANNED_CLAIMS = ['"Treats allergies" or "allergy cure"', '"Clears congestion" or "decongestant"', '"Replaces your allergy medication"', '"Clinically proven" (without SleepScore citation)', '"Medical device" (it\'s FDA registered, not cleared/approved)', '"Guarantees fit" — say "fits 90% of noses" instead', 'Any medical diagnosis language', '"Cures" anything'];
 const DISCLOSURE = "Source: SleepScore Labs Independent Study, 840+ nights analyzed, Dec 2024. Must appear as text overlay or in caption any time a stat is referenced.";
 
@@ -169,15 +150,16 @@ const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educationa
 const PREFILL = {
   productName: "Starter Kit Black", campaignName: "The Level Up", vibe: "Fun & Entertaining",
   mission: "Four sizes. One that's perfect for you. How far can you level up?",
-  audienceKey: 0, problemKey: 0, customAudience: "", customProblem: "",
-  selectedStats: ["snoring", "sleep", "expansion", "sizes", "customers", "fda", "athletes"],
+  ageRange: "25-34", gender: "Men & Women",
+  problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
+  selectedStats: ["snoring", "sleep", "expansion", "sizes", "customers", "fda"],
   platform: "TikTok", videoLength: "15-30s", tone: "Funny & casual",
   notes: "Creator tries each level 1→4 on camera. Quick cuts. Reaction-driven. Each level opens the nose wider. Payoff is Level 4 where their nose opens WIDE and the genuine reaction IS the content.\n\nHook ideas: 'I don't even know if I can make it to Level 4' / 'This comes with FOUR sizes??' / 'Level 1 was easy... Level 4 broke me.'\n\nThe Level Up isn't about needing Level 4 — it's about finding YOUR level. But the entertainment value is the journey to 4. Keep it fun, not medical. Show the magnetic snap-on moment — it's satisfying and shareable.",
 };
 
 const DEFAULTS = {
   productName: "Starter Kit Black", campaignName: "", vibe: "Fun & Entertaining", mission: "",
-  audienceKey: 0, problemKey: 0, customAudience: "", customProblem: "",
+  ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sizes", "customers", "fda"],
   platform: "TikTok", videoLength: "15-30s", tone: "Real & relatable", notes: "",
 };
@@ -219,15 +201,15 @@ const PERSONAS = ["The Curious Scroller", "The Skeptical Shopper", "The Scroll-P
 function generateBrief(d) {
   const fullProduct = d.productName === "Other" ? "Intake Breathing" : `Intake Breathing — ${d.productName}`;
   const mission = d.mission || `Discover what ${fullProduct} can do for you.`;
-  const audObj = AUDIENCES[d.audienceKey];
-  const audienceText = audObj.label === "Custom" ? d.customAudience : audObj.value;
-  const ageMatch = audienceText.match(/(\d{1,2}\s*[-–]\s*\d{1,2})/);
-  const age = ageMatch ? ageMatch[1].replace(/\s/g, "") : "18-44";
-  const probObj = PROBLEMS[d.problemKey];
-  const problemText = probObj.label === "Custom" ? d.customProblem : probObj.value;
+  const ageRange = d.ageRange || "25-34";
+  const genderLabel = d.gender || "Men & Women";
+  const age = `${ageRange} · ${genderLabel}`;
+  const problemText = (d.problem || d.customProblem || "").trim();
   const problemSentences = splitSentences(problemText);
   const persona = PERSONAS[Math.floor(Math.random() * PERSONAS.length)];
-  const psycho = audienceText.length > 20 ? audienceText : "They've seen the product in their feed but haven't pulled the trigger. Open-minded but need proof. They trust real people over polished ads.";
+  const psycho = problemText.length > 20
+    ? `Target: ${genderLabel}, ages ${ageRange}. ${problemText}`
+    : `Target: ${genderLabel}, ages ${ageRange}. They've seen the product in their feed but haven't pulled the trigger. Open-minded but need proof. They trust real people over polished ads.`;
   const isStarterKit = d.productName.startsWith("Starter Kit");
   const isMouthTape = d.productName === "Mouth Tape";
   const solBase = isStarterKit ? "The Starter Kit includes 4 sizes that fit 90% of noses. Each level opens your nose wider. It's magnetic, reusable, and stays on all night." : isMouthTape ? "Intake Mouth Tape keeps your mouth closed so you breathe through your nose all night. Pair with the nasal dilator for max airflow." : `${fullProduct} is part of the Intake Breathing system for better nasal breathing.`;
@@ -248,7 +230,7 @@ function generateBrief(d) {
   const proof = d.selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean);
   const platNotes = (PLATFORM_NOTES[d.platform] || "") + "\n\n" + (LENGTH_GUIDE[d.videoLength] || "");
   const deliverables = `Submit: (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
-  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["1,000,000+ customers", "FDA registered", "Made in USA", "90-day risk-free trial"], platNotes, deliverables };
+  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["Over 1,000,000 customers worldwide", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial", "Expands nasal passageway by over 88%"], platNotes, deliverables };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -257,16 +239,15 @@ function generateBrief(d) {
 
 const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const { t, S } = useContext(ThemeContext);
-  const [audienceKey, setAudienceKey] = useState(prefill ? prefill.audienceKey : 0);
-  const [problemKey, setProblemKey] = useState(prefill ? prefill.problemKey : 0);
+  const [ageRange, setAgeRange] = useState(prefill?.ageRange ?? DEFAULTS.ageRange);
+  const [gender, setGender] = useState(prefill?.gender ?? DEFAULTS.gender);
   const [selectedStats, setSelectedStats] = useState(prefill ? [...prefill.selectedStats] : [...DEFAULTS.selectedStats]);
   const vals = useRef({
     productName: prefill?.productName || DEFAULTS.productName,
     campaignName: prefill?.campaignName || DEFAULTS.campaignName,
     vibe: prefill?.vibe || DEFAULTS.vibe,
     mission: prefill?.mission || "",
-    customAudience: prefill?.customAudience || "",
-    customProblem: prefill?.customProblem || "",
+    problem: prefill?.problem ?? DEFAULTS.problem,
     platform: prefill?.platform || DEFAULTS.platform,
     videoLength: prefill?.videoLength || DEFAULTS.videoLength,
     tone: prefill?.tone || DEFAULTS.tone,
@@ -275,22 +256,21 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   const go = useCallback((mode) => {
     const v = vals.current;
-    if (AUDIENCES[audienceKey].label === "Custom" && !v.customAudience.trim()) { alert("Please describe your target audience."); return; }
-    if (PROBLEMS[problemKey].label === "Custom" && !v.customProblem.trim()) { alert("Please describe the core problem."); return; }
+    if (!v.problem.trim()) { alert("Please describe the core problem."); return; }
+    const problemTrim = v.problem.trim();
     onGenerate({
       mode,
       productName: v.productName, campaignName: v.campaignName, vibe: v.vibe, mission: v.mission,
-      audienceKey, problemKey, customAudience: v.customAudience, customProblem: v.customProblem,
+      ageRange, gender, problem: problemTrim,
       selectedStats, platform: v.platform, videoLength: v.videoLength, tone: v.tone, notes: v.notes,
-      // Resolved text for AI prompt
-      _audience: AUDIENCES[audienceKey].label === "Custom" ? v.customAudience : AUDIENCES[audienceKey].value,
-      _problem: PROBLEMS[problemKey].label === "Custom" ? v.customProblem : PROBLEMS[problemKey].value,
+      _audience: `Ages ${ageRange} — ${gender}`,
+      _problem: problemTrim,
       _stats: selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean).join(". "),
       _approved: APPROVED_CLAIMS.join(". "),
       _banned: BANNED_CLAIMS.join(". "),
       _disclosure: DISCLOSURE,
     });
-  }, [onGenerate, audienceKey, problemKey, selectedStats]);
+  }, [onGenerate, ageRange, gender, selectedStats]);
   const mkSel = (key, label, opts) => (
     <div style={S.fg}><label style={S.label}>{label}</label>
       <select style={S.select} defaultValue={vals.current[key]} onChange={e=>{vals.current[key]=e.target.value}}>
@@ -317,20 +297,21 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>👤 Audience & Problem</div>
-        <div style={S.fg}><label style={S.label}>Target Audience</label>
-          <select style={S.select} value={audienceKey} onChange={e=>setAudienceKey(Number(e.target.value))}>
-            {AUDIENCES.map((a,i)=><option key={i} value={i}>{a.label}</option>)}
-          </select>
-          {AUDIENCES[audienceKey].label !== "Custom" && <div style={S.hint}>{AUDIENCES[audienceKey].value}</div>}
+        <div style={S.r2}>
+          <div style={S.fg}><label style={S.label}>Age Range</label>
+            <select style={S.select} value={ageRange} onChange={e=>setAgeRange(e.target.value)}>
+              {AGE_RANGES.map((a)=><option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div style={S.fg}><label style={S.label}>Gender</label>
+            <select style={S.select} value={gender} onChange={e=>setGender(e.target.value)}>
+              {GENDERS.map((g)=><option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
         </div>
-        {AUDIENCES[audienceKey].label === "Custom" && <div style={S.fg}><textarea style={S.textarea} defaultValue={vals.current.customAudience} onChange={e=>{vals.current.customAudience=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="Describe your target audience" rows={3} /></div>}
-        <div style={S.fg}><label style={S.label}>Core Problem</label>
-          <select style={S.select} value={problemKey} onChange={e=>setProblemKey(Number(e.target.value))}>
-            {PROBLEMS.map((p,i)=><option key={i} value={i}>{p.label}</option>)}
-          </select>
-          {PROBLEMS[problemKey].label !== "Custom" && <div style={S.hint}>{PROBLEMS[problemKey].value}</div>}
+        <div style={S.fg}><label style={S.label}>Core Problem *</label>
+          <textarea style={S.textarea} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="What misconception, frustration, or emotional block are we solving? Write it like you'd explain it to a creator." rows={4} />
         </div>
-        {PROBLEMS[problemKey].label === "Custom" && <div style={S.fg}><textarea style={S.textarea} defaultValue={vals.current.customProblem} onChange={e=>{vals.current.customProblem=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="The misconception or emotional block" rows={3} /></div>}
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>📊 Proof Points — tap to include</div>
@@ -373,6 +354,23 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
 // BRIEF DISPLAY
 // ═══════════════════════════════════════════════════════════
 
+function EditableField({ value, style, t }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && ref.current.textContent !== value) ref.current.textContent = value ?? "";
+  }, [value]);
+  return (
+    <div
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      style={{ ...style, cursor: "text", outline: "none", borderBottom: "1px dashed transparent" }}
+      onFocus={(e) => { e.target.style.borderBottomColor = t.green + "50"; }}
+      onBlur={(e) => { e.target.style.borderBottomColor = "transparent"; }}
+    />
+  );
+}
+
 function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenerateAI }) {
   const { t, S } = useContext(ThemeContext);
   const wasAI = fd.mode === "ai";
@@ -388,7 +386,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
       </div>
       <div style={S.bHeader}>
         <div style={S.bCampaign}>{fd.campaignName || fd.productName}</div>
-        <div style={S.bMission}>"{b.mission}"</div>
+        <EditableField value={`"${b.mission}"`} style={S.bMission} t={t} />
         <div style={S.badges}>
           <span style={S.badge(t.text)}>{fd.productName}</span>
           <span style={S.badge(t.purple)}>{fd.vibe}</span>
@@ -396,16 +394,17 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
           <span style={S.badge(t.orange)}>{fd.videoLength}</span>
           <span style={S.badge(t.green)}>{fd.tone}</span>
         </div>
+        <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>👤 Who You're Talking To</div>
         <div style={S.card}>
-          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: t.text }}>{b.persona}</div>
-          <div style={{ fontSize: 13, color: t.blue, fontWeight: 600, marginBottom: 10 }}>{b.age}</div>
-          <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 16 }}>{b.psycho}</div>
+          <EditableField value={b.persona} style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: t.text }} t={t} />
+          <EditableField value={b.age} style={{ fontSize: 13, color: t.blue, fontWeight: 600, marginBottom: 10 }} t={t} />
+          <EditableField value={b.psycho} style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 16 }} t={t} />
           <div style={S.cols2}>
-            <div><div style={S.sayH(t.green)}>They Are ✓</div>{b.theyAre.map((x,i)=><div key={i} style={S.li}><span style={S.mk(t.green)}>✓</span>{x}</div>)}</div>
-            <div><div style={S.sayH(t.red)}>They Are Not ✗</div>{b.theyAreNot.map((x,i)=><div key={i} style={S.li}><span style={S.mk(t.red)}>✗</span>{x}</div>)}</div>
+            <div><div style={S.sayH(t.green)}>They Are ✓</div>{b.theyAre.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+            <div><div style={S.sayH(t.red)}>They Are Not ✗</div>{b.theyAreNot.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
           </div>
         </div>
       </div>
@@ -418,41 +417,41 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         ].map(bt=>(
           <div key={bt.label} style={S.beat(bt.color)}>
             <div style={S.beatLabel(bt.color)}>{bt.label}</div>
-            <div style={S.beatInst}>{bt.inst}</div>
+            <EditableField value={bt.inst} style={S.beatInst} t={t} />
             <div style={S.beatSub}>Lines to riff on</div>
-            {bt.lines.map((l,i)=><div key={i} style={S.beatLine}>"{l}"</div>)}
+            {bt.lines.map((l,i)=><EditableField key={i} value={`"${l}"`} style={S.beatLine} t={t} />)}
             <div style={{ ...S.beatSub, marginTop: 12 }}>Overlay ideas</div>
-            {bt.overlays.map((o,i)=><div key={i} style={{ ...S.beatLine, borderLeftColor: bt.color+"40" }}>{o}</div>)}
+            {bt.overlays.map((o,i)=><div key={i} style={{ marginBottom: 4 }}><EditableField value={o} style={{ ...S.beatLine, borderLeftColor: bt.color+"40" }} t={t} /></div>)}
           </div>
         ))}
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>🪝 Hook Options — First 3 Seconds</div>
         <div style={{ fontSize: 12, color: t.textFaint, fontStyle: "italic", marginBottom: 14 }}>If they don't feel it here, they scroll.</div>
-        <div style={S.card}>{b.hooks.map((h,i)=>(<div key={i} style={S.hookItem}><div style={S.hookNum}>{i+1}</div><div style={S.hookText}>{h}</div></div>))}</div>
+        <div style={S.card}>{b.hooks.map((h,i)=>(<div key={i} style={S.hookItem}><div style={S.hookNum}>{i+1}</div><EditableField value={h} style={S.hookText} t={t} /></div>))}</div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>✅ Say This / 🚫 Not This</div>
         <div style={S.cols2}>
-          <div style={S.sayCol}><div style={S.sayH(t.green)}>✅ Say This</div>{b.sayThis.map((s,i)=><div key={i} style={S.li}><span style={S.mk(t.green)}>✓</span>{s}</div>)}</div>
-          <div style={S.dontCol}><div style={S.sayH(t.red)}>🚫 Not This</div>{b.notThis.map((s,i)=><div key={i} style={S.li}><span style={S.mk(t.red)}>✗</span>{s}</div>)}</div>
+          <div style={S.sayCol}><div style={S.sayH(t.green)}>✅ Say This</div>{b.sayThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+          <div style={S.dontCol}><div style={S.sayH(t.red)}>🚫 Not This</div>{b.notThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
         </div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📊 Proof Points</div>
-        <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}>{p}</div>)}</div>
+        <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}><EditableField value={p} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5, width: "100%" }} t={t} /></div>)}</div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>⚠️ Required Disclosure — Non-Negotiable</div>
-        <div style={S.discBox}><div style={S.discLabel}>Must appear when any stat is referenced</div><div style={S.discText}>{b.disclosure}</div></div>
+        <div style={S.discBox}><div style={S.discLabel}>Must appear when any stat is referenced</div><EditableField value={b.disclosure} style={S.discText} t={t} /></div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📱 Platform Notes</div>
-        <div style={S.card}><div style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-line" }}>{b.platNotes}</div></div>
+        <div style={S.card}><EditableField value={b.platNotes} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }} t={t} /></div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📦 Deliverables</div>
-        <div style={S.card}><div style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6 }}>{b.deliverables}</div></div>
+        <div style={S.card}><EditableField value={b.deliverables} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6 }} t={t} /></div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📤 Creator Submissions</div>
@@ -467,14 +466,17 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 // ═══════════════════════════════════════════════════════════
 
 function buildAIPrompt(d) {
+  const ageR = d.ageRange || "25-34";
+  const gen = d.gender || "Men & Women";
+  const prob = (d.problem || d._problem || d.customProblem || "").trim();
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
 PRODUCT: ${d.productName} by Intake Breathing
 CAMPAIGN NAME: ${d.campaignName || "Untitled"}
 CAMPAIGN VIBE: ${d.vibe}
 MISSION: ${d.mission || "N/A"}
-TARGET AUDIENCE: ${d._audience}
-CORE PROBLEM TO SOLVE: ${d._problem}
+TARGET AUDIENCE: Ages ${ageR} — ${gen}
+CORE PROBLEM TO SOLVE: ${prob}
 PROOF POINTS / STATS: ${d._stats}
 PLATFORM: ${d.platform} | LENGTH: ${d.videoLength} | TONE: ${d.tone}
 APPROVED CLAIMS (creators CAN say): ${d._approved}
