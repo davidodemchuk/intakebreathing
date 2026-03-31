@@ -772,7 +772,7 @@ export default function App() {
           <div style={{ animation: "fadeIn 0.3s ease" }}>
             <div style={S.hero}>
               <div style={S.heroTag}>Intake Breathing — Creator Partnerships</div>
-              <div style={S.heroTitle}>UGC Brief<br/>Command Center</div>
+              <div style={S.heroTitle}>UGC<br/>Army</div>
               <div style={S.heroDesc}>Pick a product, vibe, and audience. Instant creator-ready brief — hooks, story arcs, compliance all baked in.</div>
               <div style={S.heroActions}>
                 <button style={S.btnP} onClick={()=>{setView("create");setFormKey(k=>k+1)}}>+ New Brief</button>
