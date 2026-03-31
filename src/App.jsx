@@ -632,6 +632,7 @@ export default function App() {
     }
 
     // AI mode
+    const liveKey = localStorage.getItem("intake-apikey") || "";
     if (!apiKey) {
       setAiError("No API key set. Go to ⚙ Settings and add your Anthropic API key.");
       return;
