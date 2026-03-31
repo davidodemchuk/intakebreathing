@@ -634,7 +634,8 @@ export default function App() {
     }
 
     // AI mode
-    if (!apiKeyRef.current) {
+    const liveKey = localStorage.getItem("intake-apikey") || "";
+    if (!liveKey) {
       setAiError("No API key set. Go to ⚙ Settings and add your Anthropic API key.");
       return;
     }
@@ -654,7 +655,7 @@ export default function App() {
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
             "anthropic-dangerous-direct-browser-access": "true",
-            "x-api-key": apiKeyRef.current,
+            "x-api-key": liveKey,
           },
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
