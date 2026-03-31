@@ -727,7 +727,7 @@ export default function App() {
         <div style={S.nav}>
           <div style={S.navLogo} onClick={()=>setView("home")}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill={t.green}/><path d="M7 12h10M12 7v10" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
-            <div><div style={S.navTitle}>INTAKE</div><div style={S.navSub}>Brief Command Center</div></div>
+            <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>CREATOR PARTNERSHIPS</div></div>
           </div>
           <div style={S.navLinks}>
             <button style={S.navBtn(view==="home")} onClick={()=>setView("home")}>Home</button>
@@ -771,7 +771,7 @@ export default function App() {
         {!aiLoading && view === "home" && (
           <div style={{ animation: "fadeIn 0.3s ease" }}>
             <div style={S.hero}>
-              <div style={S.heroTag}>Intake Breathing — Internal Tool</div>
+              <div style={S.heroTag}>Intake Breathing — Creator Partnerships</div>
               <div style={S.heroTitle}>UGC Brief<br/>Command Center</div>
               <div style={S.heroDesc}>Pick a product, vibe, and audience. Instant creator-ready brief — hooks, story arcs, compliance all baked in.</div>
               <div style={S.heroActions}>
