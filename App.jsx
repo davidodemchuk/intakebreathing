@@ -650,7 +650,12 @@ export default function App() {
       const response = await Promise.race([
         fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: getApiHeaders(),
+          headers: {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "x-api-key": apiKeyRef.current,
+          },
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 3000,
