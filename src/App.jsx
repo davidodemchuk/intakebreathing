@@ -5,8 +5,13 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.0.3";
 const CHANGELOG = [
+  { version: "2.0.3", date: "2025-04-01", changes: [
+    "Video reformatter now downloads reformatted videos — click any format to download",
+    "Server-side FFmpeg processing via Express backend on Railway",
+    "Format cards are now clickable download buttons when a video is loaded",
+  ]},
   { version: "2.1.0", date: "2025-04-01", changes: [
     "Creator Database added to UGC Army — full roster management",
     "53 existing creators imported from Intake's spreadsheet",
@@ -26,11 +31,6 @@ const CHANGELOG = [
     "URL-based routing — each section has its own URL path",
     "Browser back/forward buttons now work correctly",
     "Direct links to sections work (e.g. /tools, /ugc-army/new)",
-  ]},
-  { version: "2.0.3", date: "2025-04-01", changes: [
-    "Nav bar is now dynamic — shows relevant links based on which section you're in",
-    "Dashboard home shows minimal nav, UGC Army shows brief-related links, Tools shows tools links",
-    "Back to Dashboard button always visible when inside a section",
   ]},
   { version: "2.0.2", date: "2025-04-01", changes: [
     "ScrapeCreators API fully wired — paste TikTok or Instagram URL to fetch video data",
@@ -2065,6 +2065,7 @@ function VideoReformatter({ onBack }) {
   const [fileDims, setFileDims] = useState(null);
   const [remoteDims, setRemoteDims] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [downloading, setDownloading] = useState({});
   const fileInputRef = useRef(null);
   const objectUrlRef = useRef(null);
 
@@ -2226,43 +2227,145 @@ function VideoReformatter({ onBack }) {
     }
   };
 
+  const handleReformat = async (format) => {
+    if (!fetchedVideo?.videoUrl) return;
+    const dimParts = String(format.dimensions || "")
+      .split(/[×x]/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const w = Number(dimParts[0]);
+    const h = Number(dimParts[1]);
+    if (!w || !h) return;
+
+    setDownloading((prev) => ({ ...prev, [format.id]: true }));
+    try {
+      const res = await fetch("/api/reformat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: fetchedVideo.videoUrl,
+          width: w,
+          height: h,
+          name: `${fetchedVideo.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server returned ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fetchedVideo.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}_${String(format.dimensions).replace(/[×]/g, "x")}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Reformat failed: ${err.message}`);
+    } finally {
+      setDownloading((prev) => ({ ...prev, [format.id]: false }));
+    }
+  };
+
+  const canReformat = !!(fetchedVideo?.videoUrl);
+
   const renderFormatReference = () => (
     <div style={{ marginTop: 32 }}>
       <div style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 8 }}>Format Reference — Ad Specs by Platform</div>
-      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 20, lineHeight: 1.55 }}>
-        Use these specs when resizing your video in your editor (CapCut, Premiere, Canva, etc.)
+      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 12, lineHeight: 1.55 }}>
+        {canReformat
+          ? "Click any format to download the reformatted video"
+          : "Use these specs when resizing your video in your editor (CapCut, Premiere, Canva, etc.)"}
       </div>
       {VIDEO_REFORMAT_GROUPS.map((group) => (
         <div key={group.title} style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>{group.title}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
-            {group.items.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  background: t.card,
-                  border: `1px solid ${t.border}`,
-                  borderRadius: 10,
-                  padding: "14px 16px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, flex: "1 1 auto", minWidth: 0 }}>{item.name}</div>
-                  <div style={{ fontSize: 12, color: t.textFaint, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
-                    {item.ratio} · {item.dimensions}
+            {group.items.map((item) => {
+              const loading = !!downloading[item.id];
+              const interactive = canReformat && !loading;
+              return (
+                <div
+                  key={item.id}
+                  role={canReformat ? "button" : undefined}
+                  tabIndex={interactive ? 0 : undefined}
+                  onClick={() => {
+                    if (!canReformat || loading) return;
+                    handleReformat(item);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!interactive) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleReformat(item);
+                    }
+                  }}
+                  style={{
+                    background: t.card,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 10,
+                    padding: "14px 16px",
+                    cursor: canReformat ? (loading ? "wait" : "pointer") : "default",
+                    opacity: canReformat ? (loading ? 0.7 : 1) : 0.92,
+                    pointerEvents: loading ? "none" : "auto",
+                    transition: "background 0.15s, border-color 0.15s, opacity 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!canReformat || loading) return;
+                    e.currentTarget.style.background = t.green + "08";
+                    e.currentTarget.style.borderColor = t.green + "50";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!canReformat || loading) return;
+                    e.currentTarget.style.background = t.card;
+                    e.currentTarget.style.borderColor = t.border;
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: t.text, flex: "1 1 auto", minWidth: 0 }}>{item.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <div style={{ fontSize: 12, color: t.textFaint, textAlign: "right", whiteSpace: "nowrap" }}>
+                        {item.ratio} · {item.dimensions}
+                      </div>
+                      {canReformat ? (
+                        loading ? (
+                          <span
+                            style={{
+                              width: 14,
+                              height: 14,
+                              border: `2px solid ${t.border}`,
+                              borderTop: `2px solid ${t.green}`,
+                              borderRadius: "50%",
+                              animation: "spin 0.8s linear infinite",
+                              display: "inline-block",
+                              flexShrink: 0,
+                            }}
+                            aria-hidden
+                          />
+                        ) : (
+                          <span style={{ fontSize: 15, color: t.green, fontWeight: 700, lineHeight: 1 }} title="Download reformatted video">
+                            ↓
+                          </span>
+                        )
+                      ) : null}
+                    </div>
                   </div>
+                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.45 }}>{loading ? "Processing..." : item.placement}</div>
+                  {item.recommended ? (
+                    <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: t.green }}>★ Recommended</div>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.45 }}>{item.placement}</div>
-                {item.recommended ? (
-                  <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: t.green }}>★ Recommended</div>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
       <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginTop: 8, paddingTop: 4 }}>
-        Tip: Most short-form UGC works best as 9:16 (1080×1920). If you&apos;re repurposing for multiple placements, create a 9:16 master and crop from there.
+        Videos are reformatted server-side using FFmpeg. Processing time depends on video length — typically 5-15 seconds.
       </div>
     </div>
   );
