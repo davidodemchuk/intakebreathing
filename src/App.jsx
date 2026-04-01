@@ -27,8 +27,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.6.2";
+const APP_VERSION = "3.6.3";
 const CHANGELOG = [
+  { version: "3.6.3", date: "2026-04-01", changes: [
+    "Fixed avatar not loading — tries multiple sources with better fallback",
+    "Removed 'View Data' button — unnecessary",
+    "Renamed 'Refresh' to 'Refresh Metrics'",
+    "Platform cards are clickable — opens creator's profile on that platform",
+  ]},
   { version: "3.6.2", date: "2026-04-01", changes: [
     "Estimated rate now uses CPM calculation from actual video performance, not AI guessing",
     "Shows CPM, average views, and calculated rate per video with full breakdown",
@@ -4491,14 +4497,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     ? (c.instagramUrl || `https://www.instagram.com/${(c.instagramHandle || c.handle || "").replace("@", "")}/`)
     : (c.tiktokUrl || `https://www.tiktok.com/@${(c.handle || "").replace("@", "")}`);
   const primaryLabel = primaryPlatform === "instagram" ? "IG" : "TT";
-  const avatarUrl = primaryPlatform === "instagram"
-    ? (c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl || "")
-    : (c.tiktokData?.avatarUrl || c.instagramData?.avatarUrl || "");
+  const clean = String(c.handle || "").replace("@", "").trim();
+  const igClean = String(c.instagramHandle || clean).replace("@", "").trim();
   const platformLinks = {
-    instagram: c.instagramUrl || (c.instagramHandle || c.handle ? `https://www.instagram.com/${(c.instagramHandle || c.handle || "").replace("@", "")}/` : ""),
-    tiktok: c.tiktokUrl || `https://www.tiktok.com/@${(c.handle || "").replace("@", "")}`,
+    instagram: c.instagramUrl || (igClean ? `https://www.instagram.com/${igClean}/` : ""),
+    tiktok: c.tiktokUrl || (clean ? `https://www.tiktok.com/@${clean}` : ""),
     youtube: c.youtubeData?.channelUrl || "",
-    twitter: c.twitterData?.handle ? `https://x.com/${c.twitterData.handle}` : "",
+    twitter: c.twitterData?.handle ? `https://x.com/${c.twitterData.handle}` : (clean ? `https://x.com/${clean}` : ""),
     facebook: c.facebookData?.profileUrl || "",
     linkedin: c.linkedinData?.profileUrl || "",
     snapchat: "",
@@ -4745,59 +4750,53 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px", minWidth: 0 }}>
-          {avatarUrl ? (
-            <div style={{ width: 48, height: 48, flexShrink: 0, position: "relative" }}>
+          {(() => {
+            const avatarSources = [
+              c.instagramData?.avatarUrl,
+              c.tiktokData?.avatarUrl,
+              c.facebookData?.avatarUrl,
+            ]
+              .map((v) => String(v || "").trim())
+              .filter(Boolean);
+
+            if (avatarSources.length === 0) {
+              return (
+                <div style={{ width: 48, height: 48, borderRadius: 24, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: t.textFaint, flexShrink: 0 }}>
+                  {handleLetter}
+                </div>
+              );
+            }
+
+            return (
               <img
-                src={avatarUrl}
+                src={avatarSources[0]}
                 alt=""
-                style={{ width: 48, height: 48, borderRadius: 24, objectFit: "cover", background: t.cardAlt, border: `1px solid ${t.border}`, display: "block" }}
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                style={{ width: 48, height: 48, borderRadius: 24, objectFit: "cover", background: t.cardAlt, border: `1px solid ${t.border}`, flexShrink: 0, display: "block" }}
                 onError={(e) => {
-                  e.target.style.display = "none";
-                  const el = e.target.nextSibling;
-                  if (el) el.style.display = "flex";
+                  const img = e.currentTarget;
+                  const tried = (img.dataset.tried || "").split("|").filter(Boolean);
+                  const current = img.currentSrc || img.src || "";
+                  const next = avatarSources.find((s) => !tried.includes(s) && s !== current);
+                  if (next) {
+                    img.dataset.tried = [...tried, current].join("|");
+                    img.src = next;
+                    return;
+                  }
+                  img.style.display = "none";
+                  const parent = img.parentElement;
+                  if (parent && !parent.querySelector("[data-avatar-fallback='true']")) {
+                    const fallback = document.createElement("div");
+                    fallback.setAttribute("data-avatar-fallback", "true");
+                    fallback.style.cssText = `width:48px;height:48px;border-radius:24px;background:${t.cardAlt};border:1px solid ${t.border};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${t.textFaint};flex-shrink:0;`;
+                    fallback.textContent = handleLetter;
+                    parent.appendChild(fallback);
+                  }
                 }}
               />
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  background: t.cardAlt,
-                  border: `1px solid ${t.border}`,
-                  display: "none",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: t.textFaint,
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                }}
-              >
-                {handleLetter}
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 24,
-                background: t.cardAlt,
-                border: `1px solid ${t.border}`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 18,
-                fontWeight: 800,
-                color: t.textFaint,
-                flexShrink: 0,
-              }}
-            >
-              {handleLetter}
-            </div>
-          )}
+            );
+          })()}
           <div style={{ minWidth: 0 }}>
             <a href={primaryUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
               {c.handle}
@@ -4822,8 +4821,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           ) : (
             <>
               <span style={{ fontSize: 11, color: t.textMuted }}>Last: {lastEnrichDateLabel}</span>
-              <button type="button" onClick={() => document.getElementById("creator-detail-content")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 14px", fontSize: 12 }}>View Data</button>
-              <button type="button" disabled={enriching} onClick={refreshProfile} style={{ ...S.btnS, padding: "9px 14px", fontSize: 12 }}>Refresh</button>
+              <button type="button" disabled={enriching} onClick={refreshProfile} style={{ ...S.btnS, padding: "9px 14px", fontSize: 12 }}>Refresh Metrics</button>
             </>
           )}
         </div>
@@ -4898,7 +4896,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             <div
               onClick={() => platformLinks.twitter && window.open(platformLinks.twitter, "_blank")}
               style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.twitter ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.twitter) e.currentTarget.style.borderColor = `${t.blue}50`; }}
+              onMouseEnter={(e) => { if (platformLinks.twitter) e.currentTarget.style.borderColor = "#1DA1F250"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -4930,7 +4928,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             <div
               onClick={() => platformLinks.linkedin && window.open(platformLinks.linkedin, "_blank")}
               style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.linkedin ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.linkedin) e.currentTarget.style.borderColor = `${t.blue}50`; }}
+              onMouseEnter={(e) => { if (platformLinks.linkedin) e.currentTarget.style.borderColor = "#0A66C250"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -7176,6 +7174,7 @@ export default function App() {
                       <img
                         src={src}
                         alt=""
+                        referrerPolicy="no-referrer"
                         style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", background: t.cardAlt, display: "block" }}
                         onError={(e) => {
                           e.target.style.display = "none";
