@@ -96,3 +96,6 @@ alter table messages enable row level security;
 
 create policy "brief_assignments_all_anon" on brief_assignments for all using (true) with check (true);
 create policy "messages_all_anon" on messages for all using (true) with check (true);
+
+-- If `creators` already existed without onboarded_at, run once:
+-- alter table creators add column if not exists onboarded_at timestamptz;

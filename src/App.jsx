@@ -19,7 +19,6 @@ const CREATOR_COLUMNS = [
   { key: "avatar", label: "", width: 36, sortable: false },
   { key: "handle", label: "Handle", width: 140, sortable: true },
   { key: "niche", label: "Niche", width: 150, filterable: true, sortable: true, editable: true },
-  { key: "email", label: "Email", width: 200, editable: true, isLink: "mailto" },
   { key: "tt", label: "TT", width: 36, isLink: "external" },
   { key: "ig", label: "IG", width: 36, isLink: "external" },
   { key: "ibScore", label: "IB", width: 44, sortable: true, align: "right" },
@@ -38,8 +37,12 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.0.0";
+const APP_VERSION = "5.1.0";
 const CHANGELOG = [
+  { version: "5.1.0", date: "2026-04-01", changes: [
+    "Creators page has a proper title and description header",
+    "Removed email column from creator table overview — visible in detail view only",
+  ]},
   { version: "5.0.0", date: "2026-04-01", changes: [
     "Creator Portal at /creator — email + OTP login via Supabase",
     "Creator onboarding form — name, handles, address, rate, niches",
@@ -8140,76 +8143,6 @@ export default function App() {
                 </div>
               );
             }
-            if (col.key === "email") {
-              const em = (c.email || "").trim();
-              const isEditing = editingCell?.creatorId === c.id && editingCell?.column === "email";
-              return (
-                <div key={col.key} style={base} {...stopNav}>
-                  {isEditing ? (
-                    <input
-                      autoFocus
-                      defaultValue={em}
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        outline: "none",
-                        background: t.green + "10",
-                        color: t.text,
-                        fontSize: 12,
-                        fontFamily: "inherit",
-                        padding: "2px 4px",
-                        borderRadius: 3,
-                        boxSizing: "border-box",
-                      }}
-                      onBlur={(e) => {
-                        if (skipCreatorCellBlurRef.current) {
-                          skipCreatorCellBlurRef.current = false;
-                          return;
-                        }
-                        updateCreator(c.id, { email: e.target.value });
-                        setEditingCell(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.target.blur();
-                        if (e.key === "Escape") {
-                          e.preventDefault();
-                          skipCreatorCellBlurRef.current = true;
-                          setEditingCell(null);
-                        }
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : em ? (
-                    <a
-                      href={`mailto:${em}`}
-                      onClick={(e) => e.stopPropagation()}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setEditingCell({ creatorId: c.id, column: "email" });
-                      }}
-                      style={{ color: t.blue, textDecoration: "none", fontSize: 12 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
-                      title={em}
-                    >
-                      {em}
-                    </a>
-                  ) : (
-                    <span
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        setEditingCell({ creatorId: c.id, column: "email" });
-                      }}
-                      title="Double-click to edit"
-                      style={{ color: t.textFaint }}
-                    >
-                      —
-                    </span>
-                  )}
-                </div>
-              );
-            }
             if (col.key === "tt") {
               const ttHandle = String(c.tiktokHandle || c.handle || "").replace(/^@/, "").trim();
               const ttUrl = ((c.tiktokUrl || "").trim() || (ttHandle ? `https://www.tiktok.com/@${ttHandle}` : "")).trim();
@@ -8444,6 +8377,10 @@ export default function App() {
           return (
           <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <button type="button" onClick={() => navigate("ugcDashboard")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
+              <div style={{ fontSize: 13, color: t.textMuted }}>Your UGC creator roster — {creators.filter((c) => c.status === "Active").length} active, {creators.length} total</div>
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <input
                 type="text"
