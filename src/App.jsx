@@ -39,8 +39,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.9.0";
+const APP_VERSION = "5.10.0";
 const CHANGELOG = [
+  { version: "5.10.0", date: "2026-04-01", changes: [
+    "Custom ratio input on Video Reformatter — enter any aspect ratio and download",
+  ]},
   { version: "5.9.0", date: "2026-04-01", changes: [
     "Video reformatter: fixed infinite loading — downloads now have hard timeouts",
     "Prefer download_addr over play_addr for TikTok (more reliable)",
@@ -4586,6 +4589,8 @@ function VideoReformatter({ onBack }) {
   const [downloadError, setDownloadError] = useState(null);
   const [batchDownloading, setBatchDownloading] = useState(false);
   const batchAbortRef = useRef(null);
+  const [customRatio, setCustomRatio] = useState("");
+  const [customWidth, setCustomWidth] = useState("1080");
 
   // Fetch video from ScrapeCreators
   const fetchVideo = async () => {
@@ -5065,6 +5070,110 @@ function VideoReformatter({ onBack }) {
               </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {(video?.cached || video?.cacheId) ? (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginTop: 16, marginBottom: 24 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Custom Ratio</div>
+          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Enter any aspect ratio to download a custom reformat.</div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 120px", minWidth: 100 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Ratio (width:height)</div>
+              <input
+                value={customRatio}
+                onChange={(e) => setCustomRatio(e.target.value)}
+                placeholder="e.g. 1:2, 3:4, 21:9"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+            <div style={{ flex: "0 0 100px" }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Base width (px)</div>
+              <input
+                value={customWidth}
+                onChange={(e) => setCustomWidth(e.target.value.replace(/\D/g, ""))}
+                placeholder="1080"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const parts = customRatio.trim().split(/[:/×x]/i).map(Number);
+                const rW = parts[0];
+                const rH = parts[1];
+                if (!rW || !rH || rW <= 0 || rH <= 0) {
+                  setDownloadError("Enter a valid ratio like 1:2, 3:4, or 21:9");
+                  return;
+                }
+                const baseW = Number(customWidth) || 1080;
+                const w = Math.round(baseW);
+                const h = Math.round(baseW * (rH / rW));
+                const finalW = w % 2 === 0 ? w : w + 1;
+                const finalH = h % 2 === 0 ? h : h + 1;
+                reformat({
+                  id: `custom-${rW}x${rH}`,
+                  name: `Custom_${rW}x${rH}`,
+                  dimensions: `${finalW}×${finalH}`,
+                  ratio: `${rW}:${rH}`,
+                });
+              }}
+              disabled={!customRatio.trim() || Object.values(downloading).some(Boolean) || batchDownloading}
+              style={{
+                padding: "10px 20px", borderRadius: 8, border: "none",
+                background: customRatio.trim() ? t.green : t.cardAlt,
+                color: customRatio.trim() ? (t.isLight ? "#fff" : "#000") : t.textFaint,
+                fontSize: 13, fontWeight: 700,
+                cursor: customRatio.trim() ? "pointer" : "not-allowed",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {(() => {
+                const parts = customRatio.trim().split(/[:/×x]/i).map(Number);
+                const rW = parts[0];
+                const rH = parts[1];
+                const id = rW && rH ? `custom-${rW}x${rH}` : "";
+                return id && downloading[id] ? "Processing..." : "Download";
+              })()}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+            {["1:1", "4:5", "9:16", "16:9", "1:2", "2:3", "3:4", "21:9"].map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setCustomRatio(r)}
+                style={{
+                  padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                  border: `1px solid ${customRatio === r ? t.green + "50" : t.border}`,
+                  background: customRatio === r ? t.green + "10" : "transparent",
+                  color: customRatio === r ? t.green : t.textFaint,
+                  cursor: "pointer",
+                }}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+
+          {(() => {
+            const parts = customRatio.trim().split(/[:/×x]/i).map(Number);
+            const rW = parts[0];
+            const rH = parts[1];
+            if (!rW || !rH || rW <= 0 || rH <= 0) return null;
+            const baseW = Number(customWidth) || 1080;
+            const w = Math.round(baseW);
+            const h = Math.round(baseW * (rH / rW));
+            const finalW = w % 2 === 0 ? w : w + 1;
+            const finalH = h % 2 === 0 ? h : h + 1;
+            return (
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 8 }}>
+                Output: {finalW} × {finalH}px
+              </div>
+            );
+          })()}
         </div>
       ) : null}
 
