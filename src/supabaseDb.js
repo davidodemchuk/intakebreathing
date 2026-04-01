@@ -10,7 +10,7 @@ function isUuid(id) {
 }
 
 export function creatorToRow(c) {
-  return {
+  const row = {
     handle: c.handle || "",
     email: c.email || "",
     name: c.name || "",
@@ -58,6 +58,25 @@ export function creatorToRow(c) {
     onboarded: c.onboarded ?? false,
     onboarded_at: c.onboardedAt || null,
   };
+
+  const clean = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (v === undefined) continue;
+    if (typeof v === "number" && !Number.isFinite(v)) {
+      clean[k] = null;
+      continue;
+    }
+    if (v && typeof v === "object") {
+      try {
+        clean[k] = JSON.parse(JSON.stringify(v, (_, x) => (typeof x === "number" && !Number.isFinite(x) ? null : x)));
+      } catch {
+        clean[k] = null;
+      }
+    } else {
+      clean[k] = v;
+    }
+  }
+  return clean;
 }
 
 export function rowToCreator(row) {
@@ -147,17 +166,38 @@ export async function dbLoadCreators() {
 
 export async function dbUpsertCreator(creator) {
   const row = creatorToRow(creator);
-  if (isUuid(creator.id)) {
-    const { error } = await supabase.from("creators").update(row).eq("id", creator.id);
-    if (error) console.error("[db] Update creator error:", error);
-    return null;
+
+  const logRow = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (v && typeof v === "object") {
+      logRow[k] = `[${Array.isArray(v) ? "array" : "object"} ${JSON.stringify(v).length}b]`;
+    } else {
+      logRow[k] = v;
+    }
   }
+  console.log("[db] Writing creator:", creator.id, logRow);
+
+  if (isUuid(creator.id)) {
+    let { error } = await supabase.from("creators").update(row).eq("id", creator.id);
+    if (error) {
+      console.warn("[db] Update retry after error:", error.message);
+      await new Promise((r) => setTimeout(r, 400));
+      ({ error } = await supabase.from("creators").update(row).eq("id", creator.id));
+    }
+    if (error) {
+      console.error("[db] Update creator error:", error.message, "| Code:", error.code, "| Details:", error.details);
+      return { error };
+    }
+    return { error: null };
+  }
+
   const { data, error } = await supabase.from("creators").insert(row).select().single();
   if (error) {
-    console.error("[db] Insert creator error:", error);
-    return null;
+    console.error("[db] Insert creator error:", error.message, "| Code:", error.code, "| Details:", error.details);
+    return { error };
   }
-  return data ? rowToCreator(data) : null;
+  const creatorOut = data ? rowToCreator(data) : null;
+  return creatorOut ? { error: null, creator: creatorOut } : { error: new Error("Insert returned no row") };
 }
 
 export async function dbDeleteCreator(id) {

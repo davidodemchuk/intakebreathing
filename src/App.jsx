@@ -36,8 +36,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.4.0";
+const APP_VERSION = "5.5.0";
 const CHANGELOG = [
+  { version: "5.5.0", date: "2026-04-01", changes: [
+    "Fixed enrichment data not persisting — added write verification, error surfacing, and retry",
+  ]},
   { version: "5.4.0", date: "2026-04-01", changes: [
     "Removed Email and Plat columns from creator table — less clutter, data still in detail view",
     "Shipping address visible and editable on manager detail and creator portal",
@@ -5247,6 +5250,33 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       setEnrichMsg(
         `Enrichment complete — ${pf}/11 platforms found · ${ib != null ? `${ib} IB Score` : "— IB Score"}`
       );
+
+      setTimeout(async () => {
+        try {
+          const { data: verify, error: verr } = await supabase
+            .from("creators")
+            .select("ib_score, tiktok_data, instagram_data, last_enriched")
+            .eq("id", c.id)
+            .maybeSingle();
+          if (verr) {
+            console.error("[enrichment] Verification query failed:", verr);
+            return;
+          }
+          if (!verify?.tiktok_data && !verify?.instagram_data) {
+            console.error("[enrichment] VERIFICATION FAILED — data did not persist to Supabase");
+            setEnrichMsg((prev) => `${prev || ""} ⚠️ WARNING: Data may not have saved. Check console for errors.`);
+          } else {
+            console.log("[enrichment] Verification OK — data persisted to Supabase", {
+              ibScore: verify.ib_score,
+              hasTT: !!verify.tiktok_data,
+              hasIG: !!verify.instagram_data,
+              lastEnriched: verify.last_enriched,
+            });
+          }
+        } catch (e) {
+          console.error("[enrichment] Verification check failed:", e);
+        }
+      }, 2000);
     } catch (err) {
       setEnrichMsg(err.message || "Enrichment failed.");
     } finally {
@@ -6223,7 +6253,8 @@ export default function App() {
         const seedLoaded = SEED_CREATORS.map((c, i) => hydrateCreator({ ...c, id: c.id || `seed-${i}` }));
         setCreators(seedLoaded);
         for (const c of seedLoaded) {
-          await dbUpsertCreator(c);
+          const sr = await dbUpsertCreator(c);
+          if (sr?.error) console.error("[seed] Failed to upsert creator:", c.id, sr.error);
         }
         const fresh = await dbLoadCreators();
         if (!cancelled && fresh && fresh.length > 0) setCreators(applyPlatformHandleDefaults(fresh.map((c) => hydrateCreator(c))));
@@ -6409,7 +6440,21 @@ export default function App() {
             merged[key] = val;
           }
         }
-        dbUpsertCreator(merged).catch((e) => console.error("[save] Creator update failed:", e));
+        dbUpsertCreator(merged)
+          .then((result) => {
+            if (result && result.error) {
+              console.error("[save] Creator update failed:", result.error);
+              if (typeof window !== "undefined") {
+                console.warn("[SAVE FAILED] Creator data may not persist. Error:", result.error.message || result.error);
+              }
+            }
+          })
+          .catch((e) => {
+            console.error("[save] Creator update exception:", e);
+            if (typeof window !== "undefined") {
+              console.warn("[SAVE FAILED] Creator data may not persist. Exception:", e.message);
+            }
+          });
         return merged;
       })
     );
@@ -6575,14 +6620,15 @@ export default function App() {
         payments: [],
       };
       const hydrated = hydrateCreator(row);
-      const inserted = await dbUpsertCreator(hydrated);
-      if (inserted) {
-        setCreators((p) => [inserted, ...p]);
+      const insRes = await dbUpsertCreator(hydrated);
+      if (insRes?.creator) {
+        setCreators((p) => [insRes.creator, ...p]);
         setAddHandleInput("");
         setCreatorImportToast("Add your ScrapeCreators API key in Settings to auto-pull creator data");
         setTimeout(() => setCreatorImportToast(null), 8000);
-        navigate("creatorDetail", { creatorId: inserted.id });
+        navigate("creatorDetail", { creatorId: insRes.creator.id });
       } else {
+        if (insRes?.error) console.error("[add] Insert failed:", insRes.error);
         setCreators((p) => [hydrated, ...p]);
         setAddHandleInput("");
         setCreatorImportToast("Add your ScrapeCreators API key in Settings to auto-pull creator data");
@@ -6668,16 +6714,17 @@ export default function App() {
       const merged = { ...base, ...patch };
       const newCreator = { ...merged, ...enrichPatchWithCpm(stub, patch, merged) };
       const hydratedNew = hydrateCreator(newCreator);
-      const inserted = await dbUpsertCreator(hydratedNew);
-      if (inserted) {
-        setCreators((p) => [inserted, ...p]);
+      const insRes = await dbUpsertCreator(hydratedNew);
+      if (insRes?.creator) {
+        setCreators((p) => [insRes.creator, ...p]);
         setAddHandleInput("");
         if (payload.notes.length) {
           setCreatorImportToast(payload.notes.filter(Boolean).join(" "));
           setTimeout(() => setCreatorImportToast(null), 10000);
         }
-        navigate("creatorDetail", { creatorId: inserted.id });
+        navigate("creatorDetail", { creatorId: insRes.creator.id });
       } else {
+        if (insRes?.error) console.error("[add] Enrich insert failed:", insRes.error);
         setCreators((p) => [hydratedNew, ...p]);
         setAddHandleInput("");
         if (payload.notes.length) {
@@ -6841,13 +6888,17 @@ export default function App() {
                 id: next[ix].id,
                 videoLog: Array.isArray(next[ix].videoLog) ? next[ix].videoLog : [],
               });
-              dbUpsertCreator(next[ix]).catch((e) => console.error("[save] CSV creator update failed:", e));
+              dbUpsertCreator(next[ix]).then((r) => {
+                if (r?.error) console.warn("[save] CSV creator update failed:", r.error);
+              }).catch((e) => console.error("[save] CSV creator update exception:", e));
               updateCount++;
             } else {
               const id = `c-import-${Date.now()}-${newCount}-${Math.random().toString(36).slice(2, 7)}`;
               const added = hydrateCreator({ id, ...rowObj });
               next.push(added);
-              dbUpsertCreator(added).catch((e) => console.error("[save] CSV creator insert failed:", e));
+              dbUpsertCreator(added).then((r) => {
+                if (r?.error) console.warn("[save] CSV creator insert failed:", r.error);
+              }).catch((e) => console.error("[save] CSV creator insert exception:", e));
               idxByHandle.set(key, next.length - 1);
               newCount++;
             }
