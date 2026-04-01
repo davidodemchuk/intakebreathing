@@ -24,8 +24,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.1.0";
+const APP_VERSION = "3.2.0";
 const CHANGELOG = [
+  { version: "3.2.0", date: "2026-04-01", changes: [
+    "Homepage stripped back and rebuilt — clean, minimal, polished design",
+    "Removed decorative clutter: no background avatars, no gradient borders, no dot grid",
+    "Cards simplified to clean flat design with clear hierarchy",
+  ]},
   { version: "3.1.0", date: "2026-04-01", changes: [
     "Smart API caching — enrichment data persists in localStorage, never re-pulled unless explicitly requested",
     "Enrich button shows last enriched date and won't auto-re-pull if data exists",
@@ -5238,25 +5243,6 @@ export default function App() {
     [creators]
   );
 
-  const mostUsedManagerName = useMemo(() => {
-    if (!library.length) return null;
-    const counts = {};
-    for (const item of library) {
-      const name = managerDisplayName(item.formData);
-      if (!name) continue;
-      counts[name] = (counts[name] || 0) + 1;
-    }
-    let best = null;
-    let bestN = 0;
-    for (const [k, v] of Object.entries(counts)) {
-      if (v > bestN) {
-        bestN = v;
-        best = k;
-      }
-    }
-    return best;
-  }, [library]);
-
   const allNiches = useMemo(() => {
     const set = new Set();
     creators.forEach((c) => {
@@ -5375,10 +5361,8 @@ export default function App() {
           @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
           @keyframes spin { to { transform: rotate(360deg) } }
           @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
-          @keyframes pulseGlowOrange { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,170,59,0.3); } 50% { box-shadow: 0 0 8px 2px rgba(255,170,59,0.15); } }
-          @keyframes pulseGlowPurple { 0%, 100% { box-shadow: 0 0 0 0 rgba(192,132,252,0.35); } 50% { box-shadow: 0 0 8px 2px rgba(192,132,252,0.18); } }
-          .home-dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-          @media (max-width: 720px) { .home-dashboard-grid { grid-template-columns: 1fr !important; } }
+          .home-dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+          @media (max-width: 700px) { .home-dashboard-grid { grid-template-columns: 1fr !important; } }
           * { box-sizing:border-box }
           input::placeholder,textarea::placeholder { color:${t.textFaint} }
           ::-webkit-scrollbar { width:6px }
@@ -5552,336 +5536,131 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME — premium dashboard (managers only; creators use library) */}
+        {/* HOME — minimal dashboard (managers only; creators use library) */}
         {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
           const hour = new Date().getHours();
           const greetingWord = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-          const greetingLine =
-            library.length > 0 && mostUsedManagerName ? `${greetingWord}, ${mostUsedManagerName}` : greetingWord;
-          const hoverLiftShadow = t.isLight
-            ? "0 12px 40px rgba(0,140,86,0.1), 0 4px 12px rgba(0,0,0,0.08)"
-            : "0 12px 40px rgba(0,254,169,0.08), 0 4px 12px rgba(0,0,0,0.3)";
-          const statPill = {
-            background: t.card,
-            border: `1px solid ${t.border}`,
-            borderRadius: 20,
-            padding: "4px 14px",
-            fontSize: 12,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
+          const homeCardShadow = (id) => {
+            if (!t.isLight) {
+              const m = {
+                ugc: "0 4px 20px rgba(0,254,169,0.06)",
+                pipeline: "0 4px 20px rgba(255,170,59,0.06)",
+                influencer: "0 4px 20px rgba(192,132,252,0.06)",
+                tools: "0 4px 20px rgba(99,183,186,0.06)",
+              };
+              return m[id] || "none";
+            }
+            return "0 4px 20px rgba(0,0,0,0.06)";
           };
-          const cardBase = (id) => ({
-            position: "relative",
-            borderRadius: 20,
-            padding: 0,
-            overflow: "hidden",
-            cursor: "pointer",
-            border: `1px solid ${dashCardHover === id ? t.green + "40" : t.border}`,
-            background: t.card,
-            minHeight: 200,
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            transform: dashCardHover === id ? "translateY(-4px)" : "translateY(0)",
-            boxShadow: dashCardHover === id ? hoverLiftShadow : t.shadow,
+          const cardShell = (id, accent) => ({
+            role: "button",
+            tabIndex: 0,
+            onMouseEnter: () => setDashCardHover(id),
+            onMouseLeave: () => setDashCardHover(null),
+            style: {
+              background: t.card,
+              border: `1px solid ${dashCardHover === id ? accent + "50" : t.border}`,
+              borderRadius: 14,
+              padding: 28,
+              cursor: "pointer",
+              transition: "border-color 0.2s, box-shadow 0.2s",
+              position: "relative",
+              overflow: "hidden",
+              boxShadow: dashCardHover === id ? homeCardShadow(id) : "none",
+            },
           });
+          const accentBar = (color) => (
+            <div style={{ height: 3, width: 40, borderRadius: 2, background: color, marginBottom: 20 }} />
+          );
           return (
-            <div style={{ position: "relative", zIndex: 1, animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
+            <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 1000, margin: "0 auto", padding: "48px 24px" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>{greetingWord}</div>
               <div
-                aria-hidden
                 style={{
-                  position: "fixed",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  pointerEvents: "none",
-                  zIndex: 0,
-                  opacity: 0.015,
-                  background: `radial-gradient(circle at 1px 1px, ${t.textFaint} 1px, transparent 0)`,
-                  backgroundSize: "40px 40px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: t.textFaint,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginTop: 4,
+                  marginBottom: 32,
                 }}
-              />
-              <div style={{ position: "relative", zIndex: 1 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    alignItems: "flex-start",
-                    justifyContent: "space-between",
-                    gap: 20,
-                    marginBottom: 28,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>
-                      {greetingLine}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                        fontWeight: 600,
-                        color: t.textFaint,
-                      }}
-                    >
-                      Intake Breathing — Creator Partnerships
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "flex-end" }}>
-                    <div style={statPill}>
-                      <span style={{ fontWeight: 800, color: t.green }}>{library.length}</span>
-                      <span style={{ fontWeight: 500, color: t.textMuted }}>Briefs</span>
-                    </div>
-                    <div style={statPill}>
-                      <span style={{ fontWeight: 800, color: t.green }}>{activeCreatorCount}</span>
-                      <span style={{ fontWeight: 500, color: t.textMuted }}>Creators</span>
-                    </div>
-                    <div style={statPill}>
-                      <span style={{ fontWeight: 800, color: t.green }}>{activeVideosTotal}</span>
-                      <span style={{ fontWeight: 500, color: t.textMuted }}>Videos</span>
-                    </div>
-                    <div style={{ ...statPill, opacity: 0.75 }}>
-                      <span style={{ fontWeight: 600, color: t.textFaint, fontSize: 11 }}>v{APP_VERSION}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="home-dashboard-grid">
-                  {/* UGC Army */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("create"); setFormKey((k) => k + 1); } }}
-                    onMouseEnter={() => setDashCardHover("ugc")}
-                    onMouseLeave={() => setDashCardHover(null)}
-                    style={cardBase("ugc")}
-                  >
-                    <div style={{ height: 3, background: "linear-gradient(135deg, #00FEA9, #63B7BA)", width: "100%" }} />
-                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
-                      <div
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 14,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: "linear-gradient(135deg, rgba(0,254,169,0.2), rgba(99,183,186,0.2))",
-                        }}
-                      >
-                        <Icon name="film" size={26} color={t.green} />
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>UGC Army</div>
-                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
-                        Create briefs, manage creators, and track your UGC content pipeline
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "4px 10px",
-                            borderRadius: 20,
-                            background: t.green + (t.isLight ? "18" : "15"),
-                            color: t.green,
-                            border: t.isLight ? `1px solid ${t.green}30` : "none",
-                          }}
-                        >
-                          Active
-                        </span>
-                        <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 500 }}>
-                          {library.length} brief{library.length === 1 ? "" : "s"} · {activeCreatorCount} creator{activeCreatorCount === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
-                      <Icon name="film" size={120} color={t.text} />
-                    </div>
-                  </div>
-
-                  {/* Channel Pipeline */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate("pipeline")}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("pipeline"); } }}
-                    onMouseEnter={() => setDashCardHover("pipeline")}
-                    onMouseLeave={() => setDashCardHover(null)}
-                    style={cardBase("pipeline")}
-                  >
-                    <div style={{ height: 3, background: "linear-gradient(135deg, #ffaa3b, #ff6b6b)", width: "100%" }} />
-                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
-                      <div
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 14,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: "linear-gradient(135deg, rgba(255,170,59,0.2), rgba(255,107,107,0.2))",
-                        }}
-                      >
-                        <Icon name="send" size={26} color={t.orange} />
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>Channel Pipeline</div>
-                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
-                        Track creator outreach, responses, and partnership status
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "4px 10px",
-                            borderRadius: 20,
-                            background: t.orange + (t.isLight ? "18" : "15"),
-                            color: t.orange,
-                            border: t.isLight ? `1px solid ${t.orange}30` : "none",
-                            animation: "pulseGlowOrange 2.5s ease-in-out infinite",
-                          }}
-                        >
-                          Coming Soon
-                        </span>
-                        <span />
-                      </div>
-                    </div>
-                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
-                      <Icon name="send" size={120} color={t.text} />
-                    </div>
-                  </div>
-
-                  {/* Influencer Buys */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate("influencer")}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("influencer"); } }}
-                    onMouseEnter={() => setDashCardHover("influencer")}
-                    onMouseLeave={() => setDashCardHover(null)}
-                    style={cardBase("influencer")}
-                  >
-                    <div style={{ height: 3, background: "linear-gradient(135deg, #c084fc, #818cf8)", width: "100%" }} />
-                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
-                      <div
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 14,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: "linear-gradient(135deg, rgba(192,132,252,0.2), rgba(129,140,248,0.2))",
-                        }}
-                      >
-                        <Icon name="dollarSign" size={26} color={t.purple} />
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>Influencer Buys</div>
-                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
-                        Manage influencer campaigns, negotiate rates, and track spend
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "4px 10px",
-                            borderRadius: 20,
-                            background: t.purple + (t.isLight ? "18" : "15"),
-                            color: t.purple,
-                            border: t.isLight ? `1px solid ${t.purple}30` : "none",
-                            animation: "pulseGlowPurple 2.5s ease-in-out infinite",
-                          }}
-                        >
-                          Coming Soon
-                        </span>
-                        <span />
-                      </div>
-                    </div>
-                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
-                      <Icon name="dollarSign" size={120} color={t.text} />
-                    </div>
-                  </div>
-
-                  {/* Tools */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate("tools")}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("tools"); } }}
-                    onMouseEnter={() => setDashCardHover("tools")}
-                    onMouseLeave={() => setDashCardHover(null)}
-                    style={cardBase("tools")}
-                  >
-                    <div style={{ height: 3, background: "linear-gradient(135deg, #63B7BA, #818cf8)", width: "100%" }} />
-                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
-                      <div
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 14,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: "linear-gradient(135deg, rgba(99,183,186,0.2), rgba(129,140,248,0.2))",
-                        }}
-                      >
-                        <Icon name="wrench" size={26} color={t.blue} />
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>Tools</div>
-                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
-                        Video reformatter, content analytics, and team utilities
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "4px 10px",
-                            borderRadius: 20,
-                            background: t.blue + (t.isLight ? "18" : "15"),
-                            color: t.blue,
-                            border: t.isLight ? `1px solid ${t.blue}30` : "none",
-                          }}
-                        >
-                          1 tool
-                        </span>
-                        <span
-                          role="link"
-                          tabIndex={0}
-                          onClick={(e) => { e.stopPropagation(); navigate("videotool"); }}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); navigate("videotool"); } }}
-                          style={{ fontSize: 12, color: t.blue, fontWeight: 600, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}
-                        >
-                          Video Reformatter
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
-                      <Icon name="wrench" size={120} color={t.text} />
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 40, textAlign: "center" }}>
-                  Built for Intake Breathing&apos;s marketing team · v{APP_VERSION}
-                </div>
-
-                {!apiKey && (
-                  <div style={{ marginTop: 28, fontSize: 13, color: t.textFaint }}>
-                    Want IB-Ai-powered briefs?{" "}
-                    <span onClick={() => navigate("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
-                  </div>
-                )}
-                {apiKey && apiStatus === "ok" && (
-                  <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
-                    <Icon name="checkCircle" size={16} color={t.green} />
-                    <span>IB-Ai connected and ready</span>
-                  </div>
-                )}
+              >
+                Intake Breathing — Creator Partnerships
               </div>
+
+              <div style={{ display: "flex", gap: 24, marginBottom: 40, flexWrap: "wrap", alignItems: "baseline" }}>
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{library.length}</span>
+                  <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>briefs</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{activeCreatorCount}</span>
+                  <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>creators</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{activeVideosTotal}</span>
+                  <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>videos</span>
+                </div>
+              </div>
+
+              <div className="home-dashboard-grid">
+                <div
+                  {...cardShell("ugc", t.green)}
+                  onClick={() => navigate("library")}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("library"); } }}
+                >
+                  {accentBar(t.green)}
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>UGC Army</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
+                    Create briefs, manage creators, and track content
+                  </div>
+                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.green }}>
+                    {library.length} briefs · {activeCreatorCount} active creators
+                  </div>
+                </div>
+
+                <div
+                  {...cardShell("pipeline", t.orange)}
+                  onClick={() => navigate("pipeline")}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("pipeline"); } }}
+                >
+                  {accentBar(t.orange)}
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Channel Pipeline</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
+                    Track outreach, responses, and partnerships
+                  </div>
+                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.textFaint }}>Coming soon</div>
+                </div>
+
+                <div
+                  {...cardShell("influencer", t.purple)}
+                  onClick={() => navigate("influencer")}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("influencer"); } }}
+                >
+                  {accentBar(t.purple)}
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Influencer Buys</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
+                    Manage campaigns, rates, and spend
+                  </div>
+                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.textFaint }}>Coming soon</div>
+                </div>
+
+                <div
+                  {...cardShell("tools", t.blue)}
+                  onClick={() => navigate("tools")}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("tools"); } }}
+                >
+                  {accentBar(t.blue)}
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Tools</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
+                    Video reformatter and team utilities
+                  </div>
+                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.blue }}>1 tool available</div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 48, textAlign: "center", fontSize: 11, color: `${t.textFaint}60` }}>v{APP_VERSION}</div>
             </div>
           );
         })()}
