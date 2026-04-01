@@ -4,8 +4,14 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const CHANGELOG = [
+  { version: "1.2.0", date: "2025-03-31", changes: [
+    "Proof points overhauled — only stats verified on intakebreathing.com",
+    "Removed unverified claims: 96% easier breathing, 41% congestion, 88% expansion, 90% fit rate",
+    "Added verified site claims: press features, industry stats, product specs",
+    "AI proof point suggestions now use verified data only",
+  ]},
   { version: "1.1.0", date: "2025-03-31", changes: [
     "AI-powered proof point auto-selection — stats update based on product, audience, problem, mission, and campaign fields",
     "Debounced 2-second delay to avoid excessive API calls",
@@ -157,20 +163,59 @@ const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"];
 const GENDERS = ["Men & Women", "Men", "Women"];
 
 const STAT_OPTIONS = [
-  { id: "snoring", label: "88% reduced snoring", full: "88% of users reported reduced snoring (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "sleep", label: "87% deeper sleep", full: "87% reported deeper, more restful sleep (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "sinus", label: "92% sinus pressure relief", full: "92% reported sinus pressure relief (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "breathe", label: "96% easier breathing night one", full: "96% reported easier breathing from night one (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "congestion", label: "41% less nasal congestion", full: "41% reduction in perceived nasal congestion (SleepScore Labs, 840+ nights, Dec 2024)" },
-  { id: "expansion", label: "Over 88% nasal passageway expansion", full: "Expands nasal passageway by over 88%" },
-  { id: "sizes", label: "4 sizes fit 90% of noses", full: "Starter Kit includes 4 sizes that fit 90% of noses" },
-  { id: "customers", label: "1,000,000+ customers", full: "Over 1,000,000 customers worldwide" },
-  { id: "fda", label: "FDA registered, made in USA", full: "FDA registered, medical grade, hypoallergenic, latex-free, made in USA" },
+  // SleepScore Labs verified (840+ nights analyzed)
+  { id: "snoring", label: "88% reduced snoring", full: "88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", category: "sleep" },
+  { id: "sleep", label: "87% deeper sleep", full: "87% of users reported deeper & more restful sleep (SleepScore Labs independent study, 840+ nights analyzed)", category: "sleep" },
+  { id: "sinus", label: "92% sinus pressure relief", full: "92% of users reported relief from sinus pressure (SleepScore Labs independent study, 840+ nights analyzed)", category: "health" },
+  // Verified product facts
+  { id: "customers", label: "1,000,000+ customers", full: "Over 1,000,000 customers · 4.5 star rating", category: "trust" },
+  { id: "fda", label: "FDA registered, made in USA", full: "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", category: "trust" },
+  { id: "starterkit", label: "4 band sizes (S/M/L/XL)", full: "Starter Kit includes 4 magnetic bands (S, M, L, XL) and 15 adhesive tab sets", category: "product" },
+  { id: "sweatproof", label: "Sweat-proof, designed for motocross", full: "Originally designed for motocross and high-intensity sports — sweat-proof adhesive stays on through workouts and sleep", category: "product" },
+  { id: "trial", label: "90-day risk-free trial", full: "90-day risk-free trial included", category: "trust" },
+  { id: "reusable", label: "Reusable band, replace tabs only", full: "Reusable magnetic band — only replace the adhesive tabs, reducing waste and cost vs single-use strips", category: "product" },
+  // Industry stats from intakebreathing.com/pages/science
+  { id: "airflow", label: "4 out of 5 people are airflow limited", full: "4 out of 5 people are airflow limited — most don't even know it", category: "awareness" },
+  { id: "mouthbreath", label: "67% have trouble nose breathing", full: "Over two thirds (67%) of people report trouble breathing through their nose, even while at rest", category: "awareness" },
+  { id: "snoring_pop", label: "90M Americans snore nightly", full: "90 million American adults suffer from snoring — 56% suffer nightly", category: "awareness" },
+  // Press
+  { id: "press", label: "Featured in Yahoo, CNN, FOX, Men's Health", full: "As featured in Yahoo, Mashable, Men's Health, CNN, and FOX", category: "trust" },
 ];
 
-const APPROVED_CLAIMS = ["Keeps my nose open all night", "Drug-free, nothing wears off", "Easier to breathe through my nose", "Helps me sleep through allergy season", "Physically opens your nasal passages", "Comes with 4 sizes to fit your nose", "Magnetic — stays on all night", "Sweat-proof, won't fall off", "Built for athletes, loved by everyone", "Originally designed for professional motocross athletes", "Reusable band, just replace the tabs", "90-day risk-free trial"];
-const BANNED_CLAIMS = ['"Treats allergies" or "allergy cure"', '"Clears congestion" or "decongestant"', '"Replaces your allergy medication"', '"Clinically proven" (without SleepScore citation)', '"Medical device" (it\'s FDA registered, not cleared/approved)', '"Guarantees fit" — say "fits 90% of noses" instead', 'Any medical diagnosis language', '"Cures" anything'];
-const DISCLOSURE = "Source: SleepScore Labs Independent Study, 840+ nights analyzed, Dec 2024. Must appear as text overlay or in caption any time a stat is referenced.";
+const STAT_CATEGORY_ORDER = ["sleep", "health", "product", "trust", "awareness"];
+const STAT_CATEGORY_LABELS = {
+  sleep: "Sleep & Snoring",
+  health: "Health",
+  product: "Product Features",
+  trust: "Trust & Social Proof",
+  awareness: "Industry Stats",
+};
+
+const APPROVED_CLAIMS = [
+  "Opens wider, holds stronger, and never collapses",
+  "Drug-free — nothing to ingest, nothing wears off",
+  "Magnetic lift expands from the sides",
+  "Sweat-proof — designed for motocross and high-intensity training",
+  "Reusable band — only replace the tabs",
+  "Skin safe — hypoallergenic, latex-free, medical grade",
+  "FDA registered, made in USA",
+  "Starter Kit includes 4 sizes (S, M, L, XL) + 15 tab sets",
+  "90-day risk-free trial",
+  "Originally engineered for athletes, loved by everyone",
+  "Nothing goes inside your nose — fully external",
+];
+const BANNED_CLAIMS = [
+  '"Cures" or "treats" any medical condition',
+  '"Clears congestion" or "decongestant"',
+  '"Replaces medication" or "alternative to medication"',
+  '"Clinically proven" without the SleepScore Labs citation',
+  '"FDA approved" or "FDA cleared" — it is FDA registered, not approved',
+  '"Guarantees" fit or results',
+  '"Medical device" — it is an external nasal dilator',
+  'Any diagnosis language like "you have sleep apnea"',
+  '"Permanently" changes anything — effects are while wearing only',
+];
+const DISCLOSURE = "Source: SleepScore Labs independent study · Participants with sleep tracking · Over 840 nights analyzed. Must appear as text overlay or in caption any time a SleepScore stat is referenced. Read more: intakebreathing.com/blogs/breathing-smarter/what-sleepscore-labs-discovered-about-nasal-strips-for-sleep";
 
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Multi-platform"];
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
@@ -181,7 +226,7 @@ const PREFILL = {
   mission: "Four sizes. One that's perfect for you. How far can you level up?",
   ageRange: "25-34", gender: "Men & Women",
   problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
-  selectedStats: ["snoring", "sleep", "expansion", "sizes", "customers", "fda"],
+  selectedStats: ["snoring", "sleep", "sinus", "starterkit", "customers", "fda"],
   platform: "TikTok", videoLength: "15-30s", tone: "Funny & casual",
   notes: "Creator tries each level 1→4 on camera. Quick cuts. Reaction-driven. Each level opens the nose wider. Payoff is Level 4 where their nose opens WIDE and the genuine reaction IS the content.\n\nHook ideas: 'I don't even know if I can make it to Level 4' / 'This comes with FOUR sizes??' / 'Level 1 was easy... Level 4 broke me.'\n\nThe Level Up isn't about needing Level 4 — it's about finding YOUR level. But the entertainment value is the journey to 4. Keep it fun, not medical. Show the magnetic snap-on moment — it's satisfying and shareable.",
 };
@@ -189,7 +234,7 @@ const PREFILL = {
 const DEFAULTS = {
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
-  selectedStats: ["snoring", "sleep", "sizes", "customers", "fda"],
+  selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
   platform: "TikTok", videoLength: "15-30s", tone: "Real & relatable", notes: "",
 };
 
@@ -242,7 +287,7 @@ function generateBrief(d) {
     : `Target: ${genderLabel}, ages ${ageRange}. They've seen the product in their feed but haven't pulled the trigger. Open-minded but need proof. They trust real people over polished ads.`;
   const isStarterKit = productLabel.startsWith("Starter Kit");
   const isMouthTape = productLabel === "Mouth Tape";
-  const solBase = isStarterKit ? "The Starter Kit includes 4 sizes that fit 90% of noses. Each level opens your nose wider. It's magnetic, reusable, and stays on all night." : isMouthTape ? "Intake Mouth Tape keeps your mouth closed so you breathe through your nose all night. Pair with the nasal dilator for max airflow." : `${fullProduct} is part of the Intake Breathing system for better nasal breathing.`;
+  const solBase = isStarterKit ? "The Starter Kit includes 4 magnetic bands (S, M, L, XL) and 15 adhesive tab sets. It's magnetic, reusable, and stays on through workouts and sleep." : isMouthTape ? "Intake Mouth Tape keeps your mouth closed so you breathe through your nose all night. Pair with the nasal dilator for max airflow." : `${fullProduct} is part of the Intake Breathing system for better nasal breathing.`;
   const solutionSentences = splitSentences(solBase);
   const theyAre = ["Curious but cautious — needs a push, not a pitch", "Scrolls fast — 2 seconds to hook or gone", "Trusts real reactions over polished ads", "Open to trying if the risk feels low"];
   const theyAreNot = ["Already a loyal customer — this is for NEW eyes", "Looking for a medical solution or prescription", "Going to watch a 3-minute infomercial", "Impressed by corporate jargon"];
@@ -262,7 +307,7 @@ function generateBrief(d) {
   const vibePrefix = d.vibe === "Other" && vibeLabel ? `Campaign vibe: ${vibeLabel}\n\n` : "";
   const platNotes = vibePrefix + (PLATFORM_NOTES[d.platform] || "") + "\n\n" + (LENGTH_GUIDE[d.videoLength] || "");
   const deliverables = `Submit: (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
-  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["Over 1,000,000 customers worldwide", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial", "Expands nasal passageway by over 88%"], platNotes, deliverables };
+  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -318,7 +363,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 100,
-            messages: [{ role: "user", content: `You are helping select proof points for a UGC creator brief. Given this campaign context: "${context}". Available stat IDs: ${statIds}. The stats are: ${STAT_OPTIONS.map(s => s.id + "=" + s.label).join(", ")}. Return ONLY a JSON array of the most relevant stat IDs for this campaign, e.g. ["snoring","sleep","sizes"]. Pick 3-5 most relevant. Return ONLY the JSON array, nothing else.` }],
+            messages: [{ role: "user", content: `You are helping select proof points for a UGC creator brief. Given this campaign context: "${context}". Available stat IDs: ${statIds}. The stats are: ${STAT_OPTIONS.map(s => s.id + "=" + s.label).join(", ")}. Return ONLY a JSON array of the most relevant stat IDs for this campaign, e.g. ["snoring","sleep","starterkit"]. Pick 3-5 most relevant. Use only verified stat IDs from the list. Return ONLY the JSON array, nothing else.` }],
           }),
         }),
         new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000)),
@@ -428,10 +473,20 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>📊 Proof Points {statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— AI selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by AI, tap to adjust</span>}</div>
-        <div style={S.chipGrid}>
-          {STAT_OPTIONS.map(st => <div key={st.id} style={S.chip(selectedStats.includes(st.id))} onClick={()=>toggleStat(st.id)}>{selectedStats.includes(st.id) ? "✓ " : ""}{st.label}</div>)}
+        <div>
+          {STAT_CATEGORY_ORDER.filter(c => STAT_OPTIONS.some(s => s.category === c)).map((cat, catIdx) => {
+            const items = STAT_OPTIONS.filter(s => s.category === cat);
+            return (
+              <div key={cat}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.05em", marginTop: catIdx === 0 ? 0 : 12, marginBottom: 6 }}>{STAT_CATEGORY_LABELS[cat]}</div>
+                <div style={S.chipGrid}>
+                  {items.map(st => <div key={st.id} style={S.chip(selectedStats.includes(st.id))} onClick={()=>toggleStat(st.id)}>{selectedStats.includes(st.id) ? "✓ " : ""}{st.label}</div>)}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div style={{ ...S.hint, marginTop: 10 }}>Selected stats become proof point cards. SleepScore citation auto-included.</div>
+        <div style={{ ...S.hint, marginTop: 10 }}>Selected stats become proof point cards. Use disclosure when citing SleepScore stats.</div>
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>⚖️ Compliance — auto-included</div>
