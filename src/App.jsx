@@ -2953,6 +2953,8 @@ function VideoReformatter({ onBack }) {
     if (!w || !h) return;
 
     setDownloading((prev) => ({ ...prev, [format.id]: true }));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
     try {
       const res = await fetch("/api/reformat", {
         method: "POST",
@@ -2963,7 +2965,9 @@ function VideoReformatter({ onBack }) {
           height: h,
           name: `${fetchedVideo.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -2980,7 +2984,12 @@ function VideoReformatter({ onBack }) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(`Reformat failed: ${err.message}`);
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError") {
+        alert("Reformat timed out — the video may be too long. Try a shorter clip.");
+      } else {
+        alert(`Reformat failed: ${err.message}`);
+      }
     } finally {
       setDownloading((prev) => ({ ...prev, [format.id]: false }));
     }
