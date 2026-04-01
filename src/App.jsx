@@ -24,8 +24,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.0.0";
+const APP_VERSION = "3.1.0";
 const CHANGELOG = [
+  { version: "3.1.0", date: "2026-04-01", changes: [
+    "Smart API caching — enrichment data persists in localStorage, never re-pulled unless explicitly requested",
+    "Enrich button shows last enriched date and won't auto-re-pull if data exists",
+    "Bulk enrich skips creators already enriched (configurable: 24h, 7d, 30d, or never re-pull)",
+  ]},
   { version: "3.0.0", date: "2026-04-01", changes: [
     "Fixed engagement rate — now calculated from recent video performance, not lifetime hearts",
     "Fixed Instagram enrichment — better error handling, separate IG handle field",
@@ -853,6 +858,32 @@ function backfillCreatorSocialUrls(c) {
   return Object.keys(updates).length ? { ...c, ...updates } : c;
 }
 
+/** Dot + label for how stale TikTok enrichment is (uses tt lastEnriched). */
+function creatorDataFreshness(lastIso, t) {
+  if (!lastIso) return { color: t.textFaint, text: "Never enriched" };
+  const days = (Date.now() - new Date(lastIso).getTime()) / 86400000;
+  if (days < 1) return { color: t.green, text: "Data from today" };
+  if (days < 7) return { color: "#eab308", text: `Data from ${Math.floor(days) || 1} days ago` };
+  if (days < 30) return { color: t.orange, text: `Data from ${Math.floor(days)} days ago` };
+  return { color: t.red, text: `Data is ${Math.floor(days)} days old — consider refreshing` };
+}
+
+/** Bulk: who needs a re-pull given skip-within window. mode "never" = re-pull everyone. */
+function shouldBulkEnrichCreator(c, mode) {
+  const last = c.tiktokData?.lastEnriched;
+  if (mode === "never") return true;
+  if (!last) return true;
+  const ms =
+    mode === "24h"
+      ? 24 * 60 * 60 * 1000
+      : mode === "7d"
+        ? 7 * 24 * 60 * 60 * 1000
+        : mode === "30d"
+          ? 30 * 24 * 60 * 60 * 1000
+          : 7 * 24 * 60 * 60 * 1000;
+  return Date.now() - new Date(last).getTime() > ms;
+}
+
 /** Compact e.g. 4.1M, 127K */
 function formatMetricShort(n) {
   if (n == null || Number.isNaN(Number(n))) return "—";
@@ -943,7 +974,7 @@ function instagramDataFromProfileResponse(raw) {
   };
 }
 
-async function fetchInstagramEnrichment(igHandleRaw, scrapeKey, existingData = {}) {
+async function fetchInstagramEnrichment(igHandleRaw, scrapeKey, existingData = {}, onCreditUsed) {
   const base = { ...DEFAULT_INSTAGRAM_DATA, ...existingData };
   const clean = String(igHandleRaw || "").replace(/^@/, "").trim();
   const sk = String(scrapeKey || "").trim();
@@ -967,6 +998,7 @@ async function fetchInstagramEnrichment(igHandleRaw, scrapeKey, existingData = {
         enrichError: `Profile not found (HTTP ${igRes.status}). Handle may differ from TikTok.`,
       };
     }
+    onCreditUsed?.();
     const igProfile = await igRes.json();
     return {
       ...base,
@@ -1225,7 +1257,7 @@ function fitScoreBadgeStyle(score, t) {
   return { bg: t.red + "18", color: t.red, label: "Low Fit" };
 }
 
-async function fetchTikTokProfileRaw(cleanHandle, scrapeKey) {
+async function fetchTikTokProfileRaw(cleanHandle, scrapeKey, onCreditUsed) {
   const res = await Promise.race([
     fetch(`https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(cleanHandle)}`, {
       headers: { "x-api-key": scrapeKey },
@@ -1238,10 +1270,11 @@ async function fetchTikTokProfileRaw(cleanHandle, scrapeKey) {
     e.status = res.status;
     throw e;
   }
+  onCreditUsed?.();
   return raw;
 }
 
-async function fetchTikTokVideosRaw(cleanHandle, scrapeKey) {
+async function fetchTikTokVideosRaw(cleanHandle, scrapeKey, onCreditUsed) {
   try {
     const res = await Promise.race([
       fetch(`https://api.scrapecreators.com/v3/tiktok/profile/videos?handle=${encodeURIComponent(cleanHandle)}`, {
@@ -1250,6 +1283,7 @@ async function fetchTikTokVideosRaw(cleanHandle, scrapeKey) {
       new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
     ]);
     if (!res.ok) return null;
+    onCreditUsed?.();
     return await res.json().catch(() => null);
   } catch {
     return null;
@@ -1264,11 +1298,12 @@ async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opt
   const igHandleOverride = String(opts?.instagramHandle || "").replace(/^@/, "").trim();
   const igHandle = igHandleOverride || cleanHandle;
   const notes = [];
+  const bump = opts?.onCreditUsed;
   onStep?.("tt_profile");
-  const ttRaw = await fetchTikTokProfileRaw(cleanHandle, sk);
+  const ttRaw = await fetchTikTokProfileRaw(cleanHandle, sk, bump);
   const { user, stats } = parseTikTokUserStats(ttRaw);
   onStep?.("tt_videos");
-  const vidRaw = await fetchTikTokVideosRaw(cleanHandle, sk);
+  const vidRaw = await fetchTikTokVideosRaw(cleanHandle, sk, bump);
   const tops = topVideosForAi(vidRaw || {});
   const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
 
@@ -1279,7 +1314,7 @@ async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opt
   const engagementRate = erFromVideos;
 
   onStep?.("ig_profile");
-  const igData = await fetchInstagramEnrichment(igHandle, sk, opts?.existingInstagramData || {});
+  const igData = await fetchInstagramEnrichment(igHandle, sk, opts?.existingInstagramData || {}, bump);
   if (igData.enrichError) notes.push(igData.enrichError);
 
   onStep?.("ai_analyze");
@@ -3530,7 +3565,7 @@ const VIDEO_LOG_STATUSES = [
   { value: "draft", label: "Draft" },
 ];
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {} }) {
   const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
@@ -3572,6 +3607,11 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const lastEnriched = ttD.lastEnriched || igD.lastEnriched;
   const handleLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
   const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
+  const hasTTEnrichment = !!ttD.lastEnriched;
+  const lastEnrichDateLabel = hasTTEnrichment
+    ? new Date(ttD.lastEnriched).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const freshness = creatorDataFreshness(ttD.lastEnriched, t);
 
   const pullInstagramOnly = async () => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
@@ -3583,7 +3623,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     setIgPullBusy(true);
     try {
       const merged = { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}) };
-      const ig = await fetchInstagramEnrichment(igH, key.trim(), merged);
+      const ig = await fetchInstagramEnrichment(igH, key.trim(), merged, onScrapeCreditUsed);
       updateCreator(c.id, { instagramData: { ...merged, ...ig } });
     } finally {
       setIgPullBusy(false);
@@ -3599,19 +3639,26 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     setIgPullBusy(true);
     try {
       const merged = { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}) };
-      const ig = await fetchInstagramEnrichment(resolved, key.trim(), merged);
+      const ig = await fetchInstagramEnrichment(resolved, key.trim(), merged, onScrapeCreditUsed);
       updateCreator(c.id, { instagramData: { ...merged, ...ig } });
     } finally {
       setIgPullBusy(false);
     }
   };
 
-  const enrichProfile = async () => {
+  const runFullEnrich = async (forceRefresh = false) => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
     const ak = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
     if (!key.trim()) {
       alert("Add your ScrapeCreators API key in Settings");
       return;
+    }
+    if (!forceRefresh && ttD.lastEnriched) {
+      const hoursSince = (Date.now() - new Date(ttD.lastEnriched).getTime()) / (1000 * 60 * 60);
+      if (hoursSince < 24) {
+        alert(`Already enriched ${Math.round(hoursSince)} hours ago. Click "Refresh" to re-pull.`);
+        return;
+      }
     }
     setEnriching(true);
     setEnrichMsg("Pulling live data from TikTok...");
@@ -3619,6 +3666,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak, null, {
         instagramHandle: c.instagramHandle,
         existingInstagramData: c.instagramData,
+        onCreditUsed: onScrapeCreditUsed,
       });
       const patch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(c, payload.aiAnalysis) : {};
       updateCreator(c.id, {
@@ -3639,6 +3687,11 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     }
   };
 
+  const refreshProfile = async () => {
+    if (!window.confirm("This will use about 2–3 ScrapeCreators API credits. Continue?")) return;
+    await runFullEnrich(true);
+  };
+
   const reanalyzeOnly = async () => {
     const ak = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
     const sk = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
@@ -3649,8 +3702,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     setEnriching(true);
     setEnrichMsg("IB-Ai re-analyzing…");
     try {
-      const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
-      const vidRaw = sk ? await fetchTikTokVideosRaw(cleanHandle, sk) : null;
+      const vidRaw = sk ? await fetchTikTokVideosRaw(cleanHandle, sk, onScrapeCreditUsed) : null;
       const tops = topVideosForAi(vidRaw || {});
       const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
       const ttD = c.tiktokData || {};
@@ -3785,26 +3837,51 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           <button type="button" onClick={() => document.getElementById("creator-notes-section")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>
             Edit
           </button>
-          <button
-            type="button"
-            disabled={enriching}
-            onClick={enrichProfile}
-            style={{ ...S.btnP, padding: "9px 18px", fontSize: 13, opacity: enriching ? 0.65 : 1 }}
-          >
-            {enriching ? "Pulling live data…" : "Enrich Profile"}
-          </button>
+          {!hasTTEnrichment ? (
+            <button
+              type="button"
+              disabled={enriching}
+              onClick={() => runFullEnrich(false)}
+              style={{ ...S.btnP, padding: "9px 18px", fontSize: 13, opacity: enriching ? 0.65 : 1 }}
+            >
+              {enriching ? "Pulling live data…" : "Enrich Profile"}
+            </button>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 12, color: t.textMuted }}>Last enriched: {lastEnrichDateLabel}</span>
+              <button type="button" onClick={() => document.getElementById("creator-live-metrics")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 16px", fontSize: 13 }}>
+                View Data
+              </button>
+              <button
+                type="button"
+                disabled={enriching}
+                onClick={refreshProfile}
+                style={{ ...S.btnS, padding: "9px 16px", fontSize: 13, opacity: enriching ? 0.65 : 1 }}
+              >
+                {enriching ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
       {enrichMsg ? (
         <div style={{ fontSize: 12, color: enrichMsg.includes("Profile enriched") || enrichMsg.includes("enriched") || enrichMsg.includes("IB-Ai analysis") ? t.green : t.orange, marginBottom: 16 }}>{enrichMsg}</div>
       ) : null}
 
-      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16, color: t.text }}>Live Metrics</div>
+      <div id="creator-live-metrics" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Live Metrics</div>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: t.textMuted }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: freshness.color, flexShrink: 0 }} title={freshness.text} />
+              {freshness.text}
+            </span>
+          </div>
+        </div>
         {!lastEnriched ? (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 12 }}>No live data yet</div>
-            <button type="button" disabled={enriching} onClick={enrichProfile} style={{ ...S.btnP, padding: "10px 20px", fontSize: 14 }}>
+            <button type="button" disabled={enriching} onClick={() => runFullEnrich(false)} style={{ ...S.btnP, padding: "10px 20px", fontSize: 14 }}>
               Enrich Profile
             </button>
           </div>
@@ -3895,9 +3972,14 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             ) : null}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
               <div style={{ fontSize: 11, color: t.textFaint }}>Last updated: {new Date(lastEnriched).toLocaleString()}</div>
-              <button type="button" disabled={enriching} onClick={enrichProfile} style={{ ...S.btnP, padding: "8px 16px", fontSize: 12 }}>
-                Enrich Profile
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => document.getElementById("creator-live-metrics")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "8px 16px", fontSize: 12 }}>
+                  View Data
+                </button>
+                <button type="button" disabled={enriching} onClick={refreshProfile} style={{ ...S.btnS, padding: "8px 16px", fontSize: 12, opacity: enriching ? 0.65 : 1 }}>
+                  {enriching ? "Refreshing…" : "Refresh"}
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -4528,28 +4610,40 @@ export default function App() {
     setCreators((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
-        let next = { ...c, ...updates };
-        if (updates.tiktokData && typeof updates.tiktokData === "object") {
-          next = {
-            ...next,
-            tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...updates.tiktokData },
-          };
+        const merged = { ...c };
+        for (const [key, val] of Object.entries(updates)) {
+          if (
+            val &&
+            typeof val === "object" &&
+            !Array.isArray(val) &&
+            Object.getPrototypeOf(val) === Object.prototype
+          ) {
+            const prevVal = c[key];
+            if (
+              prevVal &&
+              typeof prevVal === "object" &&
+              !Array.isArray(prevVal) &&
+              Object.getPrototypeOf(prevVal) === Object.prototype
+            ) {
+              merged[key] = { ...prevVal, ...val };
+            } else {
+              merged[key] = val;
+            }
+          } else {
+            merged[key] = val;
+          }
         }
-        if (updates.instagramData && typeof updates.instagramData === "object") {
-          next = {
-            ...next,
-            instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...updates.instagramData },
-          };
-        }
-        if ("aiAnalysis" in updates) {
-          next = { ...next, aiAnalysis: updates.aiAnalysis };
-        }
-        return next;
+        return merged;
       })
     );
   }, []);
 
   const [bulkEnrichProgress, setBulkEnrichProgress] = useState(null);
+  const [bulkStaleWindow, setBulkStaleWindow] = useState("7d");
+  const [creditsUsed, setCreditsUsed] = useState(0);
+  const bumpScrapeCredit = useCallback(() => {
+    setCreditsUsed((n) => n + 1);
+  }, []);
 
   const runBulkEnrichAll = useCallback(async () => {
     const key = (scrapeKey || "").trim() || storageGet("intake-scrape-key") || "";
@@ -4559,15 +4653,12 @@ export default function App() {
       return;
     }
     const active = creators.filter((c) => c.status === "Active");
-    const stale = active.filter((c) => {
-      const last = c.tiktokData?.lastEnriched;
-      if (!last) return true;
-      return Date.now() - new Date(last).getTime() > 24 * 60 * 60 * 1000;
-    });
+    const stale = active.filter((c) => shouldBulkEnrichCreator(c, bulkStaleWindow));
     const skipped = active.length - stale.length;
+    const estCredits = stale.length * 3;
     if (
       !window.confirm(
-        `This will pull live TikTok data for ${stale.length} active creators (skipping ${skipped} enriched in the last 24h). Uses about ${stale.length} ScrapeCreators credits plus IB-Ai for creators missing analysis. Continue?`
+        `This will enrich ${stale.length} creators (${skipped} skipped as recent). Estimated cost: ${estCredits} ScrapeCreators credits (≈3 per creator). IB-Ai may use additional calls for creators missing analysis. Continue?`
       )
     ) {
       return;
@@ -4593,6 +4684,7 @@ export default function App() {
           skipAi: !!cr.aiAnalysis,
           instagramHandle: cr.instagramHandle,
           existingInstagramData: cr.instagramData,
+          onCreditUsed: bumpScrapeCredit,
         });
         const tt = payload.ttData;
         const engagementRate = payload.engagementRate;
@@ -4630,10 +4722,10 @@ export default function App() {
       ? `\nTop discovery: ${topDiscovery.handle} — ${topDiscovery.score}/10 fit score${topDiscovery.followers != null ? `, ${formatMetricShort(topDiscovery.followers)} followers` : ""}`
       : "";
     setCreatorImportToast(
-      `Bulk enrichment complete:\n• ${done} creators updated\n• ${skipped} skipped (enriched < 24h ago)\n• ${fail} failed (handle not found or API error)${td}`
+      `Bulk enrichment complete:\n• ${done} creators updated\n• ${skipped} skipped (fresh per your setting)\n• ${fail} failed (handle not found or API error)${td}`
     );
     setTimeout(() => setCreatorImportToast(null), 12000);
-  }, [creators, scrapeKey, apiKey, updateCreator]);
+  }, [creators, scrapeKey, apiKey, updateCreator, bulkStaleWindow, bumpScrapeCredit]);
 
   const runAddAndEnrich = useCallback(async () => {
     const raw = addHandleInput.trim();
@@ -4698,7 +4790,7 @@ export default function App() {
     setAddEnrichStepState({ completed: [], current: "tt_profile" });
 
     try {
-      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, onStep);
+      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, onStep, { onCreditUsed: bumpScrapeCredit });
       const ai = payload.aiAnalysis;
       const id = `c-${Date.now()}`;
       const newCreator = {
@@ -4748,7 +4840,7 @@ export default function App() {
       setAddEnrichBusy(false);
       setAddEnrichStepState(null);
     }
-  }, [addHandleInput, creators, scrapeKey, apiKey, navigate]);
+  }, [addHandleInput, creators, scrapeKey, apiKey, navigate, bumpScrapeCredit]);
 
   const runReEnrichExisting = useCallback(async () => {
     if (!duplicateModal) return;
@@ -4768,6 +4860,7 @@ export default function App() {
       const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, null, {
         instagramHandle: existing.instagramHandle,
         existingInstagramData: existing.instagramData,
+        onCreditUsed: bumpScrapeCredit,
       });
       const merged = mergeAiFieldsIntoExisting(existing, payload.aiAnalysis);
       updateCreator(existingId, {
@@ -4787,7 +4880,7 @@ export default function App() {
     } finally {
       setAddEnrichBusy(false);
     }
-  }, [duplicateModal, creators, scrapeKey, apiKey, updateCreator, navigate]);
+  }, [duplicateModal, creators, scrapeKey, apiKey, updateCreator, navigate, bumpScrapeCredit]);
 
   const handleCsvImport = useCallback(
     (file) => {
@@ -6601,6 +6694,28 @@ export default function App() {
               >
                 + Add Creator
               </button>
+              <label style={{ fontSize: 12, color: t.textMuted, display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                <span>Skip if enriched within:</span>
+                <select
+                  value={bulkStaleWindow}
+                  onChange={(e) => setBulkStaleWindow(e.target.value)}
+                  style={{
+                    height: 34,
+                    padding: "0 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${t.border}`,
+                    background: t.inputBg,
+                    color: t.inputText,
+                    fontSize: 12,
+                    maxWidth: 200,
+                  }}
+                >
+                  <option value="24h">24 hours</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="never">Never skip (re-pull all)</option>
+                </select>
+              </label>
               <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, opacity: bulkEnrichProgress ? 0.6 : 1, display: "inline-flex", alignItems: "center" }}>
                 Enrich All
               </button>
@@ -6617,6 +6732,9 @@ export default function App() {
                 }}
               />
               <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 12, color: t.textFaint }}>
+                Credits used this session: {creditsUsed}
+              </span>
               <span style={{ fontSize: 12, color: t.textFaint }}>
                 {sortedCreators.length} of {creators.length}
               </span>
@@ -6763,6 +6881,7 @@ export default function App() {
               apiKey={apiKey}
               t={t}
               S={S}
+              onScrapeCreditUsed={bumpScrapeCredit}
             />
           )
         )}
