@@ -138,7 +138,7 @@ create table if not exists monthly_metrics (
   ads_to_lunar integer,
   ads_launched integer,
   ad_spend numeric,
-  purchases integer,
+  purchases numeric,
   cpa numeric,
   roas numeric,
   ctr numeric,
