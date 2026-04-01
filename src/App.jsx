@@ -10,6 +10,7 @@ import {
   dbDeleteBrief,
   dbUpdateBriefForm,
   rowToCreator,
+  creatorToRow,
   dbGetSetting,
   dbSetSetting,
 } from "./supabaseDb.js";
@@ -39,8 +40,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.11.0";
+const APP_VERSION = "5.12.0";
 const CHANGELOG = [
+  { version: "5.12.0", date: "2026-04-01", changes: [
+    "Fixed enrichment data not persisting — visible error banner when saves fail",
+    "Creator table shows avatars instead of letters",
+    "Creators page improved with better layout",
+    "Added database connection test in Settings",
+  ]},
   { version: "5.11.0", date: "2026-04-01", changes: [
     "Homepage reverted to card-based layout matching UGC Army dashboard style",
   ]},
@@ -5378,7 +5385,7 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
   );
 }
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {} }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError }) {
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
     url: "",
@@ -5524,44 +5531,64 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         lastEnriched: new Date().toISOString(),
       };
       const mergedCreator = { ...c, ...platformUpdate, ...patch };
-      updateCreator(c.id, {
+      const cpmExtra = enrichPatchWithCpm(c, patch, mergedCreator);
+      const nameExtra = !c.name?.trim() && payload.nickname ? { name: payload.nickname } : {};
+      const fullUpdate = {
         ...platformUpdate,
         ...patch,
-        ...enrichPatchWithCpm(c, patch, mergedCreator),
-        ...(!c.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
-      });
+        ...cpmExtra,
+        ...nameExtra,
+      };
+      updateCreator(c.id, fullUpdate);
       const pf = payload.platformsFound ?? 0;
       const ib = payload.aiAnalysis?.ibScore;
       setEnrichMsg(
         `Enrichment complete — ${pf}/11 platforms found · ${ib != null ? `${ib} IB Score` : "— IB Score"}`
       );
 
+      const mergedForRetry = { ...c, ...fullUpdate };
       setTimeout(async () => {
         try {
-          const { data: verify, error: verr } = await supabase
+          const { data: check, error: checkErr } = await supabase
             .from("creators")
-            .select("ib_score, tiktok_data, instagram_data, last_enriched")
+            .select("tiktok_data, instagram_data, ib_score, last_enriched")
             .eq("id", c.id)
-            .maybeSingle();
-          if (verr) {
-            console.error("[enrichment] Verification query failed:", verr);
+            .single();
+
+          if (checkErr) {
+            console.error("[enrich-verify] Read error:", checkErr);
+            setEnrichMsg((prev) => `${prev || ""} ⚠️ Could not verify save.`);
             return;
           }
-          if (!verify?.tiktok_data && !verify?.instagram_data) {
-            console.error("[enrichment] VERIFICATION FAILED — data did not persist to Supabase");
-            setEnrichMsg((prev) => `${prev || ""} ⚠️ WARNING: Data may not have saved. Check console for errors.`);
+
+          if (!check.tiktok_data && !check.instagram_data && !check.ib_score) {
+            console.error("[enrich-verify] DATA NOT PERSISTED. Retrying...");
+            setEnrichMsg((prev) => `${prev || ""} ⚠️ Retrying save...`);
+
+            const retryRow = creatorToRow(mergedForRetry);
+            const { error: retryErr } = await supabase.from("creators").update(retryRow).eq("id", c.id);
+
+            if (retryErr) {
+              console.error("[enrich-verify] RETRY FAILED:", retryErr.message, retryErr.code, retryErr.details);
+              setEnrichMsg(
+                `Enrichment data FAILED to save: ${retryErr.message}. Screenshot this and report it.`
+              );
+              setDbError(`Enrichment save failed for ${c.handle}: ${retryErr.message}`);
+            } else {
+              console.log("[enrich-verify] Retry succeeded.");
+              setEnrichMsg((prev) => prev.replace("⚠️ Retrying save...", "✓ Data saved on retry."));
+            }
           } else {
-            console.log("[enrichment] Verification OK — data persisted to Supabase", {
-              ibScore: verify.ib_score,
-              hasTT: !!verify.tiktok_data,
-              hasIG: !!verify.instagram_data,
-              lastEnriched: verify.last_enriched,
+            console.log("[enrich-verify] ✓ Data persisted:", {
+              ib: check.ib_score,
+              tt: !!check.tiktok_data,
+              ig: !!check.instagram_data,
             });
           }
         } catch (e) {
-          console.error("[enrichment] Verification check failed:", e);
+          console.error("[enrich-verify] Exception:", e);
         }
-      }, 2000);
+      }, 3000);
     } catch (err) {
       setEnrichMsg(err.message || "Enrichment failed.");
     } finally {
@@ -6586,6 +6613,7 @@ export default function App() {
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All" });
   const [openFilter, setOpenFilter] = useState(null);
+  const [dbError, setDbError] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
   const skipCreatorCellBlurRef = useRef(false);
   const addHandleInputRef = useRef(null);
@@ -6865,18 +6893,16 @@ export default function App() {
         }
         dbUpsertCreator(merged)
           .then((result) => {
-            if (result && result.error) {
-              console.error("[save] Creator update failed:", result.error);
-              if (typeof window !== "undefined") {
-                console.warn("[SAVE FAILED] Creator data may not persist. Error:", result.error.message || result.error);
-              }
+            if (result?.error) {
+              const msg =
+                result.error.message || result.error.details || JSON.stringify(result.error);
+              console.error("[SAVE FAILED]", msg);
+              setDbError(msg);
             }
           })
           .catch((e) => {
-            console.error("[save] Creator update exception:", e);
-            if (typeof window !== "undefined") {
-              console.warn("[SAVE FAILED] Creator data may not persist. Exception:", e.message);
-            }
+            console.error("[SAVE EXCEPTION]", e);
+            setDbError(e.message || "Unknown save error");
           });
         return merged;
       })
@@ -7878,6 +7904,39 @@ export default function App() {
           );
         })()}
 
+        {dbError && (
+          <div
+            style={{
+              background: "#ff4444",
+              color: "#fff",
+              padding: "10px 20px",
+              fontSize: 13,
+              fontWeight: 600,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              zIndex: 100,
+            }}
+          >
+            <span>⚠️ Database save failed: {dbError}</span>
+            <button
+              type="button"
+              onClick={() => setDbError(null)}
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                border: "none",
+                color: "#fff",
+                padding: "4px 12px",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {currentRole === ROLES.CREATOR && (
           <div className="no-print" style={{ background: t.orange + "15", borderBottom: `1px solid ${t.orange}30`, padding: "8px 24px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center", color: t.text, gap: 12, flexWrap: "wrap" }}>
             <span>👁 Viewing as Creator — read-only · Creators only see briefs</span>
@@ -8051,10 +8110,55 @@ export default function App() {
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable IB-Ai.</div>
 
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database</div>
-              <div style={{ fontSize: 13, color: t.green, fontWeight: 500 }}>✓ Connected to Supabase</div>
-              <div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>
-                {creators.length} creators · {library.length} briefs synced
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database Connection</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12 }}>Test that data can be read and written to Supabase</div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { data: readTest, error: readErr } = await supabase.from("creators").select("id").limit(1);
+                    if (readErr) throw new Error(`Read failed: ${readErr.message}`);
+
+                    if (readTest && readTest.length > 0) {
+                      const testId = readTest[0].id;
+                      const testVal = new Date().toISOString();
+                      const { error: writeErr } = await supabase
+                        .from("creators")
+                        .update({ last_enriched: testVal })
+                        .eq("id", testId);
+                      if (writeErr) throw new Error(`Write failed: ${writeErr.message}`);
+
+                      const { data: verifyData, error: verifyErr } = await supabase
+                        .from("creators")
+                        .select("last_enriched")
+                        .eq("id", testId)
+                        .single();
+                      if (verifyErr) throw new Error(`Verify failed: ${verifyErr.message}`);
+                      if (verifyData.last_enriched !== testVal) {
+                        throw new Error("Write verification failed — value didn't persist");
+                      }
+                    }
+
+                    alert("✓ Database connection working. Read, write, and verify all passed.");
+                  } catch (e) {
+                    alert(`✗ Database test FAILED: ${e.message}`);
+                  }
+                }}
+                style={{
+                  padding: "11px 20px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: "none",
+                  background: t.blue,
+                  color: "#fff",
+                }}
+              >
+                Test Connection
+              </button>
+              <div style={{ fontSize: 12, color: t.textFaint, marginTop: 8 }}>
+                {creators.length} creators · {library.length} briefs in database
               </div>
               <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10, lineHeight: 1.5 }}>
                 API keys are stored in the <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>app_settings</code> table. If saves fail, run the SQL at the end of <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>supabase/schema.sql</code> in the Supabase SQL Editor.
@@ -8519,13 +8623,34 @@ export default function App() {
             const base = { ...cellBase, ...align };
 
             if (col.key === "status") {
-              const dotBg = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.textFaint;
-              const stLabel = c.status === "Off-boarded" ? "Off" : c.status === "One-time" ? "One-time" : "Active";
-              const stColor = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.textFaint;
+              const s = c.status || "Active";
+              const colors = {
+                Active: t.green,
+                Applied: t.purple,
+                Pause: t.orange,
+                "Under Review": t.blue,
+                "Off-boarded": t.textFaint,
+                "One-time": t.blue,
+              };
+              const colSt = colors[s] || t.textFaint;
               return (
                 <div key={col.key} style={{ ...base, display: "flex", alignItems: "center" }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, background: dotBg, marginRight: 6, flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: stColor, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      background: `${colSt}15`,
+                      color: colSt,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      maxWidth: "100%",
+                    }}
+                  >
+                    {s}
+                  </span>
                 </div>
               );
             }
@@ -8591,9 +8716,36 @@ export default function App() {
             }
             if (col.key === "handle") {
               const hDisp = fmtHandle(c.handle);
+              const nm = (c.name || "").trim();
               return (
-                <div key={col.key} style={base} title={hDisp}>
-                  <span style={{ fontWeight: 600, color: t.text }}>{hDisp}</span>
+                <div key={col.key} style={{ ...base, minWidth: 0 }} title={nm ? `${hDisp} · ${nm}` : hDisp}>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: t.text,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {hDisp}
+                    </div>
+                    {nm ? (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: t.textFaint,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {nm}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               );
             }
@@ -8724,16 +8876,30 @@ export default function App() {
             }
             if (col.key === "ibScore") {
               const ib = c.ibScore != null ? Number(c.ibScore) : null;
-              const colIb = Number.isFinite(ib) ? ibScoreTierColor(ib) : t.textFaint;
+              const ok = Number.isFinite(ib);
               return (
-                <div key={col.key} style={{ ...base, fontWeight: 800, color: colIb }}>
-                  {Number.isFinite(ib) ? (
-                    <>
-                      <span style={{ fontSize: 10, opacity: 0.9 }}>✦ </span>
-                      {Math.round(ib)}
-                    </>
+                <div key={col.key} style={{ ...base, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                  {ok ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <div
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          background: ibScoreTierColor(ib),
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: "#fff",
+                        }}
+                      >
+                        {Math.round(ib)}
+                      </div>
+                    </div>
                   ) : (
-                    "—"
+                    <span style={{ color: t.textFaint }}>—</span>
                   )}
                 </div>
               );
@@ -8879,10 +9045,45 @@ export default function App() {
           <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <button type="button" onClick={() => navigate("ugcDashboard")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
-              <div style={{ fontSize: 13, color: t.textMuted }}>Your UGC creator roster — {creators.filter((c) => c.status === "Active").length} active, {creators.length} total</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
+                  <div style={{ fontSize: 13, color: t.textMuted }}>
+                    {creators.filter((cr) => cr.status === "Active").length} active · {creators.filter((cr) => cr.ibScore != null).length} scored · {creators.length} total
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCreatorPanel((prev) => {
+                        if (!prev) setTimeout(() => addHandleInputRef.current?.focus(), 0);
+                        return !prev;
+                      });
+                    }}
+                    style={{ ...S.btnP, height: 34, padding: "0 16px", fontSize: 13, display: "inline-flex", alignItems: "center" }}
+                  >
+                    + Add Creator
+                  </button>
+                  <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, opacity: bulkEnrichProgress ? 0.6 : 1, display: "inline-flex", alignItems: "center" }}>
+                    Enrich All
+                  </button>
+                  <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, display: "inline-flex", alignItems: "center" }}>Import CSV</button>
+                  <input
+                    ref={csvInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleCsvImport(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <input
                 type="text"
                 value={creatorSearch}
@@ -8890,18 +9091,6 @@ export default function App() {
                 placeholder="Search creators..."
                 style={{ flex: 1, maxWidth: 300, height: 34, padding: "0 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
               />
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddCreatorPanel((prev) => {
-                    if (!prev) setTimeout(() => addHandleInputRef.current?.focus(), 0);
-                    return !prev;
-                  });
-                }}
-                style={{ ...S.btnP, height: 34, padding: "0 16px", fontSize: 13, display: "inline-flex", alignItems: "center" }}
-              >
-                + Add Creator
-              </button>
               <label style={{ fontSize: 12, color: t.textMuted, display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
                 <span>Skip if enriched within:</span>
                 <select
@@ -8924,21 +9113,6 @@ export default function App() {
                   <option value="never">Never skip (re-pull all)</option>
                 </select>
               </label>
-              <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, opacity: bulkEnrichProgress ? 0.6 : 1, display: "inline-flex", alignItems: "center" }}>
-                Enrich All
-              </button>
-              <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, display: "inline-flex", alignItems: "center" }}>Import CSV</button>
-              <input
-                ref={csvInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleCsvImport(f);
-                  e.target.value = "";
-                }}
-              />
               <div style={{ flex: 1 }} />
               <span style={{ fontSize: 12, color: t.textFaint }}>
                 Credits used this session: {creditsUsed}
@@ -9041,7 +9215,11 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  sortedCreators.map((c, rowIdx) => (
+                  sortedCreators.map((c, rowIdx) => {
+                    const isApplied = c.status === "Applied";
+                    const stripeBg = rowIdx % 2 === 1 ? t.cardAlt + "30" : "transparent";
+                    const defaultRowBg = isApplied ? t.purple + "06" : stripeBg;
+                    return (
                     <div
                       key={c.id}
                       role="button"
@@ -9055,18 +9233,20 @@ export default function App() {
                         borderBottom: `1px solid ${t.border}30`,
                         cursor: "pointer",
                         transition: "background 0.1s",
-                        background: rowIdx % 2 === 1 ? t.cardAlt + "30" : "transparent",
+                        background: defaultRowBg,
+                        borderLeft: isApplied ? `3px solid ${t.purple}` : "none",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = t.cardAlt + "80";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = rowIdx % 2 === 1 ? t.cardAlt + "30" : "transparent";
+                        e.currentTarget.style.background = defaultRowBg;
                       }}
                     >
                       {CREATOR_COLUMNS.map((col) => renderBodyCell(c, col))}
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -9092,6 +9272,7 @@ export default function App() {
               t={t}
               S={S}
               onScrapeCreditUsed={bumpScrapeCredit}
+              setDbError={setDbError}
             />
           )
         )}
