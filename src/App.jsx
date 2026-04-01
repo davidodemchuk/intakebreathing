@@ -30,8 +30,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.4.0";
+const APP_VERSION = "3.5.0";
 const CHANGELOG = [
+  { version: "3.5.0", date: "2026-04-01", changes: [
+    "Fixed favicon — now uses real Intake hex logo (black bg, white logo)",
+    "FFmpeg bundled via npm — video reformatter downloads now work on Railway",
+    "PDF compact layout — briefs fit in 2 pages instead of 5, removed Required Disclosure section",
+  ]},
   { version: "3.4.0", date: "2026-04-01", changes: [
     "Avatar column added to creator table — shows profile pic from TikTok or Instagram",
     "IB-Ai generated badge — any data calculated by AI is clearly marked",
@@ -3038,7 +3043,7 @@ function buildBriefPrintHtml(b, fd, esc) {
       );
     })
     .join("");
-  const beatsHtml = `<div class="beats-grid">${beatsInnerHtml}</div>`;
+  const beatsHtml = beatsInnerHtml;
   const hooksHtml = (b.hooks || [])
     .map((h, i) => `<div class="hook"><div class="hook-num">${i + 1}</div><div class="hook-text">${escSafe(h)}</div></div>`)
     .join("");
@@ -3070,7 +3075,7 @@ body {
   font-size: 11px;
   line-height: 1.55;
   max-width: 100%;
-  padding: 0;
+  padding: 24px 32px 24px;
   background: #fff;
 }
 
@@ -3132,7 +3137,7 @@ body {
 /* ── Story beats — compact, no wasted space ── */
 .beats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .beat {
-  padding: 12px; background: #fafafa; border: 1px solid #e5e5e5;
+  padding: 12px; margin-bottom: 0; background: #fafafa; border: 1px solid #e5e5e5;
   border-top: 3px solid #ccc; border-radius: 6px;
 }
 .beat.problem { border-top-color: #c62828; }
@@ -3145,7 +3150,7 @@ body {
 .beat.problem .beat-label { color: #c62828; }
 .beat.agitate .beat-label { color: #e67e00; }
 .beat.solution .beat-label { color: #1a7a4e; }
-.beat-inst { font-size: 10px; color: #333; line-height: 1.5; margin-bottom: 8px; }
+.beat-inst { font-size: 11px; color: #333; line-height: 1.5; margin-bottom: 8px; }
 .beat-sub {
   font-size: 8px; font-weight: 700; color: #aaa; text-transform: uppercase;
   letter-spacing: 0.06em; margin-bottom: 3px; margin-top: 6px;
@@ -3257,7 +3262,9 @@ body {
 </div>
 
 <div class="section-title">Story Arc — Problem · Agitate · Solution</div>
+<div class="beats-grid">
 ${beatsHtml}
+</div>
 
 <div class="section-title">Hook Options — First 3 Seconds</div>
 <div class="hook-hint">If they don&apos;t feel it here, they scroll.</div>
