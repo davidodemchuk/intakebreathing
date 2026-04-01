@@ -6,9 +6,9 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 
 const THEMES = {
   dark: {
-    bg: "#060606", card: "#111", cardAlt: "#0d0d0d",
-    border: "#222", borderLight: "#333",
-    navBg: "rgba(6,6,6,0.92)",
+    bg: "#0a0a0f", card: "#161620", cardAlt: "#111118",
+    border: "#252530", borderLight: "#333",
+    navBg: "rgba(10,10,15,0.95)",
     text: "#ffffff", textSecondary: "#cccccc", textMuted: "#999999", textFaint: "#666666",
     inputBg: "#0d0d0d", inputText: "#ffffff",
     green: "#00FEA9", blue: "#63B7BA", red: "#ff6b6b", orange: "#ffaa3b", purple: "#c084fc",
@@ -16,7 +16,7 @@ const THEMES = {
     discBg: "rgba(0,0,0,0.3)",
     scrollThumb: "#222",
     isLight: false,
-    shadow: "none",
+    shadow: "0 2px 8px rgba(0,0,0,0.4)",
   },
   light: {
     bg: "#f0f0f2", card: "#ffffff", cardAlt: "#f5f5f7",
