@@ -109,3 +109,126 @@ create table if not exists app_settings (
 
 alter table app_settings enable row level security;
 create policy "settings_all_anon" on app_settings for all using (true) with check (true);
+
+-- ═══ CHANNEL PIPELINE SCHEMA ═══
+-- Run in Supabase SQL Editor if these tables are missing.
+
+-- Weekly metrics per channel
+create table if not exists weekly_metrics (
+  id uuid primary key default gen_random_uuid(),
+  channel text not null,
+  week_start date not null,
+  week_end date not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (channel, week_start)
+);
+
+-- Monthly budget & performance
+create table if not exists monthly_metrics (
+  id uuid primary key default gen_random_uuid(),
+  month date not null,
+  channel text not null,
+  budget numeric,
+  actual_spend numeric,
+  purchase_value numeric,
+  social_views bigint,
+  ad_views bigint,
+  ads_to_lunar integer,
+  ads_launched integer,
+  ad_spend numeric,
+  purchases integer,
+  cpa numeric,
+  roas numeric,
+  ctr numeric,
+  thumbstop numeric,
+  ad_cpm numeric,
+  ecpm numeric,
+  attribution numeric,
+  notes text,
+  data jsonb default '{}'::jsonb,
+  created_at timestamptz default now(),
+  unique (month, channel)
+);
+
+-- Partnership spend (creator payments)
+create table if not exists partnership_spend (
+  id uuid primary key default gen_random_uuid(),
+  month date not null,
+  section text not null,
+  status text,
+  creator_handle text,
+  pay numeric default 0,
+  new_pay numeric,
+  pl numeric,
+  paid_pl numeric,
+  platform text,
+  ad_usage text,
+  organic_views bigint,
+  ad_views bigint,
+  ad_spend numeric,
+  purchase_value numeric,
+  roas numeric,
+  contract text,
+  content_type text,
+  num_videos integer,
+  deliverable_met boolean default false,
+  creator_paid boolean default false,
+  creator_name text,
+  creator_email text,
+  creator_address text,
+  notes text,
+  creator_id uuid,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- SOPs
+create table if not exists sops (
+  id uuid primary key default gen_random_uuid(),
+  department text not null,
+  phase text,
+  section text,
+  title text not null,
+  description text,
+  owner text,
+  completed boolean default false,
+  sop_link text,
+  trainual_link text,
+  notes text,
+  sort_order integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Team KPIs
+create table if not exists team_kpis (
+  id uuid primary key default gen_random_uuid(),
+  team_member text not null,
+  week_start date not null,
+  data jsonb not null default '{}'::jsonb,
+  wins text,
+  created_at timestamptz default now(),
+  unique (team_member, week_start)
+);
+
+alter table weekly_metrics enable row level security;
+alter table monthly_metrics enable row level security;
+alter table partnership_spend enable row level security;
+alter table sops enable row level security;
+alter table team_kpis enable row level security;
+
+create policy "wm_all" on weekly_metrics for all using (true) with check (true);
+create policy "mm_all" on monthly_metrics for all using (true) with check (true);
+create policy "ps_all" on partnership_spend for all using (true) with check (true);
+create policy "sops_all" on sops for all using (true) with check (true);
+create policy "kpi_all" on team_kpis for all using (true) with check (true);
+
+create index if not exists idx_wm_channel on weekly_metrics(channel);
+create index if not exists idx_wm_week on weekly_metrics(week_start);
+create index if not exists idx_mm_month on monthly_metrics(month);
+create index if not exists idx_ps_month on partnership_spend(month);
+create index if not exists idx_ps_section on partnership_spend(section);
+create index if not exists idx_sops_dept on sops(department);
+create index if not exists idx_kpi_member on team_kpis(team_member);
