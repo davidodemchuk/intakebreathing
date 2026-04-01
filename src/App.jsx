@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
 import SEED_CREATORS from "./seedCreators.json";
+// If API key sync fails, ensure `app_settings` exists — run the SQL block in supabase/schema.sql in the Supabase SQL Editor.
 import {
   migrateLocalStorageToSupabase,
   dbLoadCreators,
@@ -9,6 +10,8 @@ import {
   dbDeleteBrief,
   dbUpdateBriefForm,
   rowToCreator,
+  dbGetSetting,
+  dbSetSetting,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -36,8 +39,12 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.5.0";
+const APP_VERSION = "5.6.0";
 const CHANGELOG = [
+  { version: "5.6.0", date: "2026-04-01", changes: [
+    "API keys now stored in Supabase — persist across browsers and devices",
+    "Theme preference stays in localStorage (per-device)",
+  ]},
   { version: "5.5.0", date: "2026-04-01", changes: [
     "Fixed enrichment data not persisting — added write verification, error surfacing, and retry",
   ]},
@@ -6283,6 +6290,23 @@ export default function App() {
       const scrapeVal = storageGet("intake-scrape-key");
       if (scrapeVal && !cancelled) setScrapeKey(scrapeVal);
 
+      const [dbApiKey, dbScrapeKey] = await Promise.all([
+        dbGetSetting("anthropic-api-key"),
+        dbGetSetting("scrapecreators-api-key"),
+      ]);
+      if (!cancelled && dbApiKey) {
+        setApiKey(dbApiKey);
+        storageSet("intake-apikey", dbApiKey);
+      } else if (!cancelled && keyVal && !dbApiKey) {
+        dbSetSetting("anthropic-api-key", keyVal).catch((e) => console.error("[settings] Seed Anthropic key to Supabase failed:", e));
+      }
+      if (!cancelled && dbScrapeKey) {
+        setScrapeKey(dbScrapeKey);
+        storageSet("intake-scrape-key", dbScrapeKey);
+      } else if (!cancelled && scrapeVal && !dbScrapeKey) {
+        dbSetSetting("scrapecreators-api-key", scrapeVal).catch((e) => console.error("[settings] Seed ScrapeCreators key to Supabase failed:", e));
+      }
+
       if (!cancelled) setStorageReady(true);
     }
 
@@ -6932,6 +6956,7 @@ export default function App() {
     setApiStatus(null);
     setApiMsg("");
     storageSet("intake-apikey", key);
+    dbSetSetting("anthropic-api-key", key).catch((e) => console.error("[settings] Save API key failed:", e));
     return key;
   };
 
@@ -6940,6 +6965,7 @@ export default function App() {
     setScrapeStatus(null);
     setScrapeMsg("");
     storageSet("intake-scrape-key", key);
+    dbSetSetting("scrapecreators-api-key", key).catch((e) => console.error("[settings] Save scrape key failed:", e));
     return key;
   };
 
@@ -7728,6 +7754,9 @@ export default function App() {
               <div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>
                 {creators.length} creators · {library.length} briefs synced
               </div>
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10, lineHeight: 1.5 }}>
+                API keys are stored in the <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>app_settings</code> table. If saves fail, run the SQL at the end of <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>supabase/schema.sql</code> in the Supabase SQL Editor.
+              </div>
             </div>
 
             {/* API Key Section */}
@@ -7782,8 +7811,11 @@ export default function App() {
               )}
               {!apiKey && !apiMsg && (
                 <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
-                  Your key is stored locally in this artifact's storage. It never leaves your browser and is never sent to Anthropic's servers except to authenticate your API calls.
+                  Saved to Supabase (shared across browsers) and cached locally. Sent to Anthropic only to authenticate your API calls.
                 </div>
+              )}
+              {apiKey && !apiMsg && (
+                <div style={{ fontSize: 12, color: t.green }}>✓ Key saved (synced via Supabase)</div>
               )}
             </div>
 
@@ -7791,7 +7823,7 @@ export default function App() {
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>ScrapeCreators API Key</div>
               <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-                Used for fetching TikTok and Instagram videos in the Video Reformatter. Get your key from{" "}
+                Used for creator enrichment and fetching TikTok and Instagram videos (e.g. Video Reformatter). Get your key from{" "}
                 <span style={{ color: t.blue, fontWeight: 600 }}>app.scrapecreators.com</span>.
               </div>
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
@@ -7839,8 +7871,11 @@ export default function App() {
               )}
               {!scrapeKey && !scrapeMsg && (
                 <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
-                  Stored locally as <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>intake-scrape-key</code>. Sent only to ScrapeCreators when you fetch videos or test the connection.
+                  Saved to Supabase (shared across browsers) and cached locally. Sent only to ScrapeCreators when you enrich or fetch videos or test the connection.
                 </div>
+              )}
+              {scrapeKey && !scrapeMsg && (
+                <div style={{ fontSize: 12, color: t.green }}>✓ Key saved (synced via Supabase)</div>
               )}
             </div>
 

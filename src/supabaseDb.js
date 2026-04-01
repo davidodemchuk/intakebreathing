@@ -287,3 +287,19 @@ export async function migrateLocalStorageToSupabase() {
   console.log("[migration] Migration complete.");
   return true;
 }
+
+export async function dbGetSetting(key) {
+  const { data, error } = await supabase.from("app_settings").select("value").eq("key", key).maybeSingle();
+  if (error) {
+    console.error("[db] Get setting error:", error);
+    return null;
+  }
+  return data?.value ?? null;
+}
+
+export async function dbSetSetting(key, value) {
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) console.error("[db] Set setting error:", error);
+}

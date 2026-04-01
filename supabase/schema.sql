@@ -99,3 +99,13 @@ create policy "messages_all_anon" on messages for all using (true) with check (t
 
 -- If `creators` already existed without onboarded_at, run once:
 -- alter table creators add column if not exists onboarded_at timestamptz;
+
+-- App-wide settings (API keys, etc.). Run in Supabase SQL Editor if this table is missing.
+create table if not exists app_settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz default now()
+);
+
+alter table app_settings enable row level security;
+create policy "settings_all_anon" on app_settings for all using (true) with check (true);
