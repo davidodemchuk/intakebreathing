@@ -37,8 +37,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.1.0";
+const APP_VERSION = "5.2.0";
 const CHANGELOG = [
+  { version: "5.2.0", date: "2026-04-01", changes: [
+    "Homepage redesigned to match intakebreathing.com brand — dark, minimal, editorial",
+    "Removed metrics bar from homepage",
+    "Cards are full-width sections instead of a 2x2 grid",
+  ]},
   { version: "5.1.0", date: "2026-04-01", changes: [
     "Creators page has a proper title and description header",
     "Removed email column from creator table overview — visible in detail view only",
@@ -6090,7 +6095,7 @@ export default function App() {
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
   const [formKey, setFormKey] = useState(0);
-  const [dashCardHover, setDashCardHover] = useState(null);
+  const [homeSectionHover, setHomeSectionHover] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -7063,19 +7068,6 @@ export default function App() {
     if (currentFormData) handleGenerate({ ...currentFormData, mode: "ai" });
   }, [currentFormData, handleGenerate]);
 
-  const activeCreatorCount = useMemo(
-    () => creators.filter((c) => c.status === "Active").length,
-    [creators]
-  );
-
-  const activeVideosTotal = useMemo(
-    () =>
-      creators
-        .filter((c) => c.status === "Active")
-        .reduce((sum, c) => sum + creatorDisplayVideoCount(c), 0),
-    [creators]
-  );
-
   const allNiches = useMemo(() => {
     const set = new Set();
     creators.forEach((c) => {
@@ -7204,8 +7196,6 @@ export default function App() {
           @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
           @keyframes spin { to { transform: rotate(360deg) } }
           @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
-          .home-dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-          @media (max-width: 700px) { .home-dashboard-grid { grid-template-columns: 1fr !important; } }
           * { box-sizing:border-box }
           input::placeholder,textarea::placeholder { color:${t.textFaint} }
           ::-webkit-scrollbar { width:6px }
@@ -7418,134 +7408,191 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME — minimal dashboard (managers only; creators use library) */}
-        {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
-          const hour = new Date().getHours();
-          const greetingWord = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-          const homeCardShadow = (id) => {
-            if (!t.isLight) {
-              const m = {
-                ugc: "0 4px 20px rgba(0,254,169,0.06)",
-                pipeline: "0 4px 20px rgba(255,170,59,0.06)",
-                influencer: "0 4px 20px rgba(192,132,252,0.06)",
-                tools: "0 4px 20px rgba(99,183,186,0.06)",
-              };
-              return m[id] || "none";
-            }
-            return "0 4px 20px rgba(0,0,0,0.06)";
-          };
-          const cardShell = (id, accent) => ({
-            role: "button",
-            tabIndex: 0,
-            onMouseEnter: () => setDashCardHover(id),
-            onMouseLeave: () => setDashCardHover(null),
-            style: {
-              background: t.card,
-              border: `1px solid ${dashCardHover === id ? accent + "50" : t.border}`,
-              borderRadius: 14,
-              padding: 28,
-              cursor: "pointer",
-              transition: "border-color 0.2s, box-shadow 0.2s",
-              position: "relative",
-              overflow: "hidden",
-              boxShadow: dashCardHover === id ? homeCardShadow(id) : "none",
-            },
-          });
-          const accentBar = (color) => (
-            <div style={{ height: 3, width: 40, borderRadius: 2, background: color, marginBottom: 20 }} />
-          );
-          return (
-            <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 1000, margin: "0 auto", padding: "48px 24px" }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>{greetingWord}</div>
+        {/* HOME — editorial dashboard (managers only; creators use library) */}
+        {!aiLoading && isCreatorViewAllowed && view === "home" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 60px", textAlign: "center" }}>
               <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: t.textFaint,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.15em",
                   textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginTop: 4,
-                  marginBottom: 32,
+                  color: t.textFaint,
+                  marginBottom: 20,
                 }}
               >
-                Intake Breathing — Creator Partnerships
+                Intake Breathing Technology
               </div>
-
-              <div style={{ display: "flex", gap: 24, marginBottom: 40, flexWrap: "wrap", alignItems: "baseline" }}>
-                <div style={{ display: "flex", alignItems: "baseline" }}>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{library.length}</span>
-                  <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>briefs</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "baseline" }}>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{activeCreatorCount}</span>
-                  <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>creators</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "baseline" }}>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{activeVideosTotal}</span>
-                  <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>videos</span>
-                </div>
-              </div>
-
-              <div className="home-dashboard-grid">
-                <div
-                  {...cardShell("ugc", t.green)}
-                  onClick={() => navigate("ugcDashboard")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("ugcDashboard"); } }}
-                >
-                  {accentBar(t.green)}
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>UGC Army</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
-                    Create briefs, manage creators, and track content
-                  </div>
-                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.green }}>
-                    {library.length} briefs · {activeCreatorCount} active creators
-                  </div>
-                </div>
-
-                <div
-                  {...cardShell("pipeline", t.orange)}
-                  onClick={() => navigate("pipeline")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("pipeline"); } }}
-                >
-                  {accentBar(t.orange)}
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Channel Pipeline</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
-                    Track outreach, responses, and partnerships
-                  </div>
-                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.textFaint }}>Coming soon</div>
-                </div>
-
-                <div
-                  {...cardShell("influencer", t.purple)}
-                  onClick={() => navigate("influencer")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("influencer"); } }}
-                >
-                  {accentBar(t.purple)}
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Influencer Buys</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
-                    Manage campaigns, rates, and spend
-                  </div>
-                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.textFaint }}>Coming soon</div>
-                </div>
-
-                <div
-                  {...cardShell("tools", t.blue)}
-                  onClick={() => navigate("tools")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("tools"); } }}
-                >
-                  {accentBar(t.blue)}
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Tools</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>
-                    Video reformatter and team utilities
-                  </div>
-                  <div style={{ marginTop: 20, fontSize: 12, fontWeight: 600, color: t.blue }}>1 tool available</div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 48, textAlign: "center", fontSize: 11, color: `${t.textFaint}60` }}>v{APP_VERSION}</div>
+              <h1
+                style={{
+                  fontSize: 44,
+                  fontWeight: 800,
+                  color: t.text,
+                  letterSpacing: "-0.03em",
+                  lineHeight: 1.1,
+                  marginBottom: 16,
+                  maxWidth: 700,
+                  margin: "0 auto 16px",
+                }}
+              >
+                Creator <em style={{ fontStyle: "italic", color: t.green }}>Partnerships</em>
+              </h1>
+              <p
+                style={{
+                  fontSize: 16,
+                  color: t.textMuted,
+                  lineHeight: 1.6,
+                  maxWidth: 480,
+                  margin: "0 auto",
+                }}
+              >
+                Build briefs, manage creators, and scale UGC content for the world&apos;s most advanced nasal breathing technology.
+              </p>
             </div>
-          );
-        })()}
+
+            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "0 24px" }}>
+              <div style={{ borderTop: `1px solid ${t.border}` }} />
+            </div>
+
+            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 80px" }}>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate("ugcDashboard")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate("ugcDashboard");
+                  }
+                }}
+                onMouseEnter={() => setHomeSectionHover("ugc")}
+                onMouseLeave={() => setHomeSectionHover(null)}
+                style={{
+                  padding: "36px 0",
+                  borderBottom: `1px solid ${t.border}`,
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 24,
+                  transition: "opacity 0.2s",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.green, marginBottom: 8 }}>01</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>UGC Army</div>
+                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
+                    Create AI-powered briefs, manage your creator roster, enrich profiles with live data, and track content across campaigns.
+                  </div>
+                </div>
+                <div
+                  aria-hidden
+                  style={{
+                    fontSize: 24,
+                    color: homeSectionHover === "ugc" ? t.green : t.textFaint,
+                    transition: "transform 0.2s, color 0.2s",
+                    transform: homeSectionHover === "ugc" ? "translateX(4px)" : "translateX(0)",
+                    flexShrink: 0,
+                  }}
+                >
+                  →
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: "36px 0",
+                  borderBottom: `1px solid ${t.border}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 24,
+                  opacity: 0.5,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.textFaint, marginBottom: 8 }}>02</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Channel Pipeline</div>
+                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
+                    Track creator outreach, manage responses, and move partnerships from discovery to onboarding.
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600, flexShrink: 0 }}>Coming Soon</div>
+              </div>
+
+              <div
+                style={{
+                  padding: "36px 0",
+                  borderBottom: `1px solid ${t.border}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 24,
+                  opacity: 0.5,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.textFaint, marginBottom: 8 }}>03</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Influencer Buys</div>
+                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
+                    Manage influencer campaigns, negotiate rates, track spend, and measure ROI across partnerships.
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600, flexShrink: 0 }}>Coming Soon</div>
+              </div>
+
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate("tools")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate("tools");
+                  }
+                }}
+                onMouseEnter={() => setHomeSectionHover("tools")}
+                onMouseLeave={() => setHomeSectionHover(null)}
+                style={{
+                  padding: "36px 0",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 24,
+                  transition: "opacity 0.2s",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.blue, marginBottom: 8 }}>04</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Tools</div>
+                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
+                    Video reformatter for ad platforms, content analytics, and team utilities.
+                  </div>
+                </div>
+                <div
+                  aria-hidden
+                  style={{
+                    fontSize: 24,
+                    color: homeSectionHover === "tools" ? t.green : t.textFaint,
+                    transition: "transform 0.2s, color 0.2s",
+                    transform: homeSectionHover === "tools" ? "translateX(4px)" : "translateX(0)",
+                    flexShrink: 0,
+                  }}
+                >
+                  →
+                </div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", padding: "0 24px 40px" }}>
+              <div style={{ fontSize: 10, color: t.textFaint + "50", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Intake Breathing Technology LLC · v{APP_VERSION}
+              </div>
+            </div>
+          </div>
+        )}
 
         {!aiLoading && isCreatorViewAllowed && view === "ugcDashboard" && (
           <UGCDashboard
