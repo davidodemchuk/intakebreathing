@@ -4,8 +4,13 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext,
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.4";
+const APP_VERSION = "2.0.5";
 const CHANGELOG = [
+  { version: "2.0.5", date: "2025-04-01", changes: [
+    "Removed 'Dashboard' subtitle from homepage",
+    "Replaced all emojis with custom SVG icons throughout the app for a more professional feel",
+    "Improved homepage card design",
+  ]},
   { version: "2.0.4", date: "2025-04-01", changes: [
     "URL-based routing — each section has its own URL path",
     "Browser back/forward buttons now work correctly",
@@ -204,6 +209,196 @@ const VIEW_TO_PATH = {
 function getViewFromPath() {
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
   return ROUTES[path] || "home";
+}
+
+function Icon({ name, size = 20, color = "currentColor" }) {
+  const icons = {
+    film: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="2" />
+        <line x1="2" y1="8" x2="22" y2="8" />
+        <line x1="8" y1="2" x2="8" y2="8" />
+        <line x1="16" y1="2" x2="16" y2="8" />
+        <line x1="8" y1="2" x2="6" y2="8" />
+        <line x1="16" y1="2" x2="14" y2="8" />
+      </svg>
+    ),
+    send: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 2L11 13" />
+        <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+      </svg>
+    ),
+    dollarSign: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23" />
+        <path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3687 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" />
+      </svg>
+    ),
+    wrench: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    ),
+    user: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
+    target: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    ),
+    barChart: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="14" />
+      </svg>
+    ),
+    shield: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    ),
+    alertTriangle: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    ),
+    sliders: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="4" y1="21" x2="4" y2="14" />
+        <line x1="4" y1="10" x2="4" y2="3" />
+        <line x1="12" y1="21" x2="12" y2="12" />
+        <line x1="12" y1="8" x2="12" y2="3" />
+        <line x1="20" y1="21" x2="20" y2="16" />
+        <line x1="20" y1="12" x2="20" y2="3" />
+        <line x1="1" y1="14" x2="7" y2="14" />
+        <line x1="9" y1="8" x2="15" y2="8" />
+        <line x1="17" y1="16" x2="23" y2="16" />
+      </svg>
+    ),
+    pen: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+      </svg>
+    ),
+    users: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+    videoCamera: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="23 7 16 12 23 17 23 7" />
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+      </svg>
+    ),
+    anchor: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="5" r="3" />
+        <line x1="12" y1="22" x2="12" y2="8" />
+        <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+      </svg>
+    ),
+    checkCircle: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+        <polyline points="22 4 12 14.01 9 11.01" />
+      </svg>
+    ),
+    smartphone: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+        <line x1="12" y1="18" x2="12.01" y2="18" />
+      </svg>
+    ),
+    package: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+    ),
+    upload: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="16 16 12 12 8 16" />
+        <line x1="12" y1="12" x2="12" y2="21" />
+        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+      </svg>
+    ),
+    video: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+        <line x1="7" y1="2" x2="7" y2="22" />
+        <line x1="17" y1="2" x2="17" y2="22" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <line x1="2" y1="7" x2="7" y2="7" />
+        <line x1="2" y1="17" x2="7" y2="17" />
+        <line x1="17" y1="7" x2="22" y2="7" />
+        <line x1="17" y1="17" x2="22" y2="17" />
+      </svg>
+    ),
+    ban: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+      </svg>
+    ),
+    x: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    ),
+    checkSm: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    ),
+    eye: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
+    folder: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+    zap: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      </svg>
+    ),
+    construction: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="6" width="20" height="8" rx="1" />
+        <path d="M6 14v6M10 14v6M14 14v6M18 14v6" />
+        <path d="M6 6V4M18 6V4" />
+      </svg>
+    ),
+    arrowRight: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12" />
+        <polyline points="12 5 19 12 12 19" />
+      </svg>
+    ),
+  };
+  return icons[name] || null;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -829,7 +1024,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         <div style={S.formSub}>Select options below. Brief generates instantly.</div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>👤 Brief Details</div>
+        <div style={S.secLabel}><Icon name="user" size={16} color={t.green} /><span>Brief Details</span></div>
         <div style={S.r3}>
           <div style={S.fg}>
             <label style={S.label}>Submitted By</label>
@@ -936,7 +1131,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                             flexShrink: 0,
                           }}
                         >
-                          {sel ? <span style={{ fontSize: 10, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span> : null}
+                          {sel ? <Icon name="checkSm" size={10} color={t.isLight ? "#fff" : "#000"} /> : null}
                         </span>
                         <span>{p}</span>
                       </div>
@@ -1004,7 +1199,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                             flexShrink: 0,
                           }}
                         >
-                          <span style={{ fontSize: 10, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span>
+                          <Icon name="checkSm" size={10} color={t.isLight ? "#fff" : "#000"} />
                         </span>
                         <span>{p}</span>
                       </div>
@@ -1028,7 +1223,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         )}
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>🎯 Product & Campaign</div>
+        <div style={S.secLabel}><Icon name="target" size={16} color={t.green} /><span>Product & Campaign</span></div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Product *</label>
             <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); fireFormSuggest(); }}>
@@ -1055,7 +1250,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>👤 Audience & Problem</div>
+        <div style={S.secLabel}><Icon name="users" size={16} color={t.green} /><span>Audience & Problem</span></div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Age Range</label>
             <select style={S.select} value={ageRange} onChange={e=>{ const v = e.target.value; vals.current.ageRange = v; setAgeRange(v); fireFormSuggest(); }}>
@@ -1073,7 +1268,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>📊 Proof Points {statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— IB-Ai selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by IB-Ai, tap to adjust</span>}</div>
+        <div style={S.secLabel}><Icon name="barChart" size={16} color={t.green} /><span>Proof Points</span>{statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— IB-Ai selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by IB-Ai, tap to adjust</span>}</div>
         <div>
           {STAT_CATEGORY_ORDER.filter(c => STAT_OPTIONS.some(s => s.category === c)).map((cat, catIdx) => {
             const items = STAT_OPTIONS.filter(s => s.category === cat);
@@ -1081,7 +1276,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
               <div key={cat}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.05em", marginTop: catIdx === 0 ? 0 : 12, marginBottom: 6 }}>{STAT_CATEGORY_LABELS[cat]}</div>
                 <div style={S.chipGrid}>
-                  {items.map(st => <div key={st.id} style={S.chip(selectedStats.includes(st.id))} onClick={()=>toggleStat(st.id)}>{selectedStats.includes(st.id) ? "✓ " : ""}{st.label}</div>)}
+                  {items.map(st => <div key={st.id} style={{ ...S.chip(selectedStats.includes(st.id)), display: "inline-flex", alignItems: "center", gap: 6 }} onClick={()=>toggleStat(st.id)}>{selectedStats.includes(st.id) ? <Icon name="checkSm" size={12} color={t.green} /> : null}{st.label}</div>)}
                 </div>
               </div>
             );
@@ -1091,16 +1286,17 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>
-          ⚖️ Compliance
+          <Icon name="shield" size={16} color={t.green} />
+          <span>Compliance</span>
           {complianceLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— IB-Ai updating...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by IB-Ai, edit as needed</span>}
         </div>
         <div style={S.cols2}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 8 }}>✅ Approved Claims</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" size={14} color={t.green} />Approved Claims</div>
             {selectedApproved.map((c, i) => (
               <div key={`a-${i}-${c.slice(0, 24)}`} style={{ background: t.card, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${t.green}20` }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><span style={{ color: t.green, fontWeight: 700, flexShrink: 0 }}>✓</span><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
-                <button type="button" onClick={() => setSelectedApproved((prev) => prev.filter((_, idx) => idx !== i))} style={{ flexShrink: 0, marginLeft: 8, border: "none", background: "transparent", color: t.textFaint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px" }} title="Remove">✕</button>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><Icon name="checkSm" size={14} color={t.green} /><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
+                <button type="button" onClick={() => setSelectedApproved((prev) => prev.filter((_, idx) => idx !== i))} style={{ flexShrink: 0, marginLeft: 8, border: "none", background: "transparent", color: t.textFaint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px", display: "flex", alignItems: "center" }} title="Remove"><Icon name="x" size={14} color={t.textFaint} /></button>
               </div>
             ))}
             <input
@@ -1119,11 +1315,11 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
             />
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.red, marginBottom: 8 }}>❌ Banned Claims</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.red, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Icon name="ban" size={14} color={t.red} />Banned Claims</div>
             {selectedBanned.map((c, i) => (
               <div key={`b-${i}-${c.slice(0, 24)}`} style={{ background: t.card, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${t.red}20` }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><span style={{ color: t.red, fontWeight: 700, flexShrink: 0 }}>✗</span><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
-                <button type="button" onClick={() => setSelectedBanned((prev) => prev.filter((_, idx) => idx !== i))} style={{ flexShrink: 0, marginLeft: 8, border: "none", background: "transparent", color: t.textFaint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px" }} title="Remove">✕</button>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><Icon name="x" size={14} color={t.red} /><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
+                <button type="button" onClick={() => setSelectedBanned((prev) => prev.filter((_, idx) => idx !== i))} style={{ flexShrink: 0, marginLeft: 8, border: "none", background: "transparent", color: t.textFaint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px", display: "flex", alignItems: "center" }} title="Remove"><Icon name="x" size={14} color={t.textFaint} /></button>
               </div>
             ))}
             <input
@@ -1144,10 +1340,10 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>⚠️ Revision Criteria</div>
+        <div style={S.secLabel}><Icon name="alertTriangle" size={16} color={t.orange} /><span>Revision Criteria</span></div>
         <div style={{ ...S.hint, marginBottom: 12, fontStyle: "normal" }}>Revisions will be needed if any of the following are present. Add custom rules below.</div>
         <div style={S.roBox}>{DEFAULT_REJECTIONS.map((c, i) => (
-          <div key={i} style={S.roItem()}><span style={S.roMarker(t.orange)}>✗</span>{c}</div>
+          <div key={i} style={{ ...S.roItem(), display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 2 }}><Icon name="x" size={14} color={t.orange} /></span>{c}</div>
         ))}</div>
         <div style={{ ...S.fg, marginTop: 14 }}>
           <label style={S.label}>Additional Revision Rules</label>
@@ -1155,7 +1351,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>🎬 Format & Tone</div>
+        <div style={S.secLabel}><Icon name="sliders" size={16} color={t.green} /><span>Format & Tone</span></div>
         <div style={S.r2}>
           {mkSel("videoLength", "Video Length", LENGTHS)}
           <div style={S.fg}><label style={S.label}>Tone</label>
@@ -1169,15 +1365,15 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>📝 Creative Direction</div>
+        <div style={S.secLabel}><Icon name="pen" size={16} color={t.green} /><span>Creative Direction</span></div>
         <div style={S.fg}><label style={S.label}>Notes for Creators</label>
           <textarea style={{ ...S.textarea, minHeight: 120 }} defaultValue={vals.current.notes} onChange={e=>{vals.current.notes=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="Format instructions, hook ideas, visual direction…" rows={5} />
           <div style={S.hint}>Main free-text field. Everything else is from the Intake playbook.</div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <button style={{ ...S.genBtn, flex: 1, marginTop: 0 }} onClick={() => go("ai")}>✦ IB-Ai</button>
-        <button style={{ ...S.genBtn, flex: 1, marginTop: 0, background: t.border, color: t.text, fontWeight: 700, fontSize: 14 }} onClick={() => go("template")}>⚡ Instant Draft</button>
+        <button style={{ ...S.genBtn, flex: 1, marginTop: 0 }} onClick={() => go("ai")}>IB-Ai</button>
+        <button style={{ ...S.genBtn, flex: 1, marginTop: 0, background: t.border, color: t.text, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => go("template")}><Icon name="zap" size={16} color={t.text} />Instant Draft</button>
       </div>
       <div style={{ ...S.hint, textAlign: "center", marginTop: 8 }}>IB-Ai uses Claude to write original creative. Instant Draft uses templates — fast but generic.</div>
     </div>
@@ -1216,14 +1412,14 @@ function EditableRejectionLine({ value, t, editable = true }) {
   if (!editable) {
     return (
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-        <span style={{ color: t.orange, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
+        <span style={{ flexShrink: 0, display: "flex" }}><Icon name="x" size={14} color={t.orange} /></span>
         <div style={{ fontSize: 14, color: t.text, lineHeight: 1.7, flex: 1, minWidth: 0 }}>{value}</div>
       </div>
     );
   }
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-      <span style={{ color: t.orange, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
+      <span style={{ flexShrink: 0, display: "flex" }}><Icon name="x" size={14} color={t.orange} /></span>
       <div
         ref={ref}
         contentEditable
@@ -1282,8 +1478,8 @@ function buildBriefPrintHtml(b, fd, esc) {
   const productTag = escSafe(prodDisp);
   const vibeTag = escSafe(vibeDisp);
   const platformTagsHtml = plats.map((p) => `<span class="doc-tag">${escSafe(p)}</span>`).join("");
-  const theyAreHtml = (b.theyAre || []).map((x) => `<div class="col-item"><span class="dot green">✓</span>${escSafe(x)}</div>`).join("");
-  const theyNotHtml = (b.theyAreNot || []).map((x) => `<div class="col-item"><span class="dot red">✗</span>${escSafe(x)}</div>`).join("");
+  const theyAreHtml = (b.theyAre || []).map((x) => `<div class="col-item"><span class="dot green">+</span>${escSafe(x)}</div>`).join("");
+  const theyNotHtml = (b.theyAreNot || []).map((x) => `<div class="col-item"><span class="dot red">–</span>${escSafe(x)}</div>`).join("");
   const beatDefs = [
     { label: "PROBLEM", cls: "problem", inst: b.probInst, lines: b.probLines || [], overlays: b.probOverlays || [] },
     { label: "AGITATE", cls: "agitate", inst: b.agInst, lines: b.agLines || [], overlays: b.agOverlays || [] },
@@ -1308,10 +1504,10 @@ function buildBriefPrintHtml(b, fd, esc) {
   const hooksHtml = (b.hooks || [])
     .map((h, i) => `<div class="hook"><div class="hook-num">${i + 1}</div><div class="hook-text">${escSafe(h)}</div></div>`)
     .join("");
-  const sayHtml = (b.sayThis || []).map((s) => `<div class="compliance-item"><span class="mark">✓</span>${escSafe(s)}</div>`).join("");
-  const notHtml = (b.notThis || []).map((s) => `<div class="compliance-item"><span class="mark">✗</span>${escSafe(s)}</div>`).join("");
+  const sayHtml = (b.sayThis || []).map((s) => `<div class="compliance-item"><span class="mark">+</span>${escSafe(s)}</div>`).join("");
+  const notHtml = (b.notThis || []).map((s) => `<div class="compliance-item"><span class="mark">–</span>${escSafe(s)}</div>`).join("");
   const rejList = Array.isArray(b.rejections) && b.rejections.length ? b.rejections : buildRejectionsArray(fd);
-  const rejHtml = rejList.map((r) => `<div class="rejection-item"><span class="rx">✕</span>${escSafe(r)}</div>`).join("");
+  const rejHtml = rejList.map((r) => `<div class="rejection-item"><span class="rx">-</span>${escSafe(r)}</div>`).join("");
   const proofHtml = (b.proof || []).map((p) => `<div class="proof-card">${escSafe(p)}</div>`).join("");
   const platNotesHtml = escSafe(b.platNotes || "").replace(/\n/g, "<br>");
   const deliverablesHtml = escSafe(b.deliverables || "").replace(/\n/g, "<br>");
@@ -1476,11 +1672,11 @@ ${hooksHtml}
 <div class="section-title page-break">Say This / Not This</div>
 <div class="two-col">
   <div class="compliance-col approve">
-    <div class="compliance-header">✓ Say This</div>
+    <div class="compliance-header">Say This</div>
     ${sayHtml}
   </div>
   <div class="compliance-col ban">
-    <div class="compliance-header">✗ Not This</div>
+    <div class="compliance-header">Not This</div>
     ${notHtml}
   </div>
 </div>
@@ -1527,7 +1723,7 @@ function RejectionSection({ brief, formData, t, S, editable = true }) {
   }, [syncKey]);
   return (
     <div style={S.bSec}>
-      <div style={S.bSecTitle}>⚠️ REVISION REQUIRED — Revisions Will Be Needed If:</div>
+      <div style={S.bSecTitle}><Icon name="alertTriangle" size={16} color={t.orange} /><span>REVISION REQUIRED — Revisions Will Be Needed If:</span></div>
       <div className="brief-rejection-block" style={{ background: t.orange + "08", border: `2px solid ${t.orange}40`, borderRadius: 12, padding: 20 }}>
         <div style={{ fontSize: 13, color: t.orange, fontWeight: 600, marginBottom: 14 }}>If any of the following are present in your submission, revisions will be required before approval.</div>
         {items.map((line, i) => (
@@ -1588,14 +1784,14 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
       <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>← Back</button>
         {isManager && <>
-          <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>✦ IB-Ai Regenerate</button>
-          <button type="button" onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>⚡ Quick Regen</button>
+          <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>IB-Ai Regenerate</button>
+          <button type="button" onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="zap" size={14} color={t.text} />Quick Regen</button>
           <button type="button" onClick={downloadPDF} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.blue + "55", color: t.blue }}>Download PDF</button>
           <button type="button" onClick={copyShareLink} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.border, color: t.textMuted }}>Copy Share Link</button>
         </>}
       </div>
       <div style={{ marginBottom: 24 }}>
-        <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11 }}>{wasAI ? "✦ IB-Ai" : "⚡ Template Draft"}</span>
+        <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11, display: "inline-flex", alignItems: "center", gap: 6 }}>{wasAI ? "IB-Ai" : <><Icon name="zap" size={12} color={t.textFaint} />Template Draft</>}</span>
       </div>
       <div style={S.bHeader}>
         <div style={S.bCampaign}>{fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName)}</div>
@@ -1616,19 +1812,19 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         {isManager && <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>}
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>👤 Who You're Talking To</div>
+        <div style={S.bSecTitle}><Icon name="users" size={16} color={t.textFaint} /><span>Who You&apos;re Talking To</span></div>
         <div style={S.card}>
           <EditableField editable={isManager} value={b.persona} style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: t.text }} t={t} />
           <EditableField editable={isManager} value={b.age} style={{ fontSize: 13, color: t.blue, fontWeight: 600, marginBottom: 10 }} t={t} />
           <EditableField editable={isManager} value={b.psycho} style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 16 }} t={t} />
           <div style={S.cols2}>
-            <div><div style={S.sayH(t.green)}>They Are ✓</div>{b.theyAre.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField editable={isManager} value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
-            <div><div style={S.sayH(t.red)}>They Are Not ✗</div>{b.theyAreNot.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField editable={isManager} value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+            <div><div style={{ ...S.sayH(t.green), display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkSm" size={14} color={t.green} />They Are</div>{b.theyAre.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><Icon name="checkSm" size={14} color={t.green} /><EditableField editable={isManager} value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+            <div><div style={{ ...S.sayH(t.red), display: "flex", alignItems: "center", gap: 6 }}><Icon name="x" size={14} color={t.red} />They Are Not</div>{b.theyAreNot.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><Icon name="x" size={14} color={t.red} /><EditableField editable={isManager} value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
           </div>
         </div>
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>🎬 Story Arc — Problem · Agitate · Solution</div>
+        <div style={S.bSecTitle}><Icon name="videoCamera" size={16} color={t.textFaint} /><span>Story Arc — Problem · Agitate · Solution</span></div>
         {[
           { label: "PROBLEM", color: t.red, inst: b.probInst, lines: b.probLines, overlays: b.probOverlays },
           { label: "AGITATE", color: t.orange, inst: b.agInst, lines: b.agLines, overlays: b.agOverlays },
@@ -1645,36 +1841,36 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         ))}
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>🪝 Hook Options — First 3 Seconds</div>
+        <div style={S.bSecTitle}><Icon name="anchor" size={16} color={t.textFaint} /><span>Hook Options — First 3 Seconds</span></div>
         <div style={{ fontSize: 12, color: t.textFaint, fontStyle: "italic", marginBottom: 14 }}>If they don't feel it here, they scroll.</div>
         <div style={S.card}>{b.hooks.map((h,i)=>(<div key={i} style={S.hookItem}><div style={S.hookNum}>{i+1}</div><EditableField editable={isManager} value={h} style={S.hookText} t={t} /></div>))}</div>
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>✅ Say This / 🚫 Not This</div>
+        <div style={S.bSecTitle}><Icon name="checkCircle" size={16} color={t.textFaint} /><span>Say This / Not This</span></div>
         <div style={S.cols2}>
-          <div style={S.sayCol}><div style={S.sayH(t.green)}>✅ Say This</div>{b.sayThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField editable={isManager} value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
-          <div style={S.dontCol}><div style={S.sayH(t.red)}>🚫 Not This</div>{b.notThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField editable={isManager} value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+          <div style={S.sayCol}><div style={{ ...S.sayH(t.green), display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" size={14} color={t.green} />Say This</div>{b.sayThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><Icon name="checkSm" size={14} color={t.green} /><EditableField editable={isManager} value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+          <div style={S.dontCol}><div style={{ ...S.sayH(t.red), display: "flex", alignItems: "center", gap: 6 }}><Icon name="ban" size={14} color={t.red} />Not This</div>{b.notThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><Icon name="x" size={14} color={t.red} /><EditableField editable={isManager} value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
         </div>
       </div>
       <RejectionSection brief={b} formData={fd} t={t} S={S} editable={isManager} />
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>📊 Proof Points</div>
+        <div style={S.bSecTitle}><Icon name="barChart" size={16} color={t.textFaint} /><span>Proof Points</span></div>
         <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}><EditableField editable={isManager} value={p} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5, width: "100%" }} t={t} /></div>)}</div>
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>⚠️ Required Disclosure — Non-Negotiable</div>
+        <div style={S.bSecTitle}><Icon name="alertTriangle" size={16} color={t.orange} /><span>Required Disclosure — Non-Negotiable</span></div>
         <div style={S.discBox}><div style={S.discLabel}>Must appear when any stat is referenced</div><EditableField editable={isManager} value={b.disclosure} style={S.discText} t={t} /></div>
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>📱 Platform Notes</div>
+        <div style={S.bSecTitle}><Icon name="smartphone" size={16} color={t.textFaint} /><span>Platform Notes</span></div>
         <div style={S.card}><EditableField editable={isManager} value={b.platNotes} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }} t={t} /></div>
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>📦 Deliverables</div>
+        <div style={S.bSecTitle}><Icon name="package" size={16} color={t.textFaint} /><span>Deliverables</span></div>
         <div style={S.card}><EditableField editable={isManager} value={b.deliverables} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6 }} t={t} /></div>
       </div>
       <div style={S.bSec}>
-        <div style={S.bSecTitle}>📤 Creator Submissions</div>
+        <div style={S.bSecTitle}><Icon name="upload" size={16} color={t.textFaint} /><span>Creator Submissions</span></div>
         <div style={{ border: `2px dashed ${t.border}`, borderRadius: 12, padding: "40px 20px", textAlign: "center", color: t.textFaint, fontSize: 14 }}>Upload zone coming soon.</div>
       </div>
     </div>
@@ -1757,7 +1953,7 @@ function ComingSoonPage({ title, message, onBack }) {
           textAlign: "center",
         }}
       >
-        <div style={{ fontSize: 40, marginBottom: 16 }}>🚧</div>
+        <div style={{ marginBottom: 16, display: "flex", justifyContent: "center" }}><Icon name="construction" size={40} color={t.orange} /></div>
         <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Coming Soon</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 14 }}>{title}</div>
         <div style={{ fontSize: 15, color: t.textMuted, lineHeight: 1.65 }}>{message}</div>
@@ -1787,7 +1983,7 @@ function ToolsPage({ onBack, onOpenVideo }) {
           transition: "border-color 0.15s",
         }}
       >
-        <div style={{ fontSize: 32, marginBottom: 12 }}>🎥</div>
+        <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-start" }}><Icon name="video" size={32} color={t.blue} /></div>
         <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
           Paste a TikTok or Instagram URL — fetch the video and see reformat options for Meta, YouTube, and TikTok ads
@@ -2020,7 +2216,7 @@ function VideoReformatter({ onBack }) {
                         marginTop: 2,
                       }}
                     >
-                      {on ? <span style={{ fontSize: 11, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span> : null}
+                      {on ? <Icon name="checkSm" size={11} color={t.isLight ? "#fff" : "#000"} /> : null}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.name}</div>
@@ -2029,7 +2225,7 @@ function VideoReformatter({ onBack }) {
                       </div>
                       <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, lineHeight: 1.4 }}>{item.placement}</div>
                       {item.recommended && (
-                        <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: t.green }}>★ Recommended</div>
+                        <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: t.green }}>Recommended</div>
                       )}
                     </div>
                   </div>
@@ -2140,7 +2336,7 @@ function VideoReformatter({ onBack }) {
                     fontSize: 48,
                   }}
                 >
-                  🎥
+                  <Icon name="video" size={48} color={t.textFaint} />
                 </div>
               )}
             </div>
@@ -2318,6 +2514,7 @@ export default function App() {
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
   const [formKey, setFormKey] = useState(0);
+  const [dashCardHover, setDashCardHover] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -2505,7 +2702,7 @@ export default function App() {
       }
       await res.json();
       setApiStatus("ok");
-      setApiMsg(`Connected in ${ms}ms — ✦ IB-Ai is ready.`);
+      setApiMsg(`Connected in ${ms}ms — IB-Ai is ready.`);
     } catch (err) {
       setApiStatus("fail");
       setApiMsg(err.message === "TIMEOUT" ? "No response after 20s. Check your network or API key." : err.message);
@@ -2614,7 +2811,7 @@ export default function App() {
     } catch (err) {
       if (cancelledRef.current) return;
       setAiError(err.message === "TIMEOUT"
-        ? "Timed out after 60s. Try again or use ⚡ Instant Draft."
+        ? "Timed out after 60s. Try again or use Instant Draft."
         : err.message);
     } finally {
       clearInterval(timerRef.current);
@@ -2725,7 +2922,7 @@ export default function App() {
 
         {currentRole === ROLES.CREATOR && (
           <div className="no-print" style={{ background: t.orange + (t.isLight ? "18" : "15"), borderBottom: `1px solid ${t.orange}35`, padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap", fontSize: 13, color: t.text }}>
-            <span>👁 Viewing as Creator — read-only mode</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="eye" size={18} color={t.text} />Viewing as Creator — read-only mode</span>
             <button type="button" onClick={() => setCurrentRole(ROLES.MANAGER)} style={{ ...S.btnS, fontSize: 12, padding: "6px 14px", borderColor: t.orange + "50", color: t.orange }}>Switch to Manager</button>
           </div>
         )}
@@ -2770,7 +2967,7 @@ export default function App() {
                         transition: "all 0.3s ease",
                       }}
                     >
-                      {status === "done" && <span style={{ color: "#000", fontSize: 13, fontWeight: 800 }}>✓</span>}
+                      {status === "done" && <Icon name="checkSm" size={14} color="#000" />}
                       {status === "active" && (
                         <div style={{ width: 8, height: 8, borderRadius: 4, background: t.green, animation: "pulse 1s ease-in-out infinite" }} />
                       )}
@@ -2800,7 +2997,7 @@ export default function App() {
         {/* IB-Ai error */}
         {aiError && !aiLoading && (
           <div style={{ margin: "20px auto", maxWidth: 600, padding: "16px 18px", background: t.red+"12", border: `1px solid ${t.red}35`, borderRadius: 10 }}>
-            <div style={{ fontSize: 13, color: t.red, marginBottom: 10 }}>⚠️ {aiError}</div>
+            <div style={{ fontSize: 13, color: t.red, marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 8 }}><Icon name="alertTriangle" size={16} color={t.red} /><span>{aiError}</span></div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setAiError(null)} style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: 8, color: t.textMuted, cursor: "pointer", fontSize: 12, padding: "8px 16px" }}>Dismiss</button>
             </div>
@@ -2810,13 +3007,14 @@ export default function App() {
         {/* HOME — dashboard */}
         {!aiLoading && view === "home" && (
           <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, letterSpacing: "0.02em" }}>Intake Breathing — Creator Partnerships</div>
-            <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Dashboard</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, letterSpacing: "0.02em", marginBottom: 20 }}>Intake Breathing — Creator Partnerships</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
               {[
                 {
                   id: "ugc",
-                  icon: "🎬",
+                  iconName: "film",
+                  accent: t.green,
+                  iconBg: t.green + "12",
                   title: "UGC Army",
                   desc: "Create and manage UGC creator briefs",
                   badge: "Active",
@@ -2826,7 +3024,9 @@ export default function App() {
                 },
                 {
                   id: "pipeline",
-                  icon: "📡",
+                  iconName: "send",
+                  accent: t.orange,
+                  iconBg: t.orange + "12",
                   title: "Channel Pipeline",
                   desc: "Track creator outreach and partnerships",
                   badge: "Coming Soon",
@@ -2835,7 +3035,9 @@ export default function App() {
                 },
                 {
                   id: "influencer",
-                  icon: "💰",
+                  iconName: "dollarSign",
+                  accent: t.purple,
+                  iconBg: t.purple + "12",
                   title: "Influencer Buys",
                   desc: "Manage influencer campaigns and spend",
                   badge: "Coming Soon",
@@ -2844,7 +3046,9 @@ export default function App() {
                 },
                 {
                   id: "tools",
-                  icon: "🛠️",
+                  iconName: "wrench",
+                  accent: t.blue,
+                  iconBg: t.blue + "12",
                   title: "Tools",
                   desc: "Video reformatter, analytics, and more",
                   badge: "1 tool",
@@ -2854,20 +3058,42 @@ export default function App() {
               ].map((card) => (
                 <div
                   key={card.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={card.onClick}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card.onClick(); } }}
+                  onMouseEnter={() => setDashCardHover(card.id)}
+                  onMouseLeave={() => setDashCardHover(null)}
                   style={{
-                    background: t.card,
-                    border: `1px solid ${t.border}`,
+                    position: "relative",
+                    background:
+                      dashCardHover === card.id
+                        ? `linear-gradient(${t.card}, ${t.card}) padding-box, linear-gradient(135deg, ${card.accent}70, ${t.green}38) border-box`
+                        : t.card,
+                    border: dashCardHover === card.id ? "1px solid transparent" : `1px solid ${t.border}`,
+                    backgroundClip: dashCardHover === card.id ? "padding-box, border-box" : "border-box",
                     borderRadius: 16,
                     padding: 28,
+                    paddingBottom: 36,
                     cursor: "pointer",
-                    boxShadow: t.shadow,
-                    transition: "border-color 0.15s",
+                    boxShadow: dashCardHover === card.id ? `0 10px 32px ${card.accent}18` : t.shadow,
+                    transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
                   }}
                 >
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>{card.icon}</div>
+                  <div
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 28,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: card.iconBg,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <Icon name={card.iconName} size={32} color={card.accent} />
+                  </div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>{card.title}</div>
                   <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12, lineHeight: 1.5 }}>{card.desc}</div>
                   {card.sub && <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 10 }}>{card.sub}</div>}
@@ -2885,6 +3111,20 @@ export default function App() {
                   >
                     {card.badge}
                   </div>
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 16,
+                      right: 16,
+                      opacity: dashCardHover === card.id ? 1 : 0,
+                      transition: "opacity 0.2s",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                    aria-hidden
+                  >
+                    <Icon name="arrowRight" size={18} color={t.textFaint} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -2896,7 +3136,10 @@ export default function App() {
               </div>
             )}
             {apiKey && apiStatus === "ok" && (
-              <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500 }}>✓ IB-Ai connected and ready</div>
+              <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+                <Icon name="checkCircle" size={16} color={t.green} />
+                <span>IB-Ai connected and ready</span>
+              </div>
             )}
           </div>
         )}
@@ -2923,7 +3166,7 @@ export default function App() {
           <div style={{ maxWidth: 600, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
             <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
-            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable ✦ IB-Ai.</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable IB-Ai.</div>
 
             {/* API Key Section */}
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
@@ -2972,7 +3215,7 @@ export default function App() {
                   color: apiStatus === "ok" ? t.green : t.red,
                   border: `1px solid ${apiStatus === "ok" ? t.green+"25" : t.red+"25"}`,
                 }}>
-                  {apiStatus === "ok" ? "✓ " : "✗ "}{apiMsg}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{apiStatus === "ok" ? <Icon name="checkSm" size={12} color={t.green} /> : <Icon name="x" size={12} color={t.red} />}{apiMsg}</span>
                 </div>
               )}
               {!apiKey && !apiMsg && (
@@ -3029,7 +3272,7 @@ export default function App() {
                   color: scrapeStatus === "ok" ? t.green : t.red,
                   border: `1px solid ${scrapeStatus === "ok" ? t.green+"25" : t.red+"25"}`,
                 }}>
-                  {scrapeStatus === "ok" ? "✓ " : "✗ "}{scrapeMsg}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{scrapeStatus === "ok" ? <Icon name="checkSm" size={12} color={t.green} /> : <Icon name="x" size={12} color={t.red} />}{scrapeMsg}</span>
                 </div>
               )}
               {!scrapeKey && !scrapeMsg && (
@@ -3043,10 +3286,10 @@ export default function App() {
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, boxShadow: t.shadow }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>How it works</div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7 }}>
-                <strong style={{ color: t.green }}>✦ IB-Ai</strong> sends your brief form data to Claude Sonnet, which writes original hooks, story beats, persona descriptions, and creative direction tailored to your specific campaign. Requires an API key.
+                <strong style={{ color: t.green }}>IB-Ai</strong> sends your brief form data to Claude Sonnet, which writes original hooks, story beats, persona descriptions, and creative direction tailored to your specific campaign. Requires an API key.
               </div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
-                <strong style={{ color: t.textSecondary }}>⚡ Instant Draft</strong> uses built-in templates with Intake's playbook data. No API key needed. Fast but less creative.
+                <strong style={{ color: t.textSecondary, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="zap" size={14} color={t.textSecondary} />Instant Draft</strong> uses built-in templates with Intake's playbook data. No API key needed. Fast but less creative.
               </div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
                 Each IB-Ai call uses roughly 3,000 output tokens (~$0.01-0.02 per brief on Claude Sonnet).
@@ -3097,7 +3340,7 @@ export default function App() {
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ ...S.formTitle, marginBottom: 24 }}>Brief Library</div>
             {library.length === 0 ? (
-              <div style={S.empty}><div style={{ fontSize: 32, marginBottom: 12 }}>📁</div><div style={{ fontSize: 15, marginBottom: 8 }}>No briefs yet</div><div style={{ fontSize: 13, marginBottom: 24 }}>Generated briefs will appear here.</div><button style={S.btnP} onClick={()=>navigate("create")}>Create Your First Brief</button></div>
+              <div style={S.empty}><div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}><Icon name="folder" size={32} color={t.textFaint} /></div><div style={{ fontSize: 15, marginBottom: 8 }}>No briefs yet</div><div style={{ fontSize: 13, marginBottom: 24 }}>Generated briefs will appear here.</div><button style={S.btnP} onClick={()=>navigate("create")}>Create Your First Brief</button></div>
             ) : library.map(item => (
               <div key={item.id} style={S.listItem}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
@@ -3107,7 +3350,7 @@ export default function App() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ fontSize: 12, color: t.textFaint }}>{item.date}</div>
-                  <button onClick={(e)=>{e.stopPropagation();deleteBrief(item.id)}} style={{ background: "none", border: "none", color: t.red, cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, opacity: 0.6 }} title="Delete brief">✕</button>
+                  <button type="button" onClick={(e)=>{e.stopPropagation();deleteBrief(item.id)}} style={{ background: "none", border: "none", color: t.red, cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, opacity: 0.6, display: "flex", alignItems: "center" }} title="Delete brief"><Icon name="x" size={16} color={t.red} /></button>
                 </div>
               </div>
             ))}
