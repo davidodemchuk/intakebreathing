@@ -122,7 +122,7 @@ function getS(t) {
 
 const PRODUCTS = ["Starter Kit Black", "Starter Kit Clear", "Mouth Tape", "Sports Tabs", "Refills", "Case", "Other"];
 
-const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge", "Unboxing / First Impressions", "Lifestyle / Routine", "Before & After", "Storytelling / Testimonial", "ASMR / Satisfying"];
+const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge", "Unboxing / First Impressions", "Lifestyle / Routine", "Before & After", "Storytelling / Testimonial", "ASMR / Satisfying", "Other"];
 
 const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"];
 const GENDERS = ["Men & Women", "Men", "Women"];
@@ -148,7 +148,7 @@ const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying"];
 
 const PREFILL = {
-  productName: "Starter Kit Black", customProductName: "", campaignName: "The Level Up", vibe: "Fun & Entertaining",
+  productName: "Starter Kit Black", customProductName: "", campaignName: "The Level Up", vibe: "Fun & Entertaining", customVibe: "",
   mission: "Four sizes. One that's perfect for you. How far can you level up?",
   ageRange: "25-34", gender: "Men & Women",
   problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
@@ -158,7 +158,7 @@ const PREFILL = {
 };
 
 const DEFAULTS = {
-  productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", mission: "",
+  productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sizes", "customers", "fda"],
   platform: "TikTok", videoLength: "15-30s", tone: "Real & relatable", notes: "",
@@ -228,8 +228,10 @@ function generateBrief(d) {
   const solLines = solutionSentences.length >= 2 ? pick(solutionSentences, 3) : ["This changed everything", "I can't believe the difference", "I'm never going back"];
   const solOverlays = ["Before/after or progression reveal", "Product in action — the key moment", "End card: product + CTA + 90-day trial"];
   const hooks = TONE_HOOKS[d.tone] || TONE_HOOKS["Real & relatable"];
+  const vibeLabel = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
   const proof = d.selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean);
-  const platNotes = (PLATFORM_NOTES[d.platform] || "") + "\n\n" + (LENGTH_GUIDE[d.videoLength] || "");
+  const vibePrefix = d.vibe === "Other" && vibeLabel ? `Campaign vibe: ${vibeLabel}\n\n` : "";
+  const platNotes = vibePrefix + (PLATFORM_NOTES[d.platform] || "") + "\n\n" + (LENGTH_GUIDE[d.videoLength] || "");
   const deliverables = `Submit: (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
   return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["Over 1,000,000 customers worldwide", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial", "Expands nasal passageway by over 88%"], platNotes, deliverables };
 }
@@ -244,11 +246,13 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [gender, setGender] = useState(prefill?.gender ?? DEFAULTS.gender);
   const [selectedStats, setSelectedStats] = useState(prefill ? [...prefill.selectedStats] : [...DEFAULTS.selectedStats]);
   const [showCustomProduct, setShowCustomProduct] = useState((prefill?.productName || DEFAULTS.productName) === "Other");
+  const [showCustomVibe, setShowCustomVibe] = useState((prefill?.vibe || DEFAULTS.vibe) === "Other");
   const vals = useRef({
     productName: prefill?.productName || DEFAULTS.productName,
     customProductName: prefill?.customProductName ?? DEFAULTS.customProductName,
     campaignName: prefill?.campaignName || DEFAULTS.campaignName,
     vibe: prefill?.vibe || DEFAULTS.vibe,
+    customVibe: prefill?.customVibe ?? DEFAULTS.customVibe,
     mission: prefill?.mission || "",
     problem: prefill?.problem ?? DEFAULTS.problem,
     platform: prefill?.platform || DEFAULTS.platform,
@@ -261,10 +265,11 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     const v = vals.current;
     if (!v.problem.trim()) { alert("Please describe the core problem."); return; }
     if (v.productName === "Other" && !v.customProductName.trim()) { alert("Please enter a product name."); return; }
+    if (v.vibe === "Other" && !v.customVibe.trim()) { alert("Please describe your campaign vibe."); return; }
     const problemTrim = v.problem.trim();
     onGenerate({
       mode,
-      productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, mission: v.mission,
+      productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
       selectedStats, platform: v.platform, videoLength: v.videoLength, tone: v.tone, notes: v.notes,
       _audience: `Ages ${ageRange} — ${gender}`,
@@ -300,7 +305,14 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
               <input style={S.input} defaultValue={vals.current.customProductName} onChange={e => { vals.current.customProductName = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Enter your product name" />
             </div>}
           </div>
-          {mkSel("vibe", "Campaign Vibe", VIBES)}
+          <div style={S.fg}><label style={S.label}>Campaign Vibe</label>
+            <select style={S.select} defaultValue={vals.current.vibe} onChange={e => { const v = e.target.value; vals.current.vibe = v; setShowCustomVibe(v === "Other"); }}>
+              {VIBES.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            {showCustomVibe && <div style={S.fg}><label style={S.label}>Campaign Vibe</label>
+              <input style={S.input} defaultValue={vals.current.customVibe} onChange={e => { vals.current.customVibe = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Describe your campaign vibe" />
+            </div>}
+          </div>
         </div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Campaign Name</label>
@@ -403,7 +415,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         <EditableField value={`"${b.mission}"`} style={S.bMission} t={t} />
         <div style={S.badges}>
           <span style={S.badge(t.text)}>{fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName}</span>
-          <span style={S.badge(t.purple)}>{fd.vibe}</span>
+          <span style={S.badge(t.purple)}>{fd.vibe === "Other" && fd.customVibe?.trim() ? fd.customVibe.trim() : fd.vibe}</span>
           <span style={S.badge(t.blue)}>{fd.platform}</span>
           <span style={S.badge(t.orange)}>{fd.videoLength}</span>
           <span style={S.badge(t.green)}>{fd.tone}</span>
@@ -482,21 +494,28 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 function buildAIPrompt(d) {
   const ageR = d.ageRange || "25-34";
   const gen = d.gender || "Men & Women";
-  const prob = (d.problem || d._problem || d.customProblem || "").trim();
+  const productResolved = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
+  const vibeResolved = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
+  const prob = (d.problem ?? d._problem ?? d.customProblem ?? "").trim();
+  const audienceCompact = `${gen} ${ageR}`;
+  const audienceForm = d._audience || `Ages ${ageR} — ${gen}`;
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
-PRODUCT: ${d.productName === "Other" ? (d.customProductName || "").trim() : d.productName} by Intake Breathing
+PRODUCT: ${productResolved} by Intake Breathing
 CAMPAIGN NAME: ${d.campaignName || "Untitled"}
-CAMPAIGN VIBE: ${d.vibe}
+CAMPAIGN VIBE: ${vibeResolved}
 MISSION: ${d.mission || "N/A"}
-TARGET AUDIENCE: Ages ${ageR} — ${gen}
-CORE PROBLEM TO SOLVE: ${prob}
-PROOF POINTS / STATS: ${d._stats}
-PLATFORM: ${d.platform} | LENGTH: ${d.videoLength} | TONE: ${d.tone}
-APPROVED CLAIMS (creators CAN say): ${d._approved}
-BANNED CLAIMS (NEVER say): ${d._banned}
-REQUIRED DISCLOSURE: ${d._disclosure}
-CREATIVE DIRECTION / NOTES: ${d.notes || "None"}
+TARGET AUDIENCE: ${audienceCompact}
+AUDIENCE (form selection, ageRange + gender): ${audienceForm}
+CORE PROBLEM: ${prob}
+PROOF POINTS / STATS: ${d._stats || ""}
+APPROVED CLAIMS (creators CAN say): ${d._approved || ""}
+BANNED CLAIMS (NEVER say): ${d._banned || ""}
+REQUIRED DISCLOSURE: ${d._disclosure || ""}
+PLATFORM: ${d.platform || ""}
+VIDEO LENGTH: ${d.videoLength || ""}
+TONE: ${d.tone || ""}
+CREATIVE NOTES: ${d.notes || "None"}
 
 Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
 
@@ -813,7 +832,7 @@ export default function App() {
                 {library.slice(0,5).map(item => (
                   <div key={item.id} style={S.listItem} onClick={()=>{setCurrentBrief(item.brief);setCurrentFormData(item.formData);setView("display")}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
-                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{item.formData.vibe} · {item.formData.platform} · {item.formData.videoLength}</div></div>
+                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {item.formData.platform} · {item.formData.videoLength}</div></div>
                     <div style={{ fontSize: 12, color: t.textFaint }}>→</div>
                   </div>
                 ))}
@@ -915,7 +934,7 @@ export default function App() {
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
                 <div style={{ cursor: "pointer", flex: 1 }} onClick={()=>{setCurrentBrief(item.brief);setCurrentFormData(item.formData);setView("display")}}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
-                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{item.formData.vibe} · {item.formData.platform} · {item.formData.videoLength}</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {item.formData.platform} · {item.formData.videoLength}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ fontSize: 12, color: t.textFaint }}>{item.date}</div>
