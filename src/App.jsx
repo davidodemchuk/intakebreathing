@@ -39,8 +39,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.6.0";
+const APP_VERSION = "5.7.0";
 const CHANGELOG = [
+  { version: "5.7.0", date: "2026-04-01", changes: [
+    "Manager authentication — password-protected dashboard",
+    "Login persists across sessions via Supabase app_settings",
+    "Creator portal remains email + OTP login",
+  ]},
   { version: "5.6.0", date: "2026-04-01", changes: [
     "API keys now stored in Supabase — persist across browsers and devices",
     "Theme preference stays in localStorage (per-device)",
@@ -6139,6 +6144,105 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
 }
 
 // ═══════════════════════════════════════════════════════════
+// MANAGER LOGIN (shared team password; hash in Supabase app_settings)
+// ═══════════════════════════════════════════════════════════
+
+function ManagerLogin({ onLogin, t }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+  const [checking, setChecking] = useState(false);
+
+  const handleLogin = async () => {
+    if (!password.trim()) { setError("Enter the team password."); return; }
+    setChecking(true);
+    setError(null);
+
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password.trim());
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+      const storedHash = await dbGetSetting("manager-password-hash");
+
+      if (!storedHash) {
+        await dbSetSetting("manager-password-hash", hash);
+        localStorage.setItem("intake-manager-auth", hash);
+        onLogin();
+        return;
+      }
+
+      if (hash === storedHash) {
+        localStorage.setItem("intake-manager-auth", hash);
+        onLogin();
+      } else {
+        setError("Wrong password.");
+      }
+    } catch (e) {
+      setError("Login failed: " + (e?.message || String(e)));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <img src="/favicon-32.png" alt="Intake" style={{ width: 48, height: 48, marginBottom: 12 }} onError={(e) => { e.target.style.display = "none"; }} />
+          <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>Manager Dashboard</div>
+          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Intake Breathing — Creator Partnerships</div>
+        </div>
+
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 28 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Sign in</div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleLogin(); }}
+            placeholder="Team password"
+            autoFocus
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 8,
+              border: `1px solid ${t.border}`, background: t.inputBg,
+              color: t.inputText, fontSize: 14, outline: "none",
+              boxSizing: "border-box", marginBottom: 12,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => void handleLogin()}
+            disabled={checking}
+            style={{
+              width: "100%", padding: 12, borderRadius: 8, border: "none",
+              background: t.green, color: t.isLight ? "#fff" : "#000",
+              fontSize: 14, fontWeight: 700,
+              cursor: checking ? "wait" : "pointer",
+              opacity: checking ? 0.6 : 1,
+            }}
+          >
+            {checking ? "Checking..." : "Sign In"}
+          </button>
+          {error && (
+            <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: t.red + "10", border: `1px solid ${t.red}25`, fontSize: 13, color: t.red }}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <a href="/creator" style={{ fontSize: 12, color: t.textFaint, textDecoration: "none" }}>
+            Creator? Sign in here →
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════
 
@@ -6152,6 +6256,8 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [currentRole, setCurrentRole] = useState(ROLES.MANAGER);
   const [view, setView] = useState(() => getViewFromPath());
+  const [managerAuthed, setManagerAuthed] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
 
   const navigate = useCallback((newView, opts) => {
     const o = opts && typeof opts === "object" ? opts : {};
@@ -6372,6 +6478,27 @@ export default function App() {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [openFilter]);
+
+  useEffect(() => {
+    (async () => {
+      const localHash = localStorage.getItem("intake-manager-auth");
+      if (!localHash) {
+        setAuthChecking(false);
+        return;
+      }
+      try {
+        const storedHash = await dbGetSetting("manager-password-hash");
+        if (storedHash && localHash === storedHash) {
+          setManagerAuthed(true);
+        } else {
+          localStorage.removeItem("intake-manager-auth");
+        }
+      } catch {
+        setManagerAuthed(true);
+      }
+      setAuthChecking(false);
+    })();
+  }, []);
 
   useEffect(() => {
     if (view !== "creatorDetail" || typeof window === "undefined") return;
@@ -7305,7 +7432,30 @@ export default function App() {
   const isCreatorPortalView = CREATOR_PORTAL_VIEWS.includes(view);
   const hideManagerShell = isCreatorPortalView || isPublicBriefView;
 
+  const isCreatorView = CREATOR_PORTAL_VIEWS.includes(view);
+  const bypassManagerAuth = isCreatorView || isPublicBriefView;
+
   const isCreatorViewAllowed = currentRole !== ROLES.CREATOR || CREATOR_ALLOWED_VIEWS.includes(view);
+
+  if (!bypassManagerAuth && authChecking) {
+    return (
+      <ThemeContext.Provider value={ctx}>
+        <div style={S.app}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", color: t.textMuted }}>Loading...</div>
+        </div>
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (!bypassManagerAuth && !managerAuthed) {
+    return (
+      <ThemeContext.Provider value={ctx}>
+        <div style={S.app}>
+          <ManagerLogin onLogin={() => setManagerAuthed(true)} t={t} />
+        </div>
+      </ThemeContext.Provider>
+    );
+  }
 
   return (
     <ThemeContext.Provider value={ctx}>
@@ -7434,6 +7584,20 @@ export default function App() {
                   <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                 )}
                 <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem("intake-manager-auth");
+                    setManagerAuthed(false);
+                  }}
+                  style={{
+                    padding: "7px 12px", borderRadius: 8, border: "none",
+                    background: "transparent", color: t.textFaint,
+                    fontSize: 12, cursor: "pointer",
+                  }}
+                >
+                  Sign Out
+                </button>
                 <button type="button" onClick={() => setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
                   <div style={S.themeKnob(isDark)} />
                 </button>
@@ -7756,6 +7920,39 @@ export default function App() {
               </div>
               <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10, lineHeight: 1.5 }}>
                 API keys are stored in the <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>app_settings</code> table. If saves fail, run the SQL at the end of <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>supabase/schema.sql</code> in the Supabase SQL Editor.
+              </div>
+            </div>
+
+            <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Team Password</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>Change the shared password for manager access (SHA-256 hash stored in Supabase).</div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input
+                  id="new-password-input"
+                  type="password"
+                  placeholder="New team password"
+                  style={{ flex: 1, padding: "11px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const el = document.getElementById("new-password-input");
+                    const val = el ? el.value.trim() : "";
+                    if (!val || val.length < 4) { alert("Password must be at least 4 characters."); return; }
+                    const encoder = new TextEncoder();
+                    const data = encoder.encode(val);
+                    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+                    await dbSetSetting("manager-password-hash", hash);
+                    localStorage.setItem("intake-manager-auth", hash);
+                    if (el) el.value = "";
+                    alert("Password updated. All team members will need to re-login with the new password.");
+                  }}
+                  style={{ padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", whiteSpace: "nowrap" }}
+                >
+                  Update
+                </button>
               </div>
             </div>
 
