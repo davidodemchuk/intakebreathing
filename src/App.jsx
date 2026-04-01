@@ -7,7 +7,8 @@ const NAV_ICON =
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
 const CREATOR_COLUMNS = [
-  { key: "status", label: "Status", width: 80, filterable: true, sortable: true },
+  { key: "status", label: "Status", width: 60, filterable: true, sortable: true },
+  { key: "avatar", label: "", width: 36, sortable: false },
   { key: "handle", label: "Handle", width: 140, sortable: true },
   { key: "niche", label: "Niche", width: 150, filterable: true, sortable: true, editable: true },
   { key: "email", label: "Email", width: 200, editable: true, isLink: "mailto" },
@@ -29,8 +30,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.3.0";
+const APP_VERSION = "3.4.0";
 const CHANGELOG = [
+  { version: "3.4.0", date: "2026-04-01", changes: [
+    "Avatar column added to creator table — shows profile pic from TikTok or Instagram",
+    "IB-Ai generated badge — any data calculated by AI is clearly marked",
+    "Removed Recent Videos section from creator detail — data still pulled for IB-Ai scoring but not displayed as a section",
+    "Best performing video shown as a single compact highlight instead of a full video list",
+  ]},
   { version: "3.3.0", date: "2026-04-01", changes: [
     "11-platform creator enrichment: Instagram (profile+posts+reels), TikTok (profile+videos+shop), YouTube, Twitter/X, LinkedIn, Snapchat, Facebook",
     "IB Score system — Intake-branded 1-100 creator score with 5-category breakdown",
@@ -858,6 +865,15 @@ function normalizeCreatorRow(c) {
     facebookData: c.facebookData && typeof c.facebookData === "object" ? c.facebookData : null,
     lastEnriched: c.lastEnriched || null,
     aiAnalysis: c.aiAnalysis && typeof c.aiAnalysis === "object" ? c.aiAnalysis : null,
+    aiAutoFilled:
+      c.aiAutoFilled && typeof c.aiAutoFilled === "object"
+        ? {
+            niche: !!c.aiAutoFilled.niche,
+            quality: !!c.aiAutoFilled.quality,
+            costPerVideo: !!c.aiAutoFilled.costPerVideo,
+          }
+        : { niche: false, quality: false, costPerVideo: false },
+    tiktokBestVideo: c.tiktokBestVideo && typeof c.tiktokBestVideo === "object" ? c.tiktokBestVideo : null,
     outreachStatus: c.outreachStatus ?? null,
     lastContactDate: c.lastContactDate ?? null,
     contactMethod: c.contactMethod ?? null,
@@ -1280,6 +1296,7 @@ Return ONLY the JSON, nothing else.`,
 function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
   if (!aiAnalysis) return {};
   const out = { aiAnalysis };
+  const prev = creator.aiAutoFilled && typeof creator.aiAutoFilled === "object" ? creator.aiAutoFilled : {};
   if (!String(creator.niche || "").trim()) out.niche = aiAnalysis.suggestedNiche || creator.niche;
   if (creator.quality === "High") {
     /* keep manager-set High */
@@ -1292,6 +1309,16 @@ function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
     out.ibScoreLabel = aiAnalysis.scoreLabel || creator.ibScoreLabel;
     out.ibScoreBreakdown = aiAnalysis.scoreBreakdown || creator.ibScoreBreakdown;
   }
+  out.aiAutoFilled = {
+    niche: !String(creator.niche || "").trim() && aiAnalysis.suggestedNiche ? true : prev.niche ?? false,
+    quality:
+      creator.quality === "High"
+        ? false
+        : (!creator.quality || creator.quality === "Standard") && aiAnalysis.qualityTier
+          ? true
+          : prev.quality ?? false,
+    costPerVideo: !String(creator.costPerVideo || "").trim() && aiAnalysis.estimatedRate ? true : prev.costPerVideo ?? false,
+  };
   return out;
 }
 
@@ -4143,6 +4170,47 @@ const VIDEO_LOG_STATUSES = [
   { value: "draft", label: "Draft" },
 ];
 
+/** Single highlight for detail view: best TikTok clip vs top IG post by engagement. */
+function pickBestContentHighlight(c) {
+  const tt = c.tiktokBestVideo || c.tiktokData?.bestVideo || null;
+  const posts = c.instagramRecentPosts || [];
+  let topIg = null;
+  let bestIg = -1;
+  for (const p of posts) {
+    const s = (Number(p.likes) || 0) + (Number(p.comments) || 0);
+    if (s > bestIg) {
+      bestIg = s;
+      topIg = p;
+    }
+  }
+  if (!tt && !topIg) return null;
+  if (!tt) {
+    return {
+      kind: "ig",
+      views: null,
+      likes: topIg.likes,
+      comments: topIg.comments,
+      caption: topIg.caption || "",
+      url: topIg.url || "",
+    };
+  }
+  if (!topIg) {
+    return { kind: "tt", views: tt.views, likes: tt.likes, comments: tt.comments, caption: tt.caption || "", url: tt.url || "" };
+  }
+  const igScore = (topIg.likes || 0) + (topIg.comments || 0);
+  if ((tt.views || 0) >= igScore * 100) {
+    return { kind: "tt", views: tt.views, likes: tt.likes, comments: tt.comments, caption: tt.caption || "", url: tt.url || "" };
+  }
+  return {
+    kind: "ig",
+    views: null,
+    likes: topIg.likes,
+    comments: topIg.comments,
+    caption: topIg.caption || "",
+    url: topIg.url || "",
+  };
+}
+
 function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {} }) {
   const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
@@ -4158,8 +4226,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState(null);
   const [enrichStepMap, setEnrichStepMap] = useState(null);
-  const [contentTab, setContentTab] = useState("tiktok");
-  const [expandedTtId, setExpandedTtId] = useState(null);
   const [igPullBusy, setIgPullBusy] = useState(false);
 
   const campaignNames = useMemo(() => {
@@ -4256,6 +4322,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       updateCreator(c.id, {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...payload.ttData },
         instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...payload.igData },
+        tiktokBestVideo: payload.tiktokBestVideo ?? c.tiktokBestVideo,
         engagementRate: payload.engagementRate,
         tiktokEngRate: payload.tiktokEngRate,
         instagramEngRate: payload.instagramEngRate,
@@ -4308,7 +4375,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         tiktokData: tt,
         instagramData: ig,
         tiktokShopData: c.tiktokShopData,
-        ttCaptions: (Array.isArray(tt.recentVideos) ? tt.recentVideos : []).slice(0, 5).map((v) => v.caption).filter(Boolean).join(" | "),
+        ttCaptions: (Array.isArray(c.tiktokData?.recentVideos) ? c.tiktokData.recentVideos : []).slice(0, 5).map((v) => v.caption).filter(Boolean).join(" | "),
         igCaptions: (c.instagramRecentPosts || []).slice(0, 5).map((p) => p.caption).filter(Boolean).join(" | "),
         igEngRate: c.instagramEngRate,
         ttEngRate: c.tiktokEngRate,
@@ -4397,9 +4464,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const snD = c.snapchatData || {};
   const fbD = c.facebookData || {};
   const shop = c.tiktokShopData || {};
-  const ttList = (ttD.recentVideos || []).slice(0, 10);
-  const igPostsList = (c.instagramRecentPosts || []).slice(0, 10);
-  const igReelsList = (c.instagramRecentReels || []).slice(0, 10);
+  const af = c.aiAutoFilled || { niche: false, quality: false, costPerVideo: false };
+  const bestHighlight = useMemo(() => pickBestContentHighlight(c), [c]);
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
@@ -4419,10 +4485,58 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px", minWidth: 0 }}>
-          {ttD.avatarUrl || igD.avatarUrl ? (
-            <img src={ttD.avatarUrl || igD.avatarUrl} alt="" style={{ width: 48, height: 48, objectFit: "cover", flexShrink: 0, border: `1px solid ${t.border}` }} />
+          {igD.avatarUrl || ttD.avatarUrl ? (
+            <div style={{ width: 48, height: 48, flexShrink: 0, position: "relative" }}>
+              <img
+                src={igD.avatarUrl || ttD.avatarUrl || ""}
+                alt=""
+                style={{ width: 48, height: 48, borderRadius: 24, objectFit: "cover", background: t.cardAlt, border: `1px solid ${t.border}`, display: "block" }}
+                onError={(e) => {
+                  e.target.style.display = "none";
+                  const el = e.target.nextSibling;
+                  if (el) el.style.display = "flex";
+                }}
+              />
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  background: t.cardAlt,
+                  border: `1px solid ${t.border}`,
+                  display: "none",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 18,
+                  fontWeight: 800,
+                  color: t.textFaint,
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                }}
+              >
+                {handleLetter}
+              </div>
+            </div>
           ) : (
-            <div style={{ width: 48, height: 48, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: t.textMuted }}>{handleLetter}</div>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                background: t.cardAlt,
+                border: `1px solid ${t.border}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 18,
+                fontWeight: 800,
+                color: t.textFaint,
+                flexShrink: 0,
+              }}
+            >
+              {handleLetter}
+            </div>
           )}
           <div style={{ minWidth: 0 }}>
             <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "block" }}>{c.handle}</a>
@@ -4523,6 +4637,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       {Number.isFinite(ib) ? (
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: t.text }}>IB Score</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 6px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#fff", flexShrink: 0 }}>{Math.round(ib)}</div>
             <div style={{ flex: "1 1 280px", minWidth: 0 }}>
@@ -4549,7 +4667,12 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                   ))}
                 </div>
               ) : null}
-              {ai.estimatedRate ? <div style={{ fontSize: 14, fontWeight: 700, color: t.green, marginTop: 10 }}>Estimated rate: {ai.estimatedRate}</div> : null}
+              {ai.estimatedRate ? (
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.green, marginTop: 10, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
+                  <span>Estimated rate: {ai.estimatedRate}</span>
+                </div>
+              ) : null}
               {ai.bestPlatform ? <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>Best platform: <strong style={{ color: t.text }}>{ai.bestPlatform}</strong></div> : null}
               <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, marginTop: 12, fontSize: 12, padding: "6px 12px" }}>Recalculate IB Score</button>
             </div>
@@ -4557,83 +4680,38 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
       ) : null}
 
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <button type="button" onClick={() => setContentTab("tiktok")} style={{ ...S.btnS, padding: "6px 14px", fontSize: 12, background: contentTab === "tiktok" ? t.green + "22" : "transparent", borderColor: contentTab === "tiktok" ? t.green : t.border }}>TikTok Videos</button>
-          <button type="button" onClick={() => setContentTab("instagram")} style={{ ...S.btnS, padding: "6px 14px", fontSize: 12, background: contentTab === "instagram" ? t.green + "22" : "transparent", borderColor: contentTab === "instagram" ? t.green : t.border }}>Instagram Posts/Reels</button>
-        </div>
-        <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, overflow: "hidden" }}>
-          {contentTab === "tiktok" ? (
-            <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 72px 56px 72px 72px 40px 32px", fontSize: 12, background: t.cardAlt }}>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>#</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Caption</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Views</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Likes</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Cmts</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Date</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>▶</div>
-              <div />
-              {ttList.length === 0 ? (
-                <div style={{ gridColumn: "1 / -1", padding: 16, color: t.textMuted }}>Not enriched yet</div>
-              ) : (
-                ttList.map((row, idx) => (
-                  <div key={row.id || idx} style={{ display: "contents" }}>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>{idx + 1}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.caption || "—"}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.views)}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.likes)}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.comments)}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, fontSize: 11 }}>{row.date || "—"}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>
-                      <button type="button" style={{ background: "none", border: "none", color: t.green, cursor: "pointer", fontSize: 12 }} onClick={() => setExpandedTtId(expandedTtId === row.id ? null : row.id)}>▶</button>
-                    </div>
-                    <div />
-                    {expandedTtId === row.id && row.playUrl ? (
-                      <div style={{ gridColumn: "1 / -1", padding: 8, background: t.card, borderTop: `1px solid ${t.border}` }}>
-                        <video src={row.playUrl} controls style={{ maxWidth: 320, maxHeight: 480, borderRadius: 8 }} />
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              )}
+      {bestHighlight && bestHighlight.url ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>Top Performer</div>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>
+                {bestHighlight.kind === "tt"
+                  ? `${formatMetricShort(bestHighlight.views)} views · ${formatMetricShort(bestHighlight.likes)} likes`
+                  : `${formatMetricShort(bestHighlight.likes)} likes · ${formatMetricShort(bestHighlight.comments)} comments`}
+              </div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bestHighlight.caption || "—"}</div>
             </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 56px 56px 56px 72px 48px", fontSize: 12, background: t.cardAlt }}>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>#</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Caption</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Likes</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Cmts</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Type</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Date</div>
-              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Link</div>
-              {[...igPostsList, ...igReelsList].length === 0 ? (
-                <div style={{ gridColumn: "1 / -1", padding: 16, color: t.textMuted }}>Not enriched yet</div>
-              ) : (
-                [...igPostsList, ...igReelsList].slice(0, 10).map((row, idx) => (
-                  <div key={row.id || idx} style={{ display: "contents" }}>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>{idx + 1}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(row.caption || "").slice(0, 80)}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.likes)}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.comments)}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, fontSize: 11 }}>{row.mediaType || "—"}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, fontSize: 11 }}>{row.date || "—"}</div>
-                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>
-                      {row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" style={{ color: t.green, fontSize: 11 }}>Open</a> : "—"}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+            <a href={bestHighlight.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.blue, textDecoration: "none", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+              View →
+            </a>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 20 }}>
         <div style={{ flex: "1 1 400px", minWidth: 280 }}>
           <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Profile</div>
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche</div>
-            <input value={c.niche || ""} onChange={(e) => updateCreator(c.id, { niche: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+              Niche
+              {af.niche ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
+            </div>
+            <input
+              value={c.niche || ""}
+              onChange={(e) => updateCreator(c.id, { niche: e.target.value, aiAutoFilled: { ...af, niche: false } })}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+            />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
             <div>
@@ -4645,16 +4723,30 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               </select>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
-              <select value={c.quality || "Standard"} onChange={(e) => updateCreator(c.id, { quality: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                Quality
+                {af.quality ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
+              </div>
+              <select
+                value={c.quality || "Standard"}
+                onChange={(e) => updateCreator(c.id, { quality: e.target.value, aiAutoFilled: { ...af, quality: false } })}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              >
                 <option value="High">High</option>
                 <option value="Standard">Standard</option>
               </select>
             </div>
           </div>
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Cost / video</div>
-            <input value={String(c.costPerVideo || "").replace(/^\$/, "")} onChange={(e) => updateCreator(c.id, { costPerVideo: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+              Cost / video
+              {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
+            </div>
+            <input
+              value={String(c.costPerVideo || "").replace(/^\$/, "")}
+              onChange={(e) => updateCreator(c.id, { costPerVideo: e.target.value, aiAutoFilled: { ...af, costPerVideo: false } })}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+            />
           </div>
           {(c.address || "").trim() ? (
             <div style={{ marginBottom: 10 }}>
@@ -4997,6 +5089,7 @@ export default function App() {
         updateCreator(cr.id, {
           tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(cr.tiktokData || {}), ...tt },
           instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(cr.instagramData || {}), ...payload.igData },
+          tiktokBestVideo: payload.tiktokBestVideo ?? cr.tiktokBestVideo,
           engagementRate,
           tiktokEngRate: payload.tiktokEngRate,
           instagramEngRate: payload.instagramEngRate,
@@ -5149,6 +5242,12 @@ export default function App() {
         ibScoreBreakdown: ai?.scoreBreakdown ?? null,
         lastEnriched: new Date().toISOString(),
         aiAnalysis: ai || null,
+        tiktokBestVideo: payload.tiktokBestVideo ?? null,
+        aiAutoFilled: {
+          niche: !!(ai?.suggestedNiche && String(ai.suggestedNiche).trim()),
+          quality: !!ai,
+          costPerVideo: !!(ai?.estimatedRate && String(ai.estimatedRate).trim()),
+        },
         outreachStatus: null,
         lastContactDate: null,
         contactMethod: null,
@@ -5200,6 +5299,7 @@ export default function App() {
       updateCreator(existingId, {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(existing.tiktokData || {}), ...payload.ttData },
         instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(existing.instagramData || {}), ...payload.igData },
+        tiktokBestVideo: payload.tiktokBestVideo ?? existing.tiktokBestVideo,
         engagementRate: payload.engagementRate,
         tiktokEngRate: payload.tiktokEngRate,
         instagramEngRate: payload.instagramEngRate,
@@ -6259,6 +6359,9 @@ export default function App() {
                   ? filters.quality !== "All"
                   : false;
           const renderHeaderCell = (col) => {
+            if (col.key === "avatar") {
+              return <div key={col.key} style={{ padding: "8px 6px" }} aria-hidden />;
+            }
             const fk = col.filterable ? col.key : null;
             const fa = fk ? filterActive(fk) : false;
             const sortOn = col.sortable && sortCol === col.key;
@@ -6469,6 +6572,65 @@ export default function App() {
                 </div>
               );
             }
+            if (col.key === "avatar") {
+              const letter = String(c.handle || "?").replace(/^@/, "").charAt(0).toUpperCase() || "?";
+              const src = (c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl || "").trim();
+              return (
+                <div key={col.key} style={{ ...base, display: "flex", alignItems: "center", justifyContent: "center", padding: "6px 4px" }}>
+                  {src ? (
+                    <div style={{ width: 28, height: 28, position: "relative", flexShrink: 0 }}>
+                      <img
+                        src={src}
+                        alt=""
+                        style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", background: t.cardAlt, display: "block" }}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                          const el = e.target.nextSibling;
+                          if (el) el.style.display = "flex";
+                        }}
+                      />
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          background: t.cardAlt,
+                          display: "none",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: t.textFaint,
+                          position: "absolute",
+                          left: 0,
+                          top: 0,
+                        }}
+                      >
+                        {letter}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        background: t.cardAlt,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: t.textFaint,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {letter}
+                    </div>
+                  )}
+                </div>
+              );
+            }
             if (col.key === "handle") {
               const hDisp = fmtHandle(c.handle);
               return (
@@ -6503,7 +6665,8 @@ export default function App() {
                           skipCreatorCellBlurRef.current = false;
                           return;
                         }
-                        updateCreator(c.id, { niche: e.target.value });
+                        const af0 = c.aiAutoFilled && typeof c.aiAutoFilled === "object" ? c.aiAutoFilled : {};
+                        updateCreator(c.id, { niche: e.target.value, aiAutoFilled: { ...af0, niche: false } });
                         setEditingCell(null);
                       }}
                       onKeyDown={(e) => {
@@ -6674,7 +6837,14 @@ export default function App() {
               const colIb = Number.isFinite(ib) ? ibScoreTierColor(ib) : t.textFaint;
               return (
                 <div key={col.key} style={{ ...base, fontWeight: 800, color: colIb }}>
-                  {Number.isFinite(ib) ? Math.round(ib) : "—"}
+                  {Number.isFinite(ib) ? (
+                    <>
+                      <span style={{ fontSize: 10, opacity: 0.9 }}>✦ </span>
+                      {Math.round(ib)}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </div>
               );
             }
@@ -6737,7 +6907,8 @@ export default function App() {
                           skipCreatorCellBlurRef.current = false;
                           return;
                         }
-                        updateCreator(c.id, { costPerVideo: e.target.value });
+                        const af0 = c.aiAutoFilled && typeof c.aiAutoFilled === "object" ? c.aiAutoFilled : {};
+                        updateCreator(c.id, { costPerVideo: e.target.value, aiAutoFilled: { ...af0, costPerVideo: false } });
                         setEditingCell(null);
                       }}
                       onKeyDown={(e) => {
