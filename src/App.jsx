@@ -11,6 +11,8 @@ const CREATOR_COLUMNS = [
   { key: "tt", label: "TT", width: 36, isLink: "external" },
   { key: "ig", label: "IG", width: 36, isLink: "external" },
   { key: "videos", label: "Videos", width: 60, sortable: true, align: "right" },
+  { key: "avgViews", label: "Avg Views", width: 72, sortable: true, align: "right" },
+  { key: "engRate", label: "Eng %", width: 52, sortable: true, align: "right" },
   { key: "quality", label: "Quality", width: 70, filterable: true, sortable: true },
   { key: "cost", label: "Cost", width: 80, editable: true },
   { key: "notes", label: "Notes", width: null, editable: true },
@@ -22,8 +24,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.9.0";
+const APP_VERSION = "3.0.0";
 const CHANGELOG = [
+  { version: "3.0.0", date: "2026-04-01", changes: [
+    "Fixed engagement rate — now calculated from recent video performance, not lifetime hearts",
+    "Fixed Instagram enrichment — better error handling, separate IG handle field",
+    "Now pulling ALL available data from ScrapeCreators: recent videos, top posts, bio links",
+    "Creator detail shows recent video performance cards with views, likes, comments",
+  ]},
   { version: "2.9.0", date: "2026-03-31", changes: [
     "Creator table completely redesigned — Google Sheets-style with filters in column headers",
     "Inline editing — double-click any cell to edit directly in the table",
@@ -709,6 +717,19 @@ const DEFAULT_TIKTOK_DATA = {
   avatarUrl: "",
   verified: false,
   lastEnriched: null,
+  bioLink: "",
+  displayName: "",
+  accountCreated: null,
+  isPrivate: false,
+  isCommerceUser: false,
+  friendCount: null,
+  likedVideos: null,
+  recentVideos: [],
+  avgViews: null,
+  avgLikes: null,
+  avgComments: null,
+  avgShares: null,
+  bestVideo: null,
 };
 const DEFAULT_INSTAGRAM_DATA = {
   followers: null,
@@ -718,6 +739,13 @@ const DEFAULT_INSTAGRAM_DATA = {
   avatarUrl: "",
   verified: false,
   lastEnriched: null,
+  enrichError: null,
+  fullName: "",
+  externalUrl: "",
+  category: "",
+  isPrivate: false,
+  isBusiness: false,
+  businessCategory: "",
 };
 
 // ═══ FUTURE: Outreach & Follow-Up System ═══
@@ -770,10 +798,16 @@ function normalizeCreatorRow(c) {
   if (!c || typeof c !== "object") return c;
   const tt = typeof c.tiktokData === "object" && c.tiktokData ? c.tiktokData : {};
   const ig = typeof c.instagramData === "object" && c.instagramData ? c.instagramData : {};
+  const cleanH = String(c.handle || "").replace(/^@/, "").trim();
+  const igH =
+    c.instagramHandle != null && String(c.instagramHandle).trim() !== ""
+      ? String(c.instagramHandle).replace(/^@/, "").trim()
+      : cleanH;
   return {
     ...c,
     videoLog: Array.isArray(c.videoLog) ? c.videoLog : [],
     dateAdded: c.dateAdded || "2025-03-31",
+    instagramHandle: igH,
     tiktokData: { ...DEFAULT_TIKTOK_DATA, ...tt },
     instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...ig },
     engagementRate: c.engagementRate != null && c.engagementRate !== "" ? c.engagementRate : null,
@@ -889,7 +923,7 @@ function parseTikTokUserStats(raw) {
 }
 
 function instagramDataFromProfileResponse(raw) {
-  if (!raw) return { ...DEFAULT_INSTAGRAM_DATA, lastEnriched: null };
+  if (!raw) return { ...DEFAULT_INSTAGRAM_DATA, lastEnriched: null, enrichError: null };
   const data = raw?.data ?? raw;
   return {
     followers: data?.follower_count ?? data?.edge_followed_by?.count ?? null,
@@ -898,11 +932,71 @@ function instagramDataFromProfileResponse(raw) {
     bio: data?.biography ?? "",
     avatarUrl: data?.profile_pic_url_hd ?? data?.profile_pic_url ?? "",
     verified: !!data?.is_verified,
+    fullName: data?.full_name ?? "",
+    externalUrl: data?.external_url ?? "",
+    category: data?.category_name ?? data?.category ?? "",
+    isPrivate: !!data?.is_private,
+    isBusiness: !!data?.is_business_account,
+    businessCategory: data?.business_category_name ?? "",
     lastEnriched: new Date().toISOString(),
+    enrichError: null,
   };
 }
 
+async function fetchInstagramEnrichment(igHandleRaw, scrapeKey, existingData = {}) {
+  const base = { ...DEFAULT_INSTAGRAM_DATA, ...existingData };
+  const clean = String(igHandleRaw || "").replace(/^@/, "").trim();
+  const sk = String(scrapeKey || "").trim();
+  if (!clean) {
+    return { ...base, enrichError: "Missing Instagram handle", lastEnriched: base.lastEnriched };
+  }
+  if (!sk) {
+    return { ...base, enrichError: "Missing ScrapeCreators API key" };
+  }
+  try {
+    const igRes = await Promise.race([
+      fetch(`https://api.scrapecreators.com/v1/instagram/profile?handle=${encodeURIComponent(clean)}`, {
+        headers: { "x-api-key": sk },
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+    ]);
+    if (!igRes.ok) {
+      return {
+        ...base,
+        lastEnriched: new Date().toISOString(),
+        enrichError: `Profile not found (HTTP ${igRes.status}). Handle may differ from TikTok.`,
+      };
+    }
+    const igProfile = await igRes.json();
+    return {
+      ...base,
+      ...instagramDataFromProfileResponse(igProfile),
+      enrichError: null,
+    };
+  } catch (err) {
+    return {
+      ...base,
+      lastEnriched: new Date().toISOString(),
+      enrichError: err?.message || String(err),
+    };
+  }
+}
+
 function tiktokDataFromUserStats(user, stats) {
+  const bioLink =
+    user?.bioLink?.link ??
+    user?.bio_link?.url ??
+    user?.bioLinkUrl ??
+    (typeof user?.bioLink === "string" ? user.bioLink : "") ??
+    "";
+  const createT = user?.createTime ?? user?.create_time;
+  let accountCreated = null;
+  if (createT != null) {
+    const sec = Number(createT);
+    if (Number.isFinite(sec)) {
+      accountCreated = new Date(sec < 1e12 ? sec * 1000 : sec).toISOString().slice(0, 10);
+    }
+  }
   return {
     followers: stats?.followerCount ?? stats?.follower_count ?? null,
     following: stats?.followingCount ?? stats?.following_count ?? null,
@@ -912,17 +1006,108 @@ function tiktokDataFromUserStats(user, stats) {
     avatarUrl: user?.avatarMedium ?? user?.avatarLarger ?? user?.avatarThumb ?? "",
     verified: !!user?.verified,
     lastEnriched: new Date().toISOString(),
+    bioLink: bioLink || "",
+    displayName: user?.nickname ?? user?.nickName ?? "",
+    accountCreated,
+    isPrivate: !!(user?.privateAccount ?? user?.secret),
+    isCommerceUser: !!(user?.commerceUserInfo?.commerceUser ?? user?.commerce_user),
+    friendCount: stats?.friendCount ?? stats?.friend_count ?? null,
+    likedVideos: stats?.diggCount ?? null,
   };
 }
 
 function extractTikTokVideoList(raw) {
   const data = raw?.data ?? raw;
+  if (Array.isArray(raw?.itemList)) return raw.itemList;
+  if (Array.isArray(data?.itemList)) return data.itemList;
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.videos)) return data.videos;
   if (Array.isArray(data?.aweme_list)) return data.aweme_list;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(raw?.videos)) return raw.videos;
   return [];
+}
+
+/** Map Profile Videos API response → recentVideos, averages, engagement %, best clip. */
+function buildTikTokRecentVideosAndMetrics(vidRaw, cleanHandle, followerCount) {
+  const raw = vidRaw?.data ?? vidRaw;
+  let videos = [];
+  if (Array.isArray(vidRaw?.itemList)) videos = vidRaw.itemList;
+  else if (Array.isArray(raw?.itemList)) videos = raw.itemList;
+  else if (Array.isArray(vidRaw?.videos)) videos = vidRaw.videos;
+  else if (Array.isArray(raw?.videos)) videos = raw.videos;
+  else videos = extractTikTokVideoList(vidRaw || {});
+
+  const recentVideos = videos.slice(0, 20);
+  const n = recentVideos.length;
+  const followers = Number(followerCount) > 0 ? Number(followerCount) : 0;
+
+  let avgViews = null;
+  let avgLikes = null;
+  let avgComments = null;
+  let avgShares = null;
+  let engagementRate = null;
+
+  if (n > 0 && followers > 0) {
+    let totalViews = 0;
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+    for (const v of recentVideos) {
+      const st = v.stats || v.statistics || {};
+      totalViews += Number(st.playCount ?? st.play_count ?? v.playCount ?? 0) || 0;
+      totalLikes += Number(st.diggCount ?? st.digg_count ?? 0) || 0;
+      totalComments += Number(st.commentCount ?? st.comment_count ?? 0) || 0;
+      totalShares += Number(st.shareCount ?? st.share_count ?? 0) || 0;
+    }
+    avgViews = Math.round(totalViews / n);
+    avgLikes = Math.round(totalLikes / n);
+    avgComments = Math.round(totalComments / n);
+    avgShares = Math.round(totalShares / n);
+    const avgEngagementActionsPerVideo = (totalLikes + totalComments + totalShares) / n;
+    engagementRate = ((avgEngagementActionsPerVideo / followers) * 100).toFixed(2);
+  }
+
+  const mapOne = (v) => {
+    const st = v.stats || v.statistics || {};
+    const vid = v.id || v.aweme_id || v.awemeId;
+    const ct = v.createTime ?? v.create_time ?? v.create_time_ms;
+    let dateStr = "";
+    if (ct != null) {
+      const sec = Number(ct);
+      if (Number.isFinite(sec)) {
+        const ms = sec < 1e12 ? sec * 1000 : sec;
+        dateStr = new Date(ms).toISOString().split("T")[0];
+      }
+    }
+    return {
+      id: vid,
+      caption: String(v.desc || v.caption || "").trim(),
+      views: Number(st.playCount ?? st.play_count ?? 0) || 0,
+      likes: Number(st.diggCount ?? st.digg_count ?? 0) || 0,
+      comments: Number(st.commentCount ?? st.comment_count ?? 0) || 0,
+      shares: Number(st.shareCount ?? st.share_count ?? 0) || 0,
+      cover: v.video?.cover || v.video?.originCover || v.video?.dynamicCover || "",
+      date: dateStr,
+      url: vid ? `https://www.tiktok.com/@${cleanHandle}/video/${vid}` : "",
+    };
+  };
+
+  const mapped10 = recentVideos.slice(0, 10).map(mapOne);
+  let bestVideo = null;
+  for (const mv of mapped10) {
+    if (!bestVideo || (mv.views || 0) > (bestVideo.views || 0)) bestVideo = { ...mv };
+  }
+
+  return {
+    recentVideos: mapped10,
+    avgViews,
+    avgLikes,
+    avgComments,
+    avgShares,
+    engagementRate,
+    bestVideo: bestVideo && (bestVideo.views != null || bestVideo.id) ? bestVideo : null,
+  };
 }
 
 function videoPlayCount(v) {
@@ -1071,11 +1256,13 @@ async function fetchTikTokVideosRaw(cleanHandle, scrapeKey) {
   }
 }
 
-/** Full ScrapeCreators + optional IB-Ai pipeline for one handle (TikTok + videos + IG + AI). onStep(id) fires after each phase starts. opts.skipAi: skip Anthropic (e.g. bulk refresh when aiAnalysis already exists). */
+/** Full ScrapeCreators + optional IB-Ai pipeline for one handle (TikTok + videos + IG + AI). onStep(id) fires after each phase starts. opts.skipAi: skip Anthropic. opts.instagramHandle: override IG handle. opts.existingInstagramData: merge base for IG errors. */
 async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opts) {
   const sk = String(scrapeKey || "").trim();
   const ak = String(aiKey || "").trim();
   const skipAi = !!opts?.skipAi;
+  const igHandleOverride = String(opts?.instagramHandle || "").replace(/^@/, "").trim();
+  const igHandle = igHandleOverride || cleanHandle;
   const notes = [];
   onStep?.("tt_profile");
   const ttRaw = await fetchTikTokProfileRaw(cleanHandle, sk);
@@ -1085,19 +1272,15 @@ async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opt
   const tops = topVideosForAi(vidRaw || {});
   const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
 
-  onStep?.("ig_profile");
-  let igRaw = null;
-  try {
-    const igRes = await fetch(`https://api.scrapecreators.com/v1/instagram/profile?handle=${encodeURIComponent(cleanHandle)}`, {
-      headers: { "x-api-key": sk },
-    });
-    if (igRes.ok) igRaw = await igRes.json();
-    else notes.push("Instagram profile not found — handle may differ. Add manually in the detail view.");
-  } catch {
-    notes.push("Instagram profile not found — handle may differ. Add manually in the detail view.");
-  }
+  const fc = Number(stats?.followerCount ?? stats?.follower_count ?? 0);
+  const vidMetrics = buildTikTokRecentVideosAndMetrics(vidRaw, cleanHandle, fc);
+  const { engagementRate: erFromVideos, ...vidFields } = vidMetrics;
+  const ttData = { ...tiktokDataFromUserStats(user, stats), ...vidFields };
+  const engagementRate = erFromVideos;
 
-  const igData = igRaw ? instagramDataFromProfileResponse(igRaw) : { ...DEFAULT_INSTAGRAM_DATA, lastEnriched: null };
+  onStep?.("ig_profile");
+  const igData = await fetchInstagramEnrichment(igHandle, sk, opts?.existingInstagramData || {});
+  if (igData.enrichError) notes.push(igData.enrichError);
 
   onStep?.("ai_analyze");
   let aiAnalysis = null;
@@ -1116,10 +1299,6 @@ async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opt
     }
   }
 
-  const ttData = tiktokDataFromUserStats(user, stats);
-  const fc = Number(stats?.followerCount ?? stats?.follower_count ?? 0);
-  const hc = stats?.heartCount ?? stats?.heart ?? null;
-  const engagementRate = fc > 0 && hc != null ? ((Number(hc) / fc) * 100).toFixed(1) : null;
   const nickname = user?.nickname || user?.uniqueId || "";
 
   onStep?.("saving");
@@ -3365,6 +3544,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   });
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState(null);
+  const [showEngHint, setShowEngHint] = useState(false);
+  const [igPullBusy, setIgPullBusy] = useState(false);
 
   const campaignNames = useMemo(() => {
     const s = new Set();
@@ -3390,6 +3571,40 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const igD = c.instagramData || {};
   const lastEnriched = ttD.lastEnriched || igD.lastEnriched;
   const handleLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
+  const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
+
+  const pullInstagramOnly = async () => {
+    const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
+    if (!key.trim()) {
+      alert("Add your ScrapeCreators API key in Settings");
+      return;
+    }
+    const igH = (c.instagramHandle || cleanHandle || "").replace(/^@/, "").trim() || cleanHandle;
+    setIgPullBusy(true);
+    try {
+      const merged = { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}) };
+      const ig = await fetchInstagramEnrichment(igH, key.trim(), merged);
+      updateCreator(c.id, { instagramData: { ...merged, ...ig } });
+    } finally {
+      setIgPullBusy(false);
+    }
+  };
+
+  const onInstagramHandleBlur = async (e) => {
+    const v = e.target.value.replace(/^@/, "").trim();
+    const resolved = v || cleanHandle;
+    updateCreator(c.id, { instagramHandle: resolved });
+    const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
+    if (!key.trim()) return;
+    setIgPullBusy(true);
+    try {
+      const merged = { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}) };
+      const ig = await fetchInstagramEnrichment(resolved, key.trim(), merged);
+      updateCreator(c.id, { instagramData: { ...merged, ...ig } });
+    } finally {
+      setIgPullBusy(false);
+    }
+  };
 
   const enrichProfile = async () => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
@@ -3401,8 +3616,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     setEnriching(true);
     setEnrichMsg("Pulling live data from TikTok...");
     try {
-      const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
-      const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak);
+      const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak, null, {
+        instagramHandle: c.instagramHandle,
+        existingInstagramData: c.instagramData,
+      });
       const patch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(c, payload.aiAnalysis) : {};
       updateCreator(c.id, {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...payload.ttData },
@@ -3596,11 +3813,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginBottom: 14 }}>
               {[
                 { label: "Followers", val: ttD.followers != null ? formatMetricShort(ttD.followers) : "—" },
-                { label: "Hearts", val: ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—" },
+                { label: "Total Hearts", val: ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—" },
                 { label: "TT Videos", val: ttD.videoCount != null ? String(ttD.videoCount) : "—" },
-                { label: "Eng. Rate", val: c.engagementRate != null ? `${c.engagementRate}%` : "—" },
-                { label: "IG Followers", val: igD.followers != null ? formatMetricShort(igD.followers) : "—" },
-                { label: "IG Posts", val: igD.posts != null ? String(igD.posts) : "—" },
+                { label: "Avg Views", val: ttD.avgViews != null ? formatMetricShort(ttD.avgViews) : "—" },
+                { label: "Avg Likes", val: ttD.avgLikes != null ? formatMetricShort(ttD.avgLikes) : "—" },
+                {
+                  label: "Eng. Rate",
+                  val: (() => {
+                    const er = parseFloat(c.engagementRate);
+                    return Number.isFinite(er) ? `${er.toFixed(2)}%` : "—";
+                  })(),
+                },
               ].map((s) => (
                 <div key={s.label} style={{ flex: "1 1 100px", textAlign: "center", minWidth: 90 }}>
                   <div style={{ fontSize: 24, fontWeight: 800, color: s.val === "—" ? t.textFaint : t.text }}>{s.val}</div>
@@ -3608,6 +3831,68 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 </div>
               ))}
             </div>
+            {igD.enrichError ? (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: 14,
+                  borderRadius: 10,
+                  background: t.orange + "12",
+                  border: `1px solid ${t.orange}44`,
+                }}
+              >
+                <div style={{ fontSize: 13, color: t.orange, marginBottom: 10, fontWeight: 600 }}>
+                  ⚠ Instagram: {igD.enrichError}
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram handle (if different from TikTok)</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <input
+                    value={c.instagramHandle || cleanHandle}
+                    onChange={(e) => updateCreator(c.id, { instagramHandle: e.target.value.replace(/^@/, "").trim() })}
+                    onBlur={onInstagramHandleBlur}
+                    placeholder="Instagram handle (if different from TikTok)"
+                    style={{ flex: "1 1 180px", minWidth: 140, padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+                  />
+                  <button type="button" disabled={igPullBusy} onClick={pullInstagramOnly} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>
+                    {igPullBusy ? "…" : "Retry"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginBottom: 14 }}>
+                {[
+                  { label: "IG Followers", val: igD.followers != null ? formatMetricShort(igD.followers) : "—" },
+                  { label: "IG Posts", val: igD.posts != null ? String(igD.posts) : "—" },
+                  { label: "IG Verified", val: igD.verified ? "✓ Yes" : "No" },
+                  { label: "IG Category", val: igD.category ? String(igD.category) : "—" },
+                ].map((s) => (
+                  <div key={s.label} style={{ flex: "1 1 100px", textAlign: "center", minWidth: 90 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: s.val === "—" ? t.textFaint : t.text }}>{s.val}</div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!igD.enrichError && igD.followers == null && !igD.lastEnriched ? (
+              <div style={{ marginBottom: 14, fontSize: 13, color: t.textMuted }}>
+                Instagram not pulled yet.
+                <button type="button" disabled={igPullBusy} onClick={pullInstagramOnly} style={{ ...S.btnP, marginLeft: 10, padding: "6px 12px", fontSize: 12 }}>
+                  {igPullBusy ? "…" : "Enrich Instagram"}
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowEngHint((v) => !v)}
+              style={{ background: "none", border: "none", color: t.textFaint, fontSize: 11, cursor: "pointer", padding: "4px 0", marginBottom: 10, textDecoration: "underline" }}
+            >
+              Engagement Rate Explained {showEngHint ? "▲" : "▼"}
+            </button>
+            {showEngHint ? (
+              <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.55, marginBottom: 12, padding: "10px 12px", background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                Engagement Rate = average (likes + comments + shares) per video ÷ followers × 100. Calculated from their 20 most recent TikTok videos. A rate of 3–6% is average, 6–10% is good, 10%+ is excellent.
+              </div>
+            ) : null}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
               <div style={{ fontSize: 11, color: t.textFaint }}>Last updated: {new Date(lastEnriched).toLocaleString()}</div>
               <button type="button" disabled={enriching} onClick={enrichProfile} style={{ ...S.btnP, padding: "8px 16px", fontSize: 12 }}>
@@ -3617,6 +3902,66 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           </>
         )}
       </div>
+
+      {Array.isArray(ttD.recentVideos) && ttD.recentVideos.length > 0 ? (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16, color: t.text }}>Recent TikTok Videos</div>
+          <div style={{ display: "flex", flexWrap: "nowrap", gap: 12, overflowX: "auto", paddingBottom: 6 }}>
+            {ttD.recentVideos.map((v) => {
+              const isBest = ttD.bestVideo && String(v.id) === String(ttD.bestVideo.id);
+              return (
+                <a
+                  key={v.id || v.url}
+                  href={v.url || ttUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    width: 180,
+                    flexShrink: 0,
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    border: isBest ? `2px solid ${t.green}` : `1px solid ${t.border}`,
+                    background: t.cardAlt,
+                    textDecoration: "none",
+                    color: "inherit",
+                    display: "block",
+                  }}
+                >
+                  {isBest ? (
+                    <div style={{ fontSize: 10, fontWeight: 800, color: t.green, padding: "6px 8px", background: t.green + "14" }}>★ Best Performer</div>
+                  ) : null}
+                  {v.cover ? (
+                    <img src={v.cover} alt="" style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: "100%", aspectRatio: "9/16", background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: t.textFaint }}>No thumb</div>
+                  )}
+                  <div style={{ padding: "8px 10px 10px" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{formatMetricShort(v.views || 0)} views</div>
+                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>
+                      ❤ {formatMetricShort(v.likes || 0)} · 💬 {formatMetricShort(v.comments || 0)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: t.textFaint,
+                        marginTop: 6,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {v.caption || "—"}
+                    </div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginTop: 6 }}>{v.date || "—"}</div>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {c.aiAnalysis ? (
         <div
@@ -3914,6 +4259,32 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 ) : null}
               </div>
             </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram Handle</div>
+              <input
+                value={c.instagramHandle || cleanHandle}
+                onChange={(e) => updateCreator(c.id, { instagramHandle: e.target.value.replace(/^@/, "").trim() })}
+                onBlur={onInstagramHandleBlur}
+                placeholder="Instagram handle (if different from TikTok)"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+              />
+            </div>
+            {ttD.bioLink ? (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>TikTok Bio Link</div>
+                <a href={/^https?:\/\//i.test(String(ttD.bioLink)) ? ttD.bioLink : `https://${ttD.bioLink}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: t.green, fontWeight: 600, wordBreak: "break-all" }}>
+                  {ttD.bioLink}
+                </a>
+              </div>
+            ) : null}
+            {igD.externalUrl ? (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram Bio Link</div>
+                <a href={/^https?:\/\//i.test(String(igD.externalUrl)) ? igD.externalUrl : `https://${igD.externalUrl}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: t.green, fontWeight: 600, wordBreak: "break-all" }}>
+                  {igD.externalUrl}
+                </a>
+              </div>
+            ) : null}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>TikTok</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -4218,7 +4589,11 @@ export default function App() {
         line: "",
       });
       try {
-        const payload = await runScrapeAndAiPipeline(ch, key.trim(), ak, null, { skipAi: !!cr.aiAnalysis });
+        const payload = await runScrapeAndAiPipeline(ch, key.trim(), ak, null, {
+          skipAi: !!cr.aiAnalysis,
+          instagramHandle: cr.instagramHandle,
+          existingInstagramData: cr.instagramData,
+        });
         const tt = payload.ttData;
         const engagementRate = payload.engagementRate;
         const mergePatch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(cr, payload.aiAnalysis) : {};
@@ -4293,6 +4668,7 @@ export default function App() {
         quality: "Standard",
         tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
         instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
+        instagramHandle: cleanHandle,
         costPerVideo: "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
@@ -4338,6 +4714,7 @@ export default function App() {
         quality: ai ? normalizeQualityTier(ai.qualityTier) : "Standard",
         tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
         instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
+        instagramHandle: cleanHandle,
         costPerVideo: ai?.estimatedRate || "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
@@ -4386,9 +4763,12 @@ export default function App() {
     }
     setAddEnrichBusy(true);
     try {
-      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak);
       const existing = creators.find((c) => c.id === existingId);
       if (!existing) return;
+      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, null, {
+        instagramHandle: existing.instagramHandle,
+        existingInstagramData: existing.instagramData,
+      });
       const merged = mergeAiFieldsIntoExisting(existing, payload.aiAnalysis);
       updateCreator(existingId, {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(existing.tiktokData || {}), ...payload.ttData },
@@ -4844,6 +5224,16 @@ export default function App() {
         case "videos":
           valA = Math.max(Number(a.totalVideos) || 0, (a.videoLog || []).length);
           valB = Math.max(Number(b.totalVideos) || 0, (b.videoLog || []).length);
+          break;
+        case "avgViews":
+          valA = a.tiktokData?.avgViews ?? -1;
+          valB = b.tiktokData?.avgViews ?? -1;
+          break;
+        case "engRate":
+          valA = parseFloat(a.engagementRate);
+          valB = parseFloat(b.engagementRate);
+          if (!Number.isFinite(valA)) valA = -1;
+          if (!Number.isFinite(valB)) valB = -1;
           break;
         case "quality":
           valA = a.quality === "High" ? 0 : 1;
@@ -6045,6 +6435,27 @@ export default function App() {
                 </div>
               );
             }
+            if (col.key === "avgViews") {
+              const av = c.tiktokData?.avgViews;
+              return (
+                <div key={col.key} style={{ ...base, fontWeight: 600, color: av != null ? t.text : t.textFaint }}>
+                  {av != null ? formatMetricShort(av) : "—"}
+                </div>
+              );
+            }
+            if (col.key === "engRate") {
+              const er = parseFloat(c.engagementRate);
+              let erc = t.textSecondary;
+              if (Number.isFinite(er)) {
+                if (er > 10) erc = t.green;
+                else if (er < 3) erc = t.orange;
+              }
+              return (
+                <div key={col.key} style={{ ...base, fontWeight: 600, color: Number.isFinite(er) ? erc : t.textFaint }}>
+                  {Number.isFinite(er) ? `${er.toFixed(2)}%` : "—"}
+                </div>
+              );
+            }
             if (col.key === "quality") {
               return (
                 <div key={col.key} style={base}>
@@ -6273,7 +6684,7 @@ export default function App() {
                 background: t.card,
               }}
             >
-              <div style={{ minWidth: 1100 }}>
+              <div style={{ minWidth: 1280 }}>
                 <div
                   style={{
                     display: "grid",
