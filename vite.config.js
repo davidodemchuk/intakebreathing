@@ -8,7 +8,8 @@ export default defineConfig({
     host: '0.0.0.0',
     historyApiFallback: true,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      // Match server.js default PORT (8080); set VITE_API_PROXY if your local server uses another port
+      '/api': { target: process.env.VITE_API_PROXY || 'http://127.0.0.1:8080', changeOrigin: true },
     },
   },
   preview: { port: 3000, host: '0.0.0.0', allowedHosts: true },

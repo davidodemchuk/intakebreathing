@@ -40,8 +40,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.17.0";
+const APP_VERSION = "5.18.0";
 const CHANGELOG = [
+  { version: "5.18.0", date: "2026-04-01", changes: [
+    "Channel Pipeline reads LIVE from Google Sheets — all formulas, all data, always current",
+    "Server-side Google Sheets proxy with caching",
+    "Each tab displays the exact sheet data with proper formatting",
+  ]},
   { version: "5.17.0", date: "2026-04-01", changes: [
     "Overview tab — full Creator Monthly with all 24 columns, channel breakdown, ad metrics",
     "Spend tab — Partnership Spend with all 22 columns, grouped by section, editable, clickable creators",
@@ -6437,1480 +6442,36 @@ function ManagerLogin({ onLogin, t }) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CHANNEL PIPELINE (Supabase: monthly_metrics, partnership_spend, weekly_metrics, sops, team_kpis)
+// CHANNEL PIPELINE — live Google Sheets (via /api/sheets proxy)
 // ═══════════════════════════════════════════════════════════
 
-const TTS_WEEKLY_MILESTONE_KEY = "_milestone";
-
-function ttsIsMilestoneRow(w) {
-  return w?.data && typeof w.data[TTS_WEEKLY_MILESTONE_KEY] === "string" && String(w.data[TTS_WEEKLY_MILESTONE_KEY]).trim();
-}
-
-function ttsNormalizeData(raw) {
-  const d = raw && typeof raw === "object" ? raw : {};
-  const n = (x) => (x === "" || x == null ? null : Number(x));
-  return {
-    sf_invites: n(d.sf_invites),
-    samples_requested: n(d.samples_requested ?? d.samples_sent),
-    samples_approved: n(d.samples_approved),
-    videos_posted: n(d.videos_posted),
-    sample_cost: n(d.sample_cost),
-    impressions: n(d.impressions),
-    organic_impressions: n(d.organic_impressions),
-    ad_impressions: n(d.ad_impressions),
-    tts_gmv: n(d.tts_gmv),
-    ad_spend: n(d.ad_spend),
-    attribution_total: n(d.attribution_total ?? d.attribution_val),
-    cs_inbox: n(d.cs_inbox),
-    discord: n(d.discord),
-    auto_approved: n(d.auto_approved),
-    post_rate: n(d.post_rate),
-  };
-}
-
-function ttsCalc(d) {
-  const vp = d.videos_posted || 0;
-  const sa = d.samples_approved || 0;
-  const out = { ...d };
-  out.sv_ratio = vp > 0 ? sa / vp : null;
-  out.cp_video = vp > 0 && d.sample_cost != null ? d.sample_cost / vp : null;
-  out.net_per_video = vp > 0 && d.tts_gmv != null ? d.tts_gmv / vp : null;
-  out.attribution_per_video = vp > 0 && d.attribution_total != null ? d.attribution_total / vp : null;
-  out.pr_pct = sa > 0 && d.post_rate != null ? d.post_rate / sa : null;
-  return out;
-}
-
-function ttsSumNormalizedWeeks(weekRows) {
-  const sum = {
-    sf_invites: 0,
-    samples_requested: 0,
-    samples_approved: 0,
-    videos_posted: 0,
-    sample_cost: 0,
-    impressions: 0,
-    organic_impressions: 0,
-    ad_impressions: 0,
-    tts_gmv: 0,
-    ad_spend: 0,
-    attribution_total: 0,
-    cs_inbox: 0,
-    discord: 0,
-    auto_approved: 0,
-    post_rate: 0,
-  };
-  for (const w of weekRows) {
-    const n = ttsNormalizeData(w.data);
-    for (const k of Object.keys(sum)) {
-      if (n[k] != null && Number.isFinite(n[k])) sum[k] += n[k];
-    }
-  }
-  return ttsCalc(sum);
-}
-
-function igPrevCalendarMonthKey(monthKey) {
-  const [ys, ms] = monthKey.split("-").map(Number);
-  const d = new Date(ys, ms - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function igNormalizeData(raw) {
-  const d = raw && typeof raw === "object" ? raw : {};
-  const n = (x) => (x === "" || x == null ? null : Number(x));
-  return {
-    follower_count: n(d.follower_count),
-    content_team: n(d.content_team),
-    partner_repost: n(d.partner_repost),
-    collabs: n(d.collabs),
-    ugc_army: n(d.ugc_army),
-    samples: n(d.samples),
-    sample_cost: n(d.sample_cost),
-    paid: n(d.paid),
-    views: n(d.views),
-    organic_v: n(d.organic_v),
-    from_ads: n(d.from_ads),
-    sf_revenue: n(d.sf_revenue),
-    sf_signups: n(d.sf_signups),
-    affiliate_inbox: n(d.affiliate_inbox),
-    conv_inbox: n(d.conv_inbox),
-    cs_inbox: n(d.cs_inbox),
-    sm_team: n(d.sm_team),
-  };
-}
-
-function igCalc(d) {
-  const out = { ...d };
-  const ct = d.content_team || 0;
-  const pr = d.partner_repost || 0;
-  const co = d.collabs || 0;
-  const ug = d.ugc_army || 0;
-  out.total_ig_posts = ct + pr + co + ug;
-  const totalPosts = out.total_ig_posts || 0;
-  const videoCount = co + ug;
-  const samples = d.samples;
-  out.sv_ratio = videoCount > 0 && samples != null ? samples / videoCount : null;
-  const costSum = (d.sample_cost || 0) + (d.paid || 0);
-  const hasCost = d.sample_cost != null || d.paid != null;
-  out.cp_video = totalPosts > 0 && hasCost ? costSum / totalPosts : null;
-  out.total_cpv = out.cp_video;
-  const v = d.views;
-  const sfr = d.sf_revenue;
-  out.ecpm = v != null && v > 0 && sfr != null ? (sfr / v) * 1000 : null;
-  return out;
-}
-
-function igBuildMonthEndFollowers(sortedWeeksAsc) {
-  const byMonth = {};
-  for (const w of sortedWeeksAsc) {
-    if (ttsIsMilestoneRow(w) || !w.week_start) continue;
-    const mk = String(w.week_start).substring(0, 7);
-    if (!byMonth[mk]) byMonth[mk] = [];
-    byMonth[mk].push(w);
-  }
-  const map = new Map();
-  for (const mk of Object.keys(byMonth)) {
-    const last = byMonth[mk].slice().sort((a, b) => String(a.week_start).localeCompare(String(b.week_start))).at(-1);
-    const fc = igNormalizeData(last.data).follower_count;
-    map.set(mk, fc);
-  }
-  return map;
-}
-
-function igAggregateMonth(weekRows) {
-  const dataWeeks = weekRows.filter((w) => !ttsIsMilestoneRow(w));
-  const sum = {
-    content_team: 0,
-    partner_repost: 0,
-    collabs: 0,
-    ugc_army: 0,
-    samples: 0,
-    sample_cost: 0,
-    paid: 0,
-    views: 0,
-    organic_v: 0,
-    from_ads: 0,
-    sf_revenue: 0,
-    sf_signups: 0,
-    affiliate_inbox: 0,
-    conv_inbox: 0,
-    cs_inbox: 0,
-    sm_team: 0,
-  };
-  for (const w of dataWeeks) {
-    const n = igNormalizeData(w.data);
-    for (const k of Object.keys(sum)) {
-      if (n[k] != null && Number.isFinite(n[k])) sum[k] += n[k];
-    }
-  }
-  const sorted = dataWeeks.slice().sort((a, b) => String(a.week_start).localeCompare(String(b.week_start)));
-  const last = sorted.at(-1);
-  const follower_count = last ? igNormalizeData(last.data).follower_count : null;
-  return igCalc({ ...sum, follower_count });
-}
-
-function TTSWeeklyTab({ t, S }) {
-  const TTS_COLUMNS = [
-    { key: "sf_invites", label: "SF 📬", type: "number", editable: true, width: 80 },
-    { key: "sf_change_pct", label: "%", type: "pct", editable: false, width: 55 },
-    { key: "samples_requested", label: "Sample 📥", type: "number", editable: true, width: 80 },
-    { key: "samples_approved", label: "Samples ☑️", type: "number", editable: true, width: 80 },
-    { key: "videos_posted", label: "🎥 Posted", type: "number", editable: true, width: 75 },
-    { key: "sample_cost", label: "Sample 💰", type: "currency", editable: true, width: 85 },
-    { key: "sv_ratio", label: "S/V Ratio", type: "decimal", editable: false, width: 70 },
-    { key: "cp_video", label: "CPVideo", type: "currency", editable: false, width: 75 },
-    { key: "impressions", label: "Impressions", type: "number", editable: true, width: 95 },
-    { key: "organic_impressions", label: "Organic Imp", type: "number", editable: true, width: 80 },
-    { key: "ad_impressions", label: "Ad Imp", type: "number", editable: true, width: 80 },
-    { key: "tts_gmv", label: "TTS GMV", type: "currency", editable: true, width: 90 },
-    { key: "ad_spend", label: "Ad Spend", type: "currency", editable: true, width: 90 },
-    { key: "net_per_video", label: "Net/Video", type: "currency", editable: false, width: 80 },
-    { key: "attribution_per_video", label: "Attribution", type: "currency", editable: false, width: 80 },
-    { key: "attribution_total", label: "Attribution $", type: "currency", editable: true, width: 85 },
-    { key: "cs_inbox", label: "CS 📥", type: "number", editable: true, width: 60 },
-    { key: "discord", label: "Discord", type: "number", editable: true, width: 65 },
-    { key: "auto_approved", label: "Auto ☑️", type: "number", editable: true, width: 65 },
-    { key: "post_rate", label: "Post Rate", type: "number", editable: true, width: 75 },
-    { key: "pr_pct", label: "PR %", type: "pct", editable: false, width: 55 },
-  ];
-
-  const [weeks, setWeeks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [editVal, setEditVal] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newWeek, setNewWeek] = useState({});
-  const skipSaveBlurRef = useRef(false);
-
-  const editableKeys = useMemo(() => TTS_COLUMNS.filter((c) => c.editable).map((c) => c.key), []);
-
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const { data, error } = await supabase.from("weekly_metrics").select("*").eq("channel", "tts").order("week_start", { ascending: false });
-      if (error) console.error("[TTS] Load error:", error);
-      setWeeks(data || []);
-      setLoading(false);
-    })();
-  }, []);
-
-  const fmtVal = (val, type) => {
-    if (val == null || val === "") return "—";
-    const n = Number(val);
-    if (!Number.isFinite(n)) return "—";
-    if (type === "currency") {
-      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(2) + "M";
-      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
-      return "$" + n.toFixed(n % 1 === 0 ? 0 : 2);
-    }
-    if (type === "pct") return (n * 100).toFixed(1) + "%";
-    if (type === "decimal") return n.toFixed(2);
-    if (type === "number") {
-      if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + "M";
-      if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + "K";
-      return n.toLocaleString();
-    }
-    return String(val);
-  };
-
-  const fmtDate = (d) => {
-    if (!d) return "";
-    const dt = new Date(String(d).substring(0, 10) + "T00:00:00");
-    return dt.getMonth() + 1 + "/" + String(dt.getDate()).padStart(2, "0");
-  };
-
-  const sortedAsc = useMemo(() => [...weeks].sort((a, b) => String(a.week_start).localeCompare(String(b.week_start))), [weeks]);
-  const prevWeekMap = useMemo(() => {
-    const m = new Map();
-    const dataOnly = sortedAsc.filter((w) => !ttsIsMilestoneRow(w));
-    for (let i = 0; i < dataOnly.length; i++) {
-      if (i > 0) m.set(dataOnly[i].id, dataOnly[i - 1]);
-    }
-    return m;
-  }, [sortedAsc]);
-
-  const weekWithWow = (w) => {
-    const raw = w.data || {};
-    const base = ttsCalc(ttsNormalizeData(raw));
-    const prev = prevWeekMap.get(w.id);
-    if (prev) {
-      const psf = ttsNormalizeData(prev.data).sf_invites;
-      const csf = base.sf_invites;
-      if (psf != null && psf > 0 && csf != null) base.sf_change_pct = (csf - psf) / psf;
-    }
-    return base;
-  };
-
-  const monthGroups = useMemo(() => {
-    const groups = [];
-    let currentMonth = null;
-    let currentGroup = null;
-    for (const w of sortedAsc) {
-      if (!w.week_start) continue;
-      const monthKey = String(w.week_start).substring(0, 7);
-      if (monthKey !== currentMonth) {
-        if (currentGroup) groups.push(currentGroup);
-        currentMonth = monthKey;
-        currentGroup = { month: monthKey, weeks: [] };
-      }
-      currentGroup.weeks.push(w);
-    }
-    if (currentGroup) groups.push(currentGroup);
-    return groups;
-  }, [sortedAsc]);
-
-  const monthTotalsMap = useMemo(() => {
-    const map = {};
-    for (const g of monthGroups) {
-      const dataWeeks = g.weeks.filter((w) => !ttsIsMilestoneRow(w));
-      map[g.month] = ttsSumNormalizedWeeks(dataWeeks);
-    }
-    return map;
-  }, [monthGroups]);
-
-  const quarterRollup = (year, q) => {
-    const mnums = [(q - 1) * 3 + 1, (q - 1) * 3 + 2, (q - 1) * 3 + 3];
-    const keys = mnums.map((mn) => `${year}-${String(mn).padStart(2, "0")}`);
-    const sum = {
-      sf_invites: 0,
-      samples_requested: 0,
-      samples_approved: 0,
-      videos_posted: 0,
-      sample_cost: 0,
-      impressions: 0,
-      organic_impressions: 0,
-      ad_impressions: 0,
-      tts_gmv: 0,
-      ad_spend: 0,
-      attribution_total: 0,
-      cs_inbox: 0,
-      discord: 0,
-      auto_approved: 0,
-      post_rate: 0,
-    };
-    let any = false;
-    for (const mk of keys) {
-      const t = monthTotalsMap[mk];
-      if (!t) continue;
-      any = true;
-      for (const k of Object.keys(sum)) {
-        const v = t[k];
-        if (v != null && Number.isFinite(v)) sum[k] += v;
-      }
-    }
-    if (!any) return null;
-    return ttsCalc(sum);
-  };
-
-  const saveEdit = async (weekId, field, value) => {
-    const week = weeks.find((w) => w.id === weekId);
-    if (!week) return;
-    const prevData = week.data && typeof week.data === "object" ? { ...week.data } : {};
-    const numVal = value === "" ? null : Number(value);
-    const newData = { ...prevData };
-    if (field === "samples_requested") {
-      newData.samples_requested = numVal;
-      delete newData.samples_sent;
-    } else if (field === "attribution_total") {
-      newData.attribution_total = numVal;
-      delete newData.attribution_val;
-    } else {
-      newData[field] = numVal;
-    }
-    const { error } = await supabase.from("weekly_metrics").update({ data: newData }).eq("id", weekId);
-    if (error) {
-      alert("Save failed: " + error.message);
-      return;
-    }
-    setWeeks((prev) => prev.map((w) => (w.id === weekId ? { ...w, data: newData } : w)));
-    setEditing(null);
-  };
-
-  const addWeek = async () => {
-    if (!newWeek.week_start || !newWeek.week_end) {
-      alert("Enter start and end dates.");
-      return;
-    }
-    const data = {};
-    for (const k of editableKeys) {
-      const v = newWeek[k];
-      if (v !== undefined && v !== "" && v != null) data[k] = Number(v);
-    }
-    const { error } = await supabase.from("weekly_metrics").insert({
-      channel: "tts",
-      week_start: newWeek.week_start,
-      week_end: newWeek.week_end,
-      data,
-    });
-    if (error) {
-      alert("Add failed: " + error.message);
-      return;
-    }
-    const { data: fresh } = await supabase.from("weekly_metrics").select("*").eq("channel", "tts").order("week_start", { ascending: false });
-    setWeeks(fresh || []);
-    setShowAddForm(false);
-    setNewWeek({});
-  };
-
-  const fmtMonthLabel = (m) => {
-    const d = new Date(m + "-01T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  };
-
-  const monthNum = (monthKey) => Number(monthKey.slice(5, 7));
-  const isEndOfQuarterMonth = (monthKey) => {
-    const mn = monthNum(monthKey);
-    return mn === 3 || mn === 6 || mn === 9 || mn === 12;
-  };
-  const quarterLabelFromMonthKey = (monthKey) => {
-    const y = monthKey.slice(0, 4);
-    const mn = monthNum(monthKey);
-    const q = Math.ceil(mn / 3);
-    return `Q${q} ${y}`;
-  };
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading TTS data...</div>;
-
-  const stickyWeekBg = t.card;
-  const monthRowBg = t.cardAlt;
-  const quarterRowBg = t.isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)";
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>TikTok Shop — Weekly</div>
-        <button
-          type="button"
-          onClick={() => setShowAddForm(!showAddForm)}
-          style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-        >
-          {showAddForm ? "Cancel" : "+ Add Week"}
-        </button>
-      </div>
-
-      {showAddForm && (
-        <div style={{ background: t.card, border: `1px solid ${t.green}30`, borderRadius: 10, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 12 }}>New Week Entry</div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Start Date</div>
-              <input
-                type="date"
-                value={newWeek.week_start || ""}
-                onChange={(e) => setNewWeek((p) => ({ ...p, week_start: e.target.value }))}
-                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>End Date</div>
-              <input
-                type="date"
-                value={newWeek.week_end || ""}
-                onChange={(e) => setNewWeek((p) => ({ ...p, week_end: e.target.value }))}
-                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
-              />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            {TTS_COLUMNS.filter((c) => c.editable).map((col) => (
-              <div key={col.key} style={{ width: col.width + 24 }}>
-                <div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>{col.label}</div>
-                <input
-                  type="number"
-                  step="any"
-                  value={newWeek[col.key] ?? ""}
-                  onChange={(e) => setNewWeek((p) => ({ ...p, [col.key]: e.target.value }))}
-                  style={{ width: "100%", padding: "5px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }}
-                />
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addWeek} style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            Save Week
-          </button>
-        </div>
-      )}
-
-      <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1680 }}>
-          <thead>
-            <tr style={{ background: t.cardAlt }}>
-              <th
-                style={{
-                  padding: "8px 10px",
-                  textAlign: "left",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: t.textFaint,
-                  textTransform: "uppercase",
-                  position: "sticky",
-                  left: 0,
-                  background: t.cardAlt,
-                  zIndex: 2,
-                  minWidth: 130,
-                }}
-              >
-                Week
-              </th>
-              {TTS_COLUMNS.map((col) => (
-                <th key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: col.width }}>
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[...monthGroups].reverse().map((group) => (
-              <Fragment key={group.month}>
-                {group.weeks
-                  .slice()
-                  .reverse()
-                  .map((w) => {
-                    if (ttsIsMilestoneRow(w)) {
-                      return (
-                        <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
-                          <td
-                            colSpan={1 + TTS_COLUMNS.length}
-                            style={{
-                              padding: "8px 12px",
-                              fontSize: 12,
-                              fontStyle: "italic",
-                              color: t.textFaint,
-                              background: t.card,
-                              position: "sticky",
-                              left: 0,
-                            }}
-                          >
-                            {w.data[TTS_WEEKLY_MILESTONE_KEY]}
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const d = weekWithWow(w);
-                    return (
-                      <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
-                        <td
-                          style={{
-                            padding: "7px 10px",
-                            fontSize: 12,
-                            color: t.text,
-                            fontWeight: 500,
-                            whiteSpace: "nowrap",
-                            position: "sticky",
-                            left: 0,
-                            background: stickyWeekBg,
-                            zIndex: 1,
-                          }}
-                        >
-                          {fmtDate(w.week_start)} – {fmtDate(w.week_end)}
-                        </td>
-                        {TTS_COLUMNS.map((col) => {
-                          const val = d[col.key];
-                          const isEdit = editing?.rowId === w.id && editing?.field === col.key;
-                          const rawForEdit =
-                            col.key === "samples_requested"
-                              ? w.data?.samples_requested ?? w.data?.samples_sent
-                              : col.key === "attribution_total"
-                                ? w.data?.attribution_total ?? w.data?.attribution_val
-                                : w.data?.[col.key];
-                          return (
-                            <td
-                              key={col.key}
-                              onDoubleClick={() => {
-                                if (col.editable) {
-                                  setEditing({ rowId: w.id, field: col.key });
-                                  setEditVal(rawForEdit != null && rawForEdit !== "" ? String(rawForEdit) : "");
-                                }
-                              }}
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                color: col.editable ? t.text : t.textMuted,
-                                fontVariantNumeric: "tabular-nums",
-                                fontSize: 11,
-                                cursor: col.editable ? "pointer" : "default",
-                              }}
-                            >
-                              {isEdit ? (
-                                <input
-                                  type="number"
-                                  step="any"
-                                  autoFocus
-                                  value={editVal}
-                                  onChange={(e) => setEditVal(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      saveEdit(w.id, col.key, editVal);
-                                    }
-                                    if (e.key === "Escape") {
-                                      skipSaveBlurRef.current = true;
-                                      setEditing(null);
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    if (skipSaveBlurRef.current) {
-                                      skipSaveBlurRef.current = false;
-                                      return;
-                                    }
-                                    saveEdit(w.id, col.key, editVal);
-                                  }}
-                                  style={{
-                                    width: col.width - 8,
-                                    padding: "2px 4px",
-                                    borderRadius: 3,
-                                    border: `1px solid ${t.green}`,
-                                    background: t.inputBg,
-                                    color: t.inputText,
-                                    fontSize: 11,
-                                    textAlign: "right",
-                                  }}
-                                />
-                              ) : (
-                                fmtVal(val, col.type)
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                <tr style={{ background: monthRowBg, borderTop: `2px solid ${t.border}`, borderBottom: `2px solid ${t.border}` }}>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: t.text,
-                      position: "sticky",
-                      left: 0,
-                      background: monthRowBg,
-                      zIndex: 1,
-                    }}
-                  >
-                    {fmtMonthLabel(group.month)}
-                  </td>
-                  {TTS_COLUMNS.map((col) => {
-                    const total = monthTotalsMap[group.month];
-                    const v = col.key === "sf_change_pct" ? null : total?.[col.key];
-                    return (
-                      <td key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: t.text, fontSize: 11 }}>
-                        {v != null && v !== "" ? fmtVal(v, col.type) : "—"}
-                      </td>
-                    );
-                  })}
-                </tr>
-                {isEndOfQuarterMonth(group.month)
-                  ? (() => {
-                      const y = Number(group.month.slice(0, 4));
-                      const mn = monthNum(group.month);
-                      const q = Math.ceil(mn / 3);
-                      const qtot = quarterRollup(y, q);
-                      if (!qtot) return null;
-                      return (
-                        <tr style={{ background: quarterRowBg, borderTop: `3px solid ${t.border}` }}>
-                          <td
-                            style={{
-                              padding: "8px 10px",
-                              fontSize: 12,
-                              fontWeight: 800,
-                              color: t.text,
-                              position: "sticky",
-                              left: 0,
-                              background: quarterRowBg,
-                              zIndex: 1,
-                            }}
-                          >
-                            {quarterLabelFromMonthKey(group.month)} (total)
-                          </td>
-                          {TTS_COLUMNS.map((col) => {
-                            const v = col.key === "sf_change_pct" ? null : qtot[col.key];
-                            return (
-                              <td key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, color: t.text, fontSize: 11 }}>
-                                {v != null && v !== "" ? fmtVal(v, col.type) : "—"}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })()
-                  : null}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10 }}>
-        Double-click any editable cell to edit · Enter to save, Esc to cancel · Calculated fields update automatically · {weeks.length} rows loaded
-      </div>
-    </div>
-  );
-}
-
-const IG_WEEKLY_ACCENT = "#E1306C";
-
-function IGWeeklyTab({ t, S }) {
-  const IG_COLUMNS = [
-    { key: "follower_count", label: "Followers", type: "number", editable: true, width: 85 },
-    { key: "f_pct_change", label: "F % Change", type: "pct", editable: false, width: 64 },
-    { key: "content_team", label: "Content Team", type: "number", editable: true, width: 78 },
-    { key: "partner_repost", label: "Partner Repost", type: "number", editable: true, width: 78 },
-    { key: "collabs", label: "Collabs", type: "number", editable: true, width: 65 },
-    { key: "ugc_army", label: "UGC Army", type: "number", editable: true, width: 65 },
-    { key: "total_ig_posts", label: "Total Posts", type: "number", editable: false, width: 72 },
-    { key: "samples", label: "Samples", type: "number", editable: true, width: 65 },
-    { key: "sample_cost", label: "Sample Cost", type: "currency", editable: true, width: 82 },
-    { key: "paid", label: "Paid", type: "currency", editable: true, width: 72 },
-    { key: "sv_ratio", label: "S/V Ratio", type: "decimal", editable: false, width: 65 },
-    { key: "views", label: "Views", type: "number", editable: true, width: 85 },
-    { key: "organic_v", label: "Organic V", type: "number", editable: true, width: 78 },
-    { key: "from_ads", label: "From Ads", type: "number", editable: true, width: 78 },
-    { key: "cp_video", label: "CPVideo", type: "currency", editable: false, width: 72 },
-    { key: "total_cpv", label: "Total CPV", type: "currency", editable: false, width: 72 },
-    { key: "sf_revenue", label: "SF Revenue", type: "currency", editable: true, width: 85 },
-    { key: "sf_signups", label: "SF SignUps", type: "number", editable: true, width: 72 },
-    { key: "affiliate_inbox", label: "Affiliate 📥", type: "number", editable: true, width: 72 },
-    { key: "conv_inbox", label: "Conv 📥", type: "number", editable: true, width: 65 },
-    { key: "cs_inbox", label: "CS 📥", type: "number", editable: true, width: 55 },
-    { key: "ecpm", label: "eCPM", type: "currency", editable: false, width: 62 },
-    { key: "sm_team", label: "SM Team", type: "number", editable: true, width: 62 },
-  ];
-
-  const [weeks, setWeeks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [editVal, setEditVal] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newWeek, setNewWeek] = useState({});
-  const skipSaveBlurRef = useRef(false);
-
-  const editableKeys = useMemo(() => IG_COLUMNS.filter((c) => c.editable).map((c) => c.key), []);
-
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const { data, error } = await supabase.from("weekly_metrics").select("*").eq("channel", "instagram").order("week_start", { ascending: false });
-      if (error) console.error("[IG] Load error:", error);
-      setWeeks(data || []);
-      setLoading(false);
-    })();
-  }, []);
-
-  const fmtVal = (val, type) => {
-    if (val == null || val === "") return "—";
-    const n = Number(val);
-    if (!Number.isFinite(n)) return "—";
-    if (type === "currency") {
-      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(2) + "M";
-      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
-      return "$" + n.toFixed(n % 1 === 0 ? 0 : 2);
-    }
-    if (type === "pct") return (n * 100).toFixed(1) + "%";
-    if (type === "decimal") return n.toFixed(2);
-    if (type === "number") {
-      if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + "M";
-      if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + "K";
-      return n.toLocaleString();
-    }
-    return String(val);
-  };
-
-  const fmtDate = (d) => {
-    if (!d) return "";
-    const dt = new Date(String(d).substring(0, 10) + "T00:00:00");
-    return dt.getMonth() + 1 + "/" + String(dt.getDate()).padStart(2, "0");
-  };
-
-  const sortedAsc = useMemo(() => [...weeks].sort((a, b) => String(a.week_start).localeCompare(String(b.week_start))), [weeks]);
-
-  const monthEndFollowers = useMemo(() => igBuildMonthEndFollowers(sortedAsc), [sortedAsc]);
-
-  const monthGroups = useMemo(() => {
-    const groups = [];
-    let currentMonth = null;
-    let currentGroup = null;
-    for (const w of sortedAsc) {
-      if (!w.week_start) continue;
-      const monthKey = String(w.week_start).substring(0, 7);
-      if (monthKey !== currentMonth) {
-        if (currentGroup) groups.push(currentGroup);
-        currentMonth = monthKey;
-        currentGroup = { month: monthKey, weeks: [] };
-      }
-      currentGroup.weeks.push(w);
-    }
-    if (currentGroup) groups.push(currentGroup);
-    return groups;
-  }, [sortedAsc]);
-
-  const monthTotalsMap = useMemo(() => {
-    const endF = igBuildMonthEndFollowers(sortedAsc);
-    const map = {};
-    for (const g of monthGroups) {
-      let total = { ...igAggregateMonth(g.weeks) };
-      const pm = igPrevCalendarMonthKey(g.month);
-      const endThis = endF.get(g.month);
-      const endPrev = endF.get(pm);
-      if (endPrev != null && endPrev > 0 && endThis != null) total.f_pct_change = (endThis - endPrev) / endPrev;
-      map[g.month] = total;
-    }
-    return map;
-  }, [monthGroups, sortedAsc]);
-
-  const weekWithMom = (w) => {
-    const base = igCalc(igNormalizeData(w.data || {}));
-    const mk = String(w.week_start || "").substring(0, 7);
-    const pm = igPrevCalendarMonthKey(mk);
-    const endPrev = monthEndFollowers.get(pm);
-    const cur = igNormalizeData(w.data).follower_count;
-    if (endPrev != null && endPrev > 0 && cur != null) base.f_pct_change = (cur - endPrev) / endPrev;
-    return base;
-  };
-
-  const saveEdit = async (weekId, field, value) => {
-    const week = weeks.find((w) => w.id === weekId);
-    if (!week) return;
-    const prevData = week.data && typeof week.data === "object" ? { ...week.data } : {};
-    const numVal = value === "" ? null : Number(value);
-    const newData = { ...prevData, [field]: numVal };
-    const { error } = await supabase.from("weekly_metrics").update({ data: newData }).eq("id", weekId);
-    if (error) {
-      alert("Save failed: " + error.message);
-      return;
-    }
-    setWeeks((prev) => prev.map((w) => (w.id === weekId ? { ...w, data: newData } : w)));
-    setEditing(null);
-  };
-
-  const addWeek = async () => {
-    if (!newWeek.week_start || !newWeek.week_end) {
-      alert("Enter start and end dates.");
-      return;
-    }
-    const data = {};
-    for (const k of editableKeys) {
-      const v = newWeek[k];
-      if (v !== undefined && v !== "" && v != null) data[k] = Number(v);
-    }
-    const { error } = await supabase.from("weekly_metrics").insert({
-      channel: "instagram",
-      week_start: newWeek.week_start,
-      week_end: newWeek.week_end,
-      data,
-    });
-    if (error) {
-      alert("Add failed: " + error.message);
-      return;
-    }
-    const { data: fresh } = await supabase.from("weekly_metrics").select("*").eq("channel", "instagram").order("week_start", { ascending: false });
-    setWeeks(fresh || []);
-    setShowAddForm(false);
-    setNewWeek({});
-  };
-
-  const fmtMonthLabel = (m) => {
-    const d = new Date(m + "-01T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  };
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading Instagram data...</div>;
-
-  const stickyWeekBg = t.card;
-  const monthRowBg = t.cardAlt;
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Instagram — Weekly</div>
-        <button
-          type="button"
-          onClick={() => setShowAddForm(!showAddForm)}
-          style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: IG_WEEKLY_ACCENT, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-        >
-          {showAddForm ? "Cancel" : "+ Add Week"}
-        </button>
-      </div>
-
-      {showAddForm && (
-        <div style={{ background: t.card, border: `1px solid ${IG_WEEKLY_ACCENT}30`, borderRadius: 10, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 12 }}>New Week Entry</div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Start Date</div>
-              <input
-                type="date"
-                value={newWeek.week_start || ""}
-                onChange={(e) => setNewWeek((p) => ({ ...p, week_start: e.target.value }))}
-                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>End Date</div>
-              <input
-                type="date"
-                value={newWeek.week_end || ""}
-                onChange={(e) => setNewWeek((p) => ({ ...p, week_end: e.target.value }))}
-                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
-              />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            {IG_COLUMNS.filter((c) => c.editable).map((col) => (
-              <div key={col.key} style={{ width: col.width + 24 }}>
-                <div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>{col.label}</div>
-                <input
-                  type="number"
-                  step="any"
-                  value={newWeek[col.key] ?? ""}
-                  onChange={(e) => setNewWeek((p) => ({ ...p, [col.key]: e.target.value }))}
-                  style={{ width: "100%", padding: "5px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }}
-                />
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addWeek} style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: IG_WEEKLY_ACCENT, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            Save Week
-          </button>
-        </div>
-      )}
-
-      <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 2000 }}>
-          <thead>
-            <tr style={{ background: t.cardAlt }}>
-              <th
-                style={{
-                  padding: "8px 10px",
-                  textAlign: "left",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: t.textFaint,
-                  textTransform: "uppercase",
-                  position: "sticky",
-                  left: 0,
-                  background: t.cardAlt,
-                  zIndex: 2,
-                  minWidth: 130,
-                }}
-              >
-                Week
-              </th>
-              {IG_COLUMNS.map((col) => (
-                <th key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: col.width }}>
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[...monthGroups].reverse().map((group) => (
-              <Fragment key={group.month}>
-                {group.weeks
-                  .slice()
-                  .reverse()
-                  .map((w) => {
-                    if (ttsIsMilestoneRow(w)) {
-                      return (
-                        <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
-                          <td
-                            colSpan={1 + IG_COLUMNS.length}
-                            style={{
-                              padding: "8px 12px",
-                              fontSize: 12,
-                              fontStyle: "italic",
-                              color: t.textFaint,
-                              background: t.card,
-                              position: "sticky",
-                              left: 0,
-                            }}
-                          >
-                            {w.data[TTS_WEEKLY_MILESTONE_KEY]}
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const d = weekWithMom(w);
-                    return (
-                      <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
-                        <td
-                          style={{
-                            padding: "7px 10px",
-                            fontSize: 12,
-                            color: t.text,
-                            fontWeight: 500,
-                            whiteSpace: "nowrap",
-                            position: "sticky",
-                            left: 0,
-                            background: stickyWeekBg,
-                            zIndex: 1,
-                          }}
-                        >
-                          {fmtDate(w.week_start)} – {fmtDate(w.week_end)}
-                        </td>
-                        {IG_COLUMNS.map((col) => {
-                          const val = d[col.key];
-                          const isEdit = editing?.rowId === w.id && editing?.field === col.key;
-                          const rawForEdit = w.data?.[col.key];
-                          return (
-                            <td
-                              key={col.key}
-                              onDoubleClick={() => {
-                                if (col.editable) {
-                                  setEditing({ rowId: w.id, field: col.key });
-                                  setEditVal(rawForEdit != null && rawForEdit !== "" ? String(rawForEdit) : "");
-                                }
-                              }}
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                color: col.editable ? t.text : t.textMuted,
-                                fontVariantNumeric: "tabular-nums",
-                                fontSize: 11,
-                                cursor: col.editable ? "pointer" : "default",
-                              }}
-                            >
-                              {isEdit ? (
-                                <input
-                                  type="number"
-                                  step="any"
-                                  autoFocus
-                                  value={editVal}
-                                  onChange={(e) => setEditVal(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      saveEdit(w.id, col.key, editVal);
-                                    }
-                                    if (e.key === "Escape") {
-                                      skipSaveBlurRef.current = true;
-                                      setEditing(null);
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    if (skipSaveBlurRef.current) {
-                                      skipSaveBlurRef.current = false;
-                                      return;
-                                    }
-                                    saveEdit(w.id, col.key, editVal);
-                                  }}
-                                  style={{
-                                    width: col.width - 8,
-                                    padding: "2px 4px",
-                                    borderRadius: 3,
-                                    border: `1px solid ${IG_WEEKLY_ACCENT}`,
-                                    background: t.inputBg,
-                                    color: t.inputText,
-                                    fontSize: 11,
-                                    textAlign: "right",
-                                  }}
-                                />
-                              ) : (
-                                fmtVal(val, col.type)
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                <tr style={{ background: monthRowBg, borderTop: `2px solid ${t.border}`, borderBottom: `2px solid ${t.border}` }}>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: t.text,
-                      position: "sticky",
-                      left: 0,
-                      background: monthRowBg,
-                      zIndex: 1,
-                    }}
-                  >
-                    {fmtMonthLabel(group.month)}
-                  </td>
-                  {IG_COLUMNS.map((col) => {
-                    const total = monthTotalsMap[group.month];
-                    const v = total?.[col.key];
-                    return (
-                      <td key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: t.text, fontSize: 11 }}>
-                        {v != null && v !== "" ? fmtVal(v, col.type) : "—"}
-                      </td>
-                    );
-                  })}
-                </tr>
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10 }}>
-        Double-click any editable cell to edit · Enter to save, Esc to cancel · Calculated fields update automatically · {weeks.length} weeks loaded
-      </div>
-    </div>
-  );
-}
-
-function WeeklyMetricsTab({ channel, t, S }) {
-  const [weeks, setWeeks] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const channelLabels = { tts: "TikTok Shop", instagram: "Instagram", ugc: "UGC Army", youtube: "YouTube" };
-
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const { data } = await supabase
-        .from("weekly_metrics")
-        .select("*")
-        .eq("channel", channel)
-        .order("week_start", { ascending: false })
-        .limit(52);
-      setWeeks(data || []);
-      setLoading(false);
-    })();
-  }, [channel]);
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading...</div>;
-
-  const allKeys = new Set();
-  weeks.forEach((w) => {
-    if (w.data && typeof w.data === "object") Object.keys(w.data).forEach((k) => allKeys.add(k));
-  });
-  const columns = [...allKeys].filter((k) => k !== "notes").slice(0, 12);
-
-  const fmtVal = (v) => {
-    if (v == null) return "—";
-    if (typeof v === "boolean") return v ? "✓" : "✗";
-    if (typeof v === "string") return v;
-    if (typeof v === "number") {
-      if (Math.abs(v) >= 1000000) return (v / 1000000).toFixed(1) + "M";
-      if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "K";
-      return !Number.isInteger(v) ? v.toFixed(2) : String(v);
-    }
-    return String(v);
-  };
-
-  const fmtDate = (d) => {
-    if (!d) return "";
-    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
-
-  return (
-    <div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 16 }}>{channelLabels[channel] || channel} — Weekly</div>
-      {weeks.length === 0 ? (
-        <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No weekly data for {channelLabels[channel]}</div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden", minWidth: 800 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${t.border}` }}>
-                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap", position: "sticky", left: 0, background: t.card, zIndex: 1 }}>Week</th>
-                  {columns.map((col) => (
-                    <th key={col} style={{ padding: "8px 10px", textAlign: "right", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                      {col.replace(/_/g, " ")}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {weeks.map((w) => (
-                  <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}08` }}>
-                    <td style={{ padding: "8px 10px", fontSize: 12, color: t.text, fontWeight: 500, whiteSpace: "nowrap", position: "sticky", left: 0, background: t.card, zIndex: 1 }}>
-                      {fmtDate(w.week_start)} – {fmtDate(w.week_end)}
-                    </td>
-                    {columns.map((col) => (
-                      <td key={col} style={{ padding: "8px 10px", textAlign: "right", color: t.text, fontVariantNumeric: "tabular-nums" }}>
-                        {fmtVal(w.data?.[col])}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SOPsTab({ t, S }) {
-  const [sops, setSops] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [ownerFilter, setOwnerFilter] = useState("all");
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("sops").select("*").order("department", { ascending: true }).order("sort_order", { ascending: true });
-      setSops(data || []);
-      setLoading(false);
-    })();
-  }, []);
-
-  const toggleComplete = async (id, current) => {
-    const { error } = await supabase.from("sops").update({ completed: !current }).eq("id", id);
-    if (!error) setSops((prev) => prev.map((s) => (s.id === id ? { ...s, completed: !current } : s)));
-  };
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading SOPs...</div>;
-
-  const departments = [...new Set(sops.map((s) => s.department).filter(Boolean))];
-  const owners = [...new Set(sops.map((s) => s.owner).filter(Boolean))];
-  const filtered = sops.filter(
-    (s) => (deptFilter === "all" || s.department === deptFilter) && (ownerFilter === "all" || s.owner === ownerFilter),
-  );
-
-  const grouped = {};
-  filtered.forEach((s) => {
-    const dept = s.department || "Other";
-    if (!grouped[dept]) grouped[dept] = {};
-    const sec = s.section || "General";
-    if (!grouped[dept][sec]) grouped[dept][sec] = [];
-    grouped[dept][sec].push(s);
-  });
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Standard Operating Procedures</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-            <option value="all">All Departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {String(d).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-              </option>
-            ))}
-          </select>
-          <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-            <option value="all">All Owners</option>
-            {owners.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {Object.entries(grouped).map(([dept, sections]) => {
-        const deptItems = Object.values(sections).flat();
-        const doneCount = deptItems.filter((s) => s.completed).length;
-        const pct = deptItems.length > 0 ? Math.round((doneCount / deptItems.length) * 100) : 0;
-        const deptLabel = String(dept).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-        return (
-          <div key={dept} style={{ marginBottom: 28 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{deptLabel}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 100, height: 4, borderRadius: 2, background: t.border, overflow: "hidden" }}>
-                  <div style={{ width: `${pct}%`, height: "100%", background: t.green, borderRadius: 2 }} />
-                </div>
-                <span style={{ fontSize: 11, color: t.textFaint }}>{pct}%</span>
-              </div>
-            </div>
-
-            {Object.entries(sections).map(([sec, items]) => (
-              <div key={sec} style={{ marginBottom: 12 }}>
-                {sec !== "General" ? (
-                  <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6, marginLeft: 4 }}>{sec}</div>
-                ) : null}
-                {items.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => toggleComplete(item.id, item.completed)}
-                    style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", borderRadius: 6, cursor: "pointer", marginBottom: 2 }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = t.cardAlt;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    <span style={{ fontSize: 14, color: item.completed ? t.green : t.textFaint, flexShrink: 0, marginTop: 1 }}>{item.completed ? "✓" : "☐"}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: item.completed ? t.textMuted : t.text, textDecoration: item.completed ? "line-through" : "none" }}>{item.title}</div>
-                      {item.description ? <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.description}</div> : null}
-                    </div>
-                    {item.owner ? <span style={{ fontSize: 10, color: t.textFaint, whiteSpace: "nowrap", flexShrink: 0 }}>{item.owner}</span> : null}
-                    {item.sop_link && item.sop_link !== "Link" ? (
-                      <a href={item.sop_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 10, color: t.blue, textDecoration: "none", flexShrink: 0 }}>
-                        Link
-                      </a>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function TeamKPIsTab({ t, S }) {
-  const [kpis, setKpis] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [memberFilter, setMemberFilter] = useState("all");
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("team_kpis").select("*").order("week_start", { ascending: false }).limit(200);
-      setKpis(data || []);
-      setLoading(false);
-    })();
-  }, []);
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading KPIs...</div>;
-
-  const members = [...new Set(kpis.map((k) => k.team_member).filter(Boolean))];
-  const filtered = memberFilter === "all" ? kpis : kpis.filter((k) => k.team_member === memberFilter);
-
-  const allKeys = new Set();
-  filtered.forEach((k) => {
-    if (k.data && typeof k.data === "object")
-      Object.keys(k.data).forEach((key) => {
-        if (typeof k.data[key] === "number") allKeys.add(key);
-      });
-  });
-  const columns = [...allKeys].slice(0, 10);
-
-  const fmtVal = (v) => {
-    if (v == null) return "—";
-    if (typeof v === "boolean") return v ? "✓" : "✗";
-    if (typeof v === "number" && Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "K";
-    return String(v);
-  };
-  const fmtDate = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Team KPIs</div>
-        <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-          <option value="all">All Members</option>
-          {members.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No KPI data</div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden", minWidth: 700 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${t.border}` }}>
-                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", position: "sticky", left: 0, background: t.card }}>Week</th>
-                  {memberFilter === "all" ? <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Member</th> : null}
-                  {columns.map((col) => (
-                    <th key={col} style={{ padding: "8px 10px", textAlign: "right", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                      {col.replace(/_/g, " ")}
-                    </th>
-                  ))}
-                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Wins</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((k) => (
-                  <tr key={k.id} style={{ borderBottom: `1px solid ${t.border}08` }}>
-                    <td style={{ padding: "8px 10px", color: t.text, whiteSpace: "nowrap", position: "sticky", left: 0, background: t.card }}>{fmtDate(k.week_start)}</td>
-                    {memberFilter === "all" ? <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11 }}>{k.team_member}</td> : null}
-                    {columns.map((col) => (
-                      <td key={col} style={{ padding: "8px 10px", textAlign: "right", color: t.text, fontVariantNumeric: "tabular-nums" }}>
-                        {fmtVal(k.data?.[col])}
-                      </td>
-                    ))}
-                    <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.wins || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const PARTNERSHIP_SECTION_ORDER = ["meta_monthly", "meta_one_time", "sf_payouts", "tts_monthly", "tts_one_time", "youtube_monthly", "campaigns", "ugc_army"];
-
-function partnershipSectionLabel(section) {
-  const map = {
-    meta_monthly: "Meta Monthly",
-    meta_one_time: "Meta One Time",
-    sf_payouts: "SF Payouts",
-    tts_monthly: "TTS Monthly",
-    tts_one_time: "TTS One Time",
-    youtube_monthly: "YouTube Monthly",
-    campaigns: "Campaigns",
-    ugc_army: "UGC Army",
-  };
-  return map[section] || String(section || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function mmData(m, key) {
-  const d = m?.data && typeof m.data === "object" ? m.data : {};
-  return d[key];
-}
-
-function pipelineAggregateMonthlyTotals(rows) {
-  const ch = rows.filter((r) => r && r.channel && r.channel !== "Totals");
-  const t = {
-    budget: 0,
-    actual_spend: 0,
-    purchase_value: 0,
-    social_views: 0,
-    ad_views: 0,
-    ads_to_lunar: 0,
-    ads_launched: 0,
-    ad_spend: 0,
-    purchases: 0,
-    attribution: 0,
-    total_r: 0,
-    attribution_refills: 0,
-  };
-  for (const m of ch) {
-    t.budget += Number(m.budget) || 0;
-    t.actual_spend += Number(m.actual_spend) || 0;
-    t.purchase_value += Number(m.purchase_value) || 0;
-    t.social_views += Number(m.social_views) || 0;
-    t.ad_views += Number(m.ad_views) || 0;
-    t.ads_to_lunar += Number(m.ads_to_lunar) || 0;
-    t.ads_launched += Number(m.ads_launched) || 0;
-    t.ad_spend += Number(m.ad_spend) || 0;
-    t.purchases += Number(m.purchases) || 0;
-    t.attribution += Number(m.attribution) || 0;
-    const d = m.data && typeof m.data === "object" ? m.data : {};
-    t.total_r += Number(d.total_r) || 0;
-    t.attribution_refills += Number(d.attribution_refills) || 0;
-  }
-  const roas = t.ad_spend > 0 ? t.purchase_value / t.ad_spend : null;
-  const cpa = t.purchases > 0 ? t.ad_spend / t.purchases : null;
-  return { ...t, roas, cpa };
-}
-
-function spendComputePl(r) {
-  const pay = Number(r.pay) || 0;
-  const np = r.new_pay != null ? Number(r.new_pay) : NaN;
-  if (!Number.isFinite(np)) return null;
-  return np - pay;
-}
-
-function spendComputeRoas(r) {
-  const as = Number(r.ad_spend);
-  const pv = r.purchase_value != null ? Number(r.purchase_value) : NaN;
-  if (!Number.isFinite(as) || as <= 0 || !Number.isFinite(pv)) return null;
-  return pv / as;
-}
-
-function ChannelPipeline({ navigate, creators, t, S }) {
+const PIPELINE_TAB_MAP = {
+  overview: "Creator Monthly",
+  spend: "Partnership Spend",
+  tts: "TTS Weekly",
+  instagram: "Instagram Weekly",
+  ugc: "UGC Weekly",
+  youtube: "YT Weekly",
+  sops: null,
+  kpis: "Ashleighs KPIs",
+};
+
+const PIPELINE_SOP_TABS = [
+  "TikTok SOP",
+  "Instagram SOP",
+  "UGC Army SOP",
+  "Superfiliate SOP",
+  "Admin SOP",
+  "YouTube SOP",
+  "Influencer Buys SOP",
+];
+
+function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
   const [tab, setTab] = useState("overview");
-  const [monthlyData, setMonthlyData] = useState([]);
-  const [spendData, setSpendData] = useState([]);
+  const [sheetData, setSheetData] = useState({});
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(null);
-  const [mmEdit, setMmEdit] = useState(null);
-  const [mmEditVal, setMmEditVal] = useState("");
-  const [psEdit, setPsEdit] = useState(null);
-  const [psEditVal, setPsEditVal] = useState("");
-  const mmSkipBlurRef = useRef(false);
-  const psSkipBlurRef = useRef(false);
-
-  useEffect(() => {
-    (async () => {
-      const [{ data: monthly }, { data: spend }] = await Promise.all([
-        supabase.from("monthly_metrics").select("*").order("month", { ascending: false }),
-        supabase.from("partnership_spend").select("*").order("month", { ascending: false }).order("section", { ascending: true }),
-      ]);
-
-      setMonthlyData(monthly || []);
-      setSpendData(spend || []);
-
-      const allMonths = new Set();
-      (monthly || []).forEach((m) => {
-        if (m.month) allMonths.add(String(m.month).substring(0, 10));
-      });
-      (spend || []).forEach((s) => {
-        if (s.month) allMonths.add(String(s.month).substring(0, 10));
-      });
-      const sortedMonths = [...allMonths].sort().reverse();
-
-      if (sortedMonths.length > 0) {
-        setSelectedMonth(sortedMonths[0]);
-      }
-      setLoading(false);
-    })();
-  }, []);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -7923,276 +6484,266 @@ function ChannelPipeline({ navigate, creators, t, S }) {
     { id: "kpis", label: "Team KPIs" },
   ];
 
-  const normDate = (d) => (d ? String(d).substring(0, 10) : "");
-  const allMonthSet = new Set();
-  monthlyData.forEach((m) => {
-    if (m.month) allMonthSet.add(normDate(m.month));
-  });
-  spendData.forEach((s) => {
-    if (s.month) allMonthSet.add(normDate(s.month));
-  });
-  const months = [...allMonthSet].sort().reverse();
-  const currentMonthData = monthlyData.filter((m) => normDate(m.month) === selectedMonth);
-  const currentSpend = spendData.filter((s) => normDate(s.month) === selectedMonth);
-
-  const CREATOR_MONTHLY_COLUMNS = [
-    { key: "budget", kind: "currency", w: 80 },
-    { key: "actual_spend", kind: "currency", w: 90 },
-    { key: "purchase_value", kind: "currency", w: 100 },
-    { key: "social_views", kind: "int", w: 90 },
-    { key: "ad_views", kind: "int", w: 85 },
-    { key: "ads_to_lunar", kind: "int", w: 72 },
-    { key: "ads_launched", kind: "int", w: 72 },
-    { key: "notes", kind: "notes", w: 200 },
-    { dataKey: "total_r", kind: "currency", w: 80 },
-    { dataKey: "revenue_pct", kind: "pct1", w: 50 },
-    { key: "ad_spend", kind: "currency", w: 90 },
-    { key: "purchases", kind: "decimal", w: 78 },
-    { key: "cpa", kind: "currency2", w: 72 },
-    { key: "roas", kind: "roas", w: 62 },
-    { key: "ctr", kind: "pct1col", w: 55 },
-    { key: "thumbstop", kind: "pct1col", w: 62 },
-    { key: "ad_cpm", kind: "currency2", w: 72 },
-    { key: "ecpm", kind: "currency2", w: 64 },
-    { dataKey: "attribution_pct", kind: "pct1", w: 50 },
-    { dataKey: "cpm", kind: "numOrText", w: 52 },
-    { key: "attribution", kind: "currency2", w: 92 },
-    { dataKey: "attribution_refills", kind: "currency", w: 92 },
-  ];
-
-  const mmCellVal = (m, col) => {
-    if (col.dataKey != null) return mmData(m, col.dataKey);
-    if (col.key === "ecpm") return m.ecpm != null ? m.ecpm : mmData(m, "ecpm");
-    if (col.key === "attribution") return m.attribution != null ? m.attribution : mmData(m, "attribution");
-    return m[col.key];
-  };
-  const mmFmtDisplay = (m, col) => {
-    const v = mmCellVal(m, col);
-    if (col.kind === "currency" || col.kind === "currency2") {
-      if (v == null || v === "") return "—";
-      return "$" + Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
-    }
-    if (col.kind === "int") return v != null ? Number(v).toLocaleString() : "—";
-    if (col.kind === "decimal") return v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—";
-    if (col.kind === "notes") return v ? String(v) : "";
-    if (col.kind === "pct1") return v == null || v === "" ? "—" : `${(Math.abs(Number(v)) <= 1 ? Number(v) * 100 : Number(v)).toFixed(1)}%`;
-    if (col.kind === "pct1col") {
-      const x = m[col.key];
-      if (x == null || x === "") return "—";
-      return `${(Math.abs(Number(x)) <= 1 ? Number(x) * 100 : Number(x)).toFixed(2)}%`;
-    }
-    if (col.kind === "roas") {
-      const stored = m.roas != null ? Number(m.roas) : null;
-      const comp = m.ad_spend > 0 && m.purchase_value != null ? m.purchase_value / m.ad_spend : null;
-      const r = stored != null ? stored : comp;
-      return r != null ? r.toFixed(2) + "x" : "—";
-    }
-    if (col.kind === "numOrText") return v != null && v !== "" ? String(v) : "—";
-    return "—";
-  };
-  const mmStartEditVal = (m, col) => {
-    const v = mmCellVal(m, col);
-    if (col.kind === "notes") return v != null ? String(v) : "";
-    if (col.kind === "pct1" || col.kind === "pct1col") {
-      const x = col.kind === "pct1col" ? m[col.key] : v;
-      if (x == null || x === "") return "";
-      return String((Math.abs(Number(x)) <= 1 ? Number(x) * 100 : Number(x)).toFixed(4)).replace(/\.?0+$/, "");
-    }
-    if (col.kind === "currency" || col.kind === "currency2" || col.kind === "int" || col.kind === "decimal") {
-      return v != null && v !== "" ? String(v) : "";
-    }
-    if (col.kind === "roas") {
-      const stored = m.roas != null ? Number(m.roas) : null;
-      return stored != null ? String(stored) : m.ad_spend > 0 && m.purchase_value != null ? String(m.purchase_value / m.ad_spend) : "";
-    }
-    return v != null ? String(v) : "";
-  };
-
-  const fmt = (n) => {
-    if (n == null || n === 0) return "—";
-    if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(1) + "M";
-    if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
-    return "$" + Math.round(n).toLocaleString();
-  };
-  const fmtNum = (n) => {
-    if (n == null) return "—";
-    if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + "M";
-    if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + "K";
-    return Math.round(n).toLocaleString();
-  };
-  const fmtMonth = (m) => {
-    if (!m) return "";
-    const d = new Date(m + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  };
-
-  const fmtSigned = (n) => {
-    if (n == null || n === "") return "—";
-    const x = Number(n);
-    if (!Number.isFinite(x)) return "—";
-    const abs = Math.abs(x);
-    const body =
-      abs >= 1e6 ? (abs / 1e6).toFixed(2) + "M" : abs >= 1e3 ? (abs / 1e3).toFixed(1) + "K" : abs.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    return (x < 0 ? "-" : "") + "$" + body;
-  };
-
-  const findSpendCreator = (r) => {
-    const raw = String(r.creator_handle || "").trim();
-    const em = String(r.creator_email || "").trim().toLowerCase();
-    const normHandle = (h) => String(h || "").replace(/^@/, "").trim().toLowerCase();
-    return creators.find((c) => {
-      if (em && String(c.email || "").trim().toLowerCase() === em) return true;
-      if (raw.includes("@") && String(c.email || "").trim().toLowerCase() === raw.toLowerCase()) return true;
-      if (raw && c.handle && normHandle(c.handle) === normHandle(raw)) return true;
-      return false;
-    });
-  };
-
-  const saveMonthlyMetricCell = async () => {
-    if (!mmEdit) return;
-    const { rowId, field, dataKey } = mmEdit;
-    const row = monthlyData.find((m) => m.id === rowId);
-    if (!row) return;
-    const raw = mmEditVal;
-    const parseNum = () => (raw === "" || raw == null ? null : Number(raw));
-    const parsePctInput = () => {
-      const n = parseNum();
-      if (n == null) return null;
-      return n / 100;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        if (tab === "sops") {
+          const results = {};
+          for (const sopTab of PIPELINE_SOP_TABS) {
+            try {
+              const res = await fetch(`/api/sheets/${encodeURIComponent(sopTab)}`);
+              if (res.ok) results[sopTab] = await res.json();
+            } catch {
+              /* skip failed SOP tab */
+            }
+          }
+          if (!cancelled) setSheetData((prev) => ({ ...prev, ...results }));
+          return;
+        }
+        const sheetTab = PIPELINE_TAB_MAP[tab];
+        if (!sheetTab) {
+          return;
+        }
+        const res = await fetch(`/api/sheets/${encodeURIComponent(sheetTab)}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        if (!cancelled) setSheetData((prev) => ({ ...prev, [sheetTab]: data }));
+      } catch (e) {
+        if (!cancelled) setError(e.message || String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
+  }, [tab]);
 
-    if (dataKey) {
-      const prevD = row.data && typeof row.data === "object" ? { ...row.data } : {};
-      let v;
-      if (["total_r", "attribution_refills", "cpm"].includes(dataKey)) v = parseNum();
-      else if (["revenue_pct", "attribution_pct"].includes(dataKey)) v = parsePctInput();
-      else v = raw === "" ? null : String(raw);
-      const newData = { ...prevD, [dataKey]: v };
-      const { error } = await supabase.from("monthly_metrics").update({ data: newData }).eq("id", rowId);
-      if (error) {
-        alert("Save failed: " + error.message);
-        return;
+  const refresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await fetch("/api/sheets-refresh", { method: "POST" });
+      setSheetData({});
+      if (tab === "sops") {
+        const results = {};
+        for (const sopTab of PIPELINE_SOP_TABS) {
+          const res = await fetch(`/api/sheets/${encodeURIComponent(sopTab)}`);
+          if (res.ok) results[sopTab] = await res.json();
+        }
+        setSheetData(results);
+      } else {
+        const sheetTab = PIPELINE_TAB_MAP[tab];
+        if (sheetTab) {
+          const res = await fetch(`/api/sheets/${encodeURIComponent(sheetTab)}`);
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          setSheetData((prev) => ({ ...prev, [sheetTab]: data }));
+        }
       }
-      setMonthlyData((prev) => prev.map((m) => (m.id === rowId ? { ...m, data: newData } : m)));
-    } else {
-      const numFields = [
-        "budget",
-        "actual_spend",
-        "purchase_value",
-        "social_views",
-        "ad_views",
-        "ads_to_lunar",
-        "ads_launched",
-        "ad_spend",
-        "purchases",
-        "cpa",
-        "roas",
-        "ad_cpm",
-        "ecpm",
-        "attribution",
-      ];
-      const intFields = ["social_views", "ad_views", "ads_to_lunar", "ads_launched"];
-      let v;
-      if (field === "channel" || field === "notes") v = raw === "" ? null : String(raw);
-      else if (field === "ctr" || field === "thumbstop") {
-        const n = parseNum();
-        v = n == null ? null : n / 100;
-      } else if (field === "roas") {
-        v = parseNum();
-      } else if (numFields.includes(field)) {
-        v = parseNum();
-        if (v != null && intFields.includes(field)) v = Math.round(v);
-      } else v = parseNum();
-
-      const { error } = await supabase.from("monthly_metrics").update({ [field]: v }).eq("id", rowId);
-      if (error) {
-        alert("Save failed: " + error.message);
-        return;
-      }
-      setMonthlyData((prev) => prev.map((m) => (m.id === rowId ? { ...m, [field]: v } : m)));
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setRefreshing(false);
     }
-    setMmEdit(null);
-    setMmEditVal("");
   };
 
-  const savePartnershipSpendCell = async () => {
-    if (!psEdit) return;
-    const { rowId, field } = psEdit;
-    const row = spendData.find((r) => r.id === rowId);
-    if (!row) return;
-    const raw = psEditVal;
-    const updates = {};
-    if (field === "status") updates.status = raw === "" ? null : String(raw);
-    else if (field === "creator_handle" || field === "platform" || field === "ad_usage" || field === "contract" || field === "content_type" || field === "creator_name" || field === "creator_email" || field === "creator_address" || field === "notes") {
-      updates[field] = raw === "" ? null : String(raw);
-    } else if (field === "deliverable_met" || field === "creator_paid") {
-      updates[field] = raw === "true" || raw === true || raw === "1";
-    } else if (["pay", "new_pay", "paid_pl", "organic_views", "ad_views", "ad_spend", "purchase_value", "num_videos"].includes(field)) {
-      updates[field] = raw === "" || raw == null ? null : Number(raw);
+  const renderSheetTable = (tabName, opts = {}) => {
+    const data = sheetData[tabName];
+    if (!data?.rows?.length) {
+      return <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data loaded</div>;
     }
-    const merged = { ...row, ...updates };
-    if (updates.pay !== undefined || updates.new_pay !== undefined) {
-      updates.pl = spendComputePl(merged);
-    }
-    if (updates.purchase_value !== undefined || updates.ad_spend !== undefined) {
-      updates.roas = spendComputeRoas(merged);
-    }
-    const { error } = await supabase.from("partnership_spend").update(updates).eq("id", rowId);
-    if (error) {
-      alert("Save failed: " + error.message);
-      return;
-    }
-    setSpendData((prev) => prev.map((r) => (r.id === rowId ? { ...r, ...updates } : r)));
-    setPsEdit(null);
-    setPsEditVal("");
+
+    const rows = data.rows;
+    const headerRow = rows[opts.headerRowIndex || 0] || [];
+    const dataRows = rows.slice((opts.headerRowIndex || 0) + 1);
+    const maxCols = Math.max(
+      1,
+      ...rows.map((r) => (Array.isArray(r) ? r.length : 0)),
+      headerRow.length,
+    );
+
+    return (
+      <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: maxCols * 90 }}>
+          <thead>
+            <tr style={{ background: t.cardAlt }}>
+              {Array.from({ length: maxCols }, (_, i) => headerRow[i]).map((cell, i) => (
+                <th
+                  key={i}
+                  style={{
+                    padding: "8px 10px",
+                    textAlign: i === 0 ? "left" : "right",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: t.textFaint,
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap",
+                    position: i === 0 ? "sticky" : "static",
+                    left: i === 0 ? 0 : "auto",
+                    background: i === 0 ? t.cardAlt : "transparent",
+                    zIndex: i === 0 ? 2 : 0,
+                    minWidth: i === 0 ? 130 : 75,
+                  }}
+                >
+                  {String(cell ?? "").replace(/\n/g, " ")}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {dataRows.map((row, ri) => {
+              const firstCell = String(row?.[0] ?? "").trim();
+              const isTotal = /total/i.test(firstCell) || /^Q\d/i.test(firstCell);
+              const isMilestone =
+                /join/i.test(firstCell) ||
+                /takes over/i.test(firstCell) ||
+                /goals/i.test(firstCell) ||
+                /video/i.test(firstCell);
+              const isMonthHeader =
+                /^\d{4}-\d{2}/.test(firstCell) ||
+                /^(January|February|March|April|May|June|July|August|September|October|November|December)/i.test(firstCell);
+              const isSectionHeader = (row || []).filter((c) => c && String(c).trim()).length <= 2 && firstCell.length > 2;
+              const isEmpty = !row || row.every((c) => !c || String(c).trim() === "");
+
+              if (isEmpty) return null;
+
+              let rowStyle = { borderBottom: `1px solid ${t.border}10` };
+              if (isTotal || isMonthHeader) {
+                rowStyle = {
+                  background: t.cardAlt,
+                  borderTop: `2px solid ${t.border}`,
+                  borderBottom: `2px solid ${t.border}`,
+                  fontWeight: 700,
+                };
+              } else if (isMilestone) {
+                rowStyle = { background: (t.purple || "#a78bfa") + "10", fontStyle: "italic" };
+              } else if (isSectionHeader) {
+                rowStyle = { background: (t.green || "#00e0b4") + "10", borderTop: `1px solid ${t.border}` };
+              }
+
+              return (
+                <tr key={ri} style={rowStyle}>
+                  {Array.from({ length: maxCols }, (_, ci) => {
+                    const val = row?.[ci] ?? "";
+                    const isFirst = ci === 0;
+                    let color = t.text;
+                    const s = String(val).trim();
+                    if (s === "—" || s === "" || s === "#REF!" || s === "#DIV/0!") color = t.textFaint;
+                    else if (s.startsWith("$") || s.startsWith("-$")) color = t.text;
+                    else if (s.endsWith("%")) color = t.textMuted;
+
+                    if (ci === 0 && /^(Active|Pause|Under Review|Complete)$/i.test(s)) {
+                      const sc = { active: t.green, pause: t.orange, "under review": t.blue, complete: t.green };
+                      color = sc[s.toLowerCase()] || t.textFaint;
+                    }
+
+                    const display = s === "#REF!" || s === "#DIV/0!" ? "—" : val;
+
+                    return (
+                      <td
+                        key={ci}
+                        style={{
+                          padding: "7px 10px",
+                          textAlign: isFirst ? "left" : "right",
+                          color: isTotal ? t.text : color,
+                          fontWeight: isTotal || isFirst ? (isTotal ? 700 : 600) : 400,
+                          fontSize: isMilestone ? 10 : 11,
+                          whiteSpace: "nowrap",
+                          maxWidth: ci > 0 ? 120 : 200,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          position: isFirst ? "sticky" : "static",
+                          left: isFirst ? 0 : "auto",
+                          background: isFirst ? (isTotal || isMonthHeader ? t.cardAlt : t.card) : "transparent",
+                          zIndex: isFirst ? 1 : 0,
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {display}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
-  const insertPartnershipRow = async (section) => {
-    if (!selectedMonth) return;
-    const { data, error } = await supabase
-      .from("partnership_spend")
-      .insert({
-        month: selectedMonth,
-        section,
-        status: "Active",
-        creator_handle: "",
-        pay: 0,
-        deliverable_met: false,
-        creator_paid: false,
-      })
-      .select("*")
-      .single();
-    if (error) {
-      alert("Add row failed: " + error.message);
-      return;
-    }
-    setSpendData((prev) => [...prev, data]);
-  };
-
-  if (loading) return <div style={{ padding: 60, textAlign: "center", color: t.textMuted }}>Loading pipeline data...</div>;
+  const activeSheetName = PIPELINE_TAB_MAP[tab];
+  const lastFetchedRaw =
+    tab === "sops"
+      ? Object.values(sheetData)
+          .map((d) => d?.fetchedAt)
+          .filter(Boolean)
+          .sort()
+          .pop()
+      : activeSheetName
+        ? sheetData[activeSheetName]?.fetchedAt
+        : null;
 
   return (
-    <div style={{ maxWidth: "min(100%, 1720px)", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+    <div style={{ maxWidth: 1400, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
           <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Channel Pipeline</div>
-          <div style={{ fontSize: 13, color: t.textMuted }}>Performance, spend, and operations across all channels</div>
+          <div style={{ fontSize: 13, color: t.textMuted }}>Live from Google Sheets — server cache ~2 minutes</div>
         </div>
-        <select
-          value={selectedMonth || ""}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          disabled={months.length === 0}
-          style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-        >
-          {months.map((m) => (
-            <option key={m} value={m}>
-              {fmtMonth(m)}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={refreshing}
+            style={{
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: `1px solid ${t.border}`,
+              background: t.cardAlt,
+              color: t.text,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: refreshing ? "not-allowed" : "pointer",
+              opacity: refreshing ? 0.5 : 1,
+            }}
+          >
+            {refreshing ? "Refreshing..." : "↻ Refresh"}
+          </button>
+          <a
+            href="https://docs.google.com/spreadsheets/d/19uhZsRjNX43_VkNfStr_PwjVMO-5kCPZ/edit"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: `1px solid ${t.border}`,
+              background: "transparent",
+              color: t.textMuted,
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            Open in Sheets ↗
+          </a>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 4, marginBottom: 24, overflowX: "auto", borderBottom: `1px solid ${t.border}`, paddingBottom: 0 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, overflowX: "auto", borderBottom: `1px solid ${t.border}` }}>
         {tabs.map((tb) => (
           <button
             key={tb.id}
@@ -8215,696 +6766,47 @@ function ChannelPipeline({ navigate, creators, t, S }) {
         ))}
       </div>
 
-      {tab === "overview" && (
+      {error ? (
+        <div style={{ padding: "12px 16px", background: t.red + "10", border: `1px solid ${t.red}25`, borderRadius: 8, marginBottom: 16, color: t.red, fontSize: 13 }}>{error}</div>
+      ) : null}
+
+      {loading ? <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading sheet data...</div> : null}
+
+      {!loading && tab !== "sops" && activeSheetName ? (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Creator Monthly — {fmtMonth(selectedMonth)}</div>
-          </div>
-          {currentMonthData.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: t.textFaint, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10 }}>No monthly metrics for this period</div>
-          ) : (
-            <>
-              {(() => {
-                const mmRows = currentMonthData.filter((m) => m.channel !== "Totals");
-                const agg = pipelineAggregateMonthlyTotals(mmRows);
-                const roas = agg.ad_spend > 0 ? agg.purchase_value / agg.ad_spend : null;
-                return (
-                  <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-                    {[
-                      { label: "Budget", value: fmt(agg.budget), color: t.textMuted },
-                      { label: "Actual Spend", value: fmt(agg.actual_spend), color: t.text },
-                      { label: "Purchase Value", value: fmt(agg.purchase_value), color: t.green },
-                      { label: "ROAS", value: roas ? roas.toFixed(2) + "x" : "—", color: roas != null && roas > 1 ? t.green : t.orange },
-                    ].map((c, i) => (
-                      <div key={i} style={{ flex: "1 1 140px", minWidth: 130, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: c.color }}>{c.value}</div>
-                        <div style={{ fontSize: 11, color: t.textFaint }}>{c.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-
-              <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 2100 }}>
-                  <thead>
-                    <tr style={{ background: t.cardAlt }}>
-                      <th
-                        style={{
-                          padding: "8px 10px",
-                          textAlign: "left",
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: t.textFaint,
-                          textTransform: "uppercase",
-                          position: "sticky",
-                          left: 0,
-                          background: t.cardAlt,
-                          zIndex: 2,
-                          minWidth: 130,
-                        }}
-                      >
-                        Channel
-                      </th>
-                      {[
-                        { label: "Budget", w: 80 },
-                        { label: "Actual Spend", w: 90 },
-                        { label: "Purchase Value", w: 100 },
-                        { label: "Social Views", w: 90 },
-                        { label: "Ad Views", w: 85 },
-                        { label: "Ads to Lunar", w: 70 },
-                        { label: "Ads Launched", w: 70 },
-                        { label: "Notes", w: 200 },
-                        { label: "Total R", w: 80 },
-                        { label: "%", w: 50 },
-                        { label: "Ad Spend", w: 90 },
-                        { label: "Purchases", w: 75 },
-                        { label: "CPA", w: 70 },
-                        { label: "ROAS", w: 60 },
-                        { label: "CTR", w: 55 },
-                        { label: "Thumbstop", w: 65 },
-                        { label: "Ad CPM", w: 70 },
-                        { label: "eCPM", w: 60 },
-                        { label: "%", w: 50 },
-                        { label: "CPM", w: 50 },
-                        { label: "Attribution", w: 95 },
-                        { label: "A w/ refills", w: 95 },
-                      ].map((h, i) => (
-                        <th
-                          key={i}
-                          style={{
-                            padding: "6px 8px",
-                            textAlign: h.label === "Notes" ? "left" : "right",
-                            fontSize: 9,
-                            fontWeight: 700,
-                            color: t.textFaint,
-                            textTransform: "uppercase",
-                            whiteSpace: "nowrap",
-                            minWidth: h.w,
-                          }}
-                        >
-                          {h.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentMonthData
-                      .filter((m) => m.channel !== "Totals")
-                      .map((m) => {
-                        return (
-                          <tr key={m.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
-                            <td
-                              style={{
-                                padding: "8px 10px",
-                                fontWeight: 600,
-                                color: t.text,
-                                position: "sticky",
-                                left: 0,
-                                background: t.card,
-                                zIndex: 1,
-                              }}
-                              onDoubleClick={() => {
-                                setMmEdit({ rowId: m.id, field: "channel" });
-                                setMmEditVal(m.channel || "");
-                              }}
-                            >
-                              {mmEdit?.rowId === m.id && mmEdit?.field === "channel" ? (
-                                <input
-                                  autoFocus
-                                  value={mmEditVal}
-                                  onChange={(e) => setMmEditVal(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      saveMonthlyMetricCell();
-                                    }
-                                    if (e.key === "Escape") {
-                                      mmSkipBlurRef.current = true;
-                                      setMmEdit(null);
-                                      setMmEditVal("");
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    if (mmSkipBlurRef.current) {
-                                      mmSkipBlurRef.current = false;
-                                      return;
-                                    }
-                                    saveMonthlyMetricCell();
-                                  }}
-                                  style={{ width: 120, padding: "2px 6px", borderRadius: 4, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
-                                />
-                              ) : (
-                                m.channel
-                              )}
-                            </td>
-                            {CREATOR_MONTHLY_COLUMNS.map((col) => {
-                              const isEdit =
-                                mmEdit?.rowId === m.id &&
-                                (col.dataKey ? mmEdit.dataKey === col.dataKey : mmEdit.field === col.key);
-                              const align = col.kind === "notes" ? "left" : "right";
-                                  return (
-                                <td
-                                  key={(col.key || "") + (col.dataKey || "")}
-                                  onDoubleClick={() => {
-                                    setMmEdit({ rowId: m.id, field: col.key, dataKey: col.dataKey });
-                                    setMmEditVal(mmStartEditVal(m, col));
-                                  }}
-                                  style={{
-                                    padding: "6px 8px",
-                                    textAlign: align,
-                                    color: col.kind === "notes" ? t.textFaint : t.textMuted,
-                                    fontSize: col.kind === "notes" ? 10 : 11,
-                                    maxWidth: col.kind === "notes" ? 200 : undefined,
-                                    overflow: col.kind === "notes" ? "hidden" : undefined,
-                                    textOverflow: col.kind === "notes" ? "ellipsis" : undefined,
-                                    whiteSpace: col.kind === "notes" ? "nowrap" : undefined,
-                                    cursor: "pointer",
-                                    fontVariantNumeric: "tabular-nums",
-                                  }}
-                                >
-                                  {isEdit ? (
-                                    col.kind === "notes" ? (
-                                      <input
-                                        autoFocus
-                                        value={mmEditVal}
-                                        onChange={(e) => setMmEditVal(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            e.preventDefault();
-                                            saveMonthlyMetricCell();
-                                          }
-                                          if (e.key === "Escape") {
-                                            mmSkipBlurRef.current = true;
-                                            setMmEdit(null);
-                                            setMmEditVal("");
-                                          }
-                                        }}
-                                        onBlur={() => {
-                                          if (mmSkipBlurRef.current) {
-                                            mmSkipBlurRef.current = false;
-                                            return;
-                                          }
-                                          saveMonthlyMetricCell();
-                                        }}
-                                        style={{ width: "100%", minWidth: 120, padding: "2px 4px", borderRadius: 3, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 10 }}
-                                      />
-                                    ) : (
-                                      <input
-                                        type={col.kind === "pct1" || col.kind === "pct1col" || col.kind === "currency" || col.kind === "currency2" || col.kind === "int" || col.kind === "decimal" || col.kind === "roas" ? "number" : "text"}
-                                        step="any"
-                                        autoFocus
-                                        value={mmEditVal}
-                                        onChange={(e) => setMmEditVal(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            e.preventDefault();
-                                            saveMonthlyMetricCell();
-                                          }
-                                          if (e.key === "Escape") {
-                                            mmSkipBlurRef.current = true;
-                                            setMmEdit(null);
-                                            setMmEditVal("");
-                                          }
-                                        }}
-                                        onBlur={() => {
-                                          if (mmSkipBlurRef.current) {
-                                            mmSkipBlurRef.current = false;
-                                            return;
-                                          }
-                                          saveMonthlyMetricCell();
-                                        }}
-                                        style={{ width: col.w - 16, padding: "2px 4px", borderRadius: 3, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 11, textAlign: align }}
-                                      />
-                                    )
-                                  ) : col.key === "purchase_value" ? (
-                                    <span style={{ color: t.green, fontWeight: 600 }}>{mmFmtDisplay(m, col)}</span>
-                                  ) : col.key === "roas" ? (
-                                    <span style={{ color: t.textMuted, fontWeight: 600 }}>{mmFmtDisplay(m, col)}</span>
-                                  ) : col.dataKey === "total_r" || col.key === "attribution" || col.dataKey === "attribution_refills" ? (
-                                    <span style={{ color: t.green }}>{mmFmtDisplay(m, col)}</span>
-                                  ) : (
-                                    mmFmtDisplay(m, col)
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                    {(() => {
-                      const mmRows = currentMonthData.filter((m) => m.channel !== "Totals");
-                      const agg = pipelineAggregateMonthlyTotals(mmRows);
-                      const totSynth = {
-                        id: null,
-                        channel: "Total",
-                        budget: agg.budget,
-                        actual_spend: agg.actual_spend,
-                        purchase_value: agg.purchase_value,
-                        social_views: agg.social_views,
-                        ad_views: agg.ad_views,
-                        ads_to_lunar: agg.ads_to_lunar,
-                        ads_launched: agg.ads_launched,
-                        notes: null,
-                        ad_spend: agg.ad_spend,
-                        purchases: agg.purchases,
-                        cpa: agg.cpa,
-                        roas: agg.roas,
-                        ctr: null,
-                        thumbstop: null,
-                        ad_cpm: null,
-                        ecpm: null,
-                        attribution: agg.attribution,
-                        data: {
-                          total_r: agg.total_r,
-                          revenue_pct: null,
-                          attribution_pct: null,
-                          cpm: null,
-                          attribution_refills: agg.attribution_refills,
-                        },
-                      };
-                      return (
-                        <tr style={{ background: t.cardAlt, borderTop: `2px solid ${t.border}`, fontWeight: 700 }}>
-                          <td
-                            style={{
-                              padding: "8px 10px",
-                              color: t.text,
-                              fontWeight: 800,
-                              position: "sticky",
-                              left: 0,
-                              background: t.cardAlt,
-                              zIndex: 1,
-                            }}
-                          >
-                            Total
-                          </td>
-                          {CREATOR_MONTHLY_COLUMNS.map((col) => (
-                            <td
-                              key={(col.key || "") + (col.dataKey || "")}
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: col.kind === "notes" ? "left" : "right",
-                                color: t.text,
-                                fontSize: 11,
-                              }}
-                            >
-                              {mmFmtDisplay(totSynth, col)}
-                            </td>
-                          ))}
-                        </tr>
-                      );
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {currentMonthData.filter((m) => m.notes && m.channel !== "Totals").length > 0 ? (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Notes</div>
-                  {currentMonthData
-                    .filter((m) => m.notes && m.channel !== "Totals")
-                    .map((m, i) => (
-                      <div key={i} style={{ fontSize: 12, color: t.textMuted, marginBottom: 6, lineHeight: 1.5 }}>
-                        <strong style={{ color: t.text }}>{m.channel}:</strong> {m.notes}
-                      </div>
-                    ))}
-                </div>
-              ) : null}
-            </>
-          )}
+          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 12 }}>{activeSheetName}</div>
+          {renderSheetTable(activeSheetName, tab === "instagram" ? { headerRowIndex: 1 } : {})}
         </div>
-      )}
+      ) : null}
 
-      {tab === "spend" && (
+      {!loading && tab === "sops" ? (
         <div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{fmtMonth(selectedMonth)} — Partnership Spend</div>
-            <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Double-click any cell to edit · Enter or blur saves · Esc cancels · Click creator handle to open profile when matched</div>
-          </div>
-          {currentSpend.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No partnership spend data for {fmtMonth(selectedMonth)}</div>
-          ) : (
-            (() => {
-              const present = [...new Set(currentSpend.map((r) => r.section).filter(Boolean))];
-              const sectionsOrdered = [
-                ...PARTNERSHIP_SECTION_ORDER.filter((s) => present.includes(s)),
-                ...present.filter((s) => !PARTNERSHIP_SECTION_ORDER.includes(s)).sort(),
-              ];
-              const grandPay = currentSpend.reduce((sum, r) => sum + (Number(r.pay) || 0), 0);
-
-              const psVal = (r, field) => {
-                const v = r[field];
-                if (field === "deliverable_met" || field === "creator_paid") return v ? "true" : "false";
-                if (v == null || v === "") return "";
-                return String(v);
-              };
-
-              const renderPsInput = (r, field, width, align = "right") => {
-                const isBool = field === "deliverable_met" || field === "creator_paid";
-                const isEdit = psEdit?.rowId === r.id && psEdit?.field === field;
-                if (!isEdit) return null;
-                if (isBool) {
-                  return (
-                    <input
-                      type="checkbox"
-                      checked={psEditVal === "true"}
-                      onChange={(e) => setPsEditVal(e.target.checked ? "true" : "false")}
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          savePartnershipSpendCell();
-                        }
-                        if (e.key === "Escape") {
-                          psSkipBlurRef.current = true;
-                          setPsEdit(null);
-                          setPsEditVal("");
-                        }
-                      }}
-                      onBlur={() => {
-                        if (psSkipBlurRef.current) {
-                          psSkipBlurRef.current = false;
-                          return;
-                        }
-                        savePartnershipSpendCell();
-                      }}
-                    />
-                  );
-                }
-                if (field === "status") {
-                  return (
-                    <select
-                      value={psEditVal}
-                      onChange={(e) => setPsEditVal(e.target.value)}
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          psSkipBlurRef.current = true;
-                          setPsEdit(null);
-                          setPsEditVal("");
-                        }
-                      }}
-                      onBlur={() => {
-                        if (psSkipBlurRef.current) {
-                          psSkipBlurRef.current = false;
-                          return;
-                        }
-                        savePartnershipSpendCell();
-                      }}
-                      style={{ maxWidth: width, padding: "3px 6px", borderRadius: 4, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
-                    >
-                      {["", "Active", "Pause", "Under Review", "Complete"].map((s) => (
-                        <option key={s || "empty"} value={s}>
-                          {s || "—"}
-                        </option>
-                      ))}
-                    </select>
-                  );
-                }
-                if (field === "notes") {
-                  return (
-                    <textarea
-                      value={psEditVal}
-                      onChange={(e) => setPsEditVal(e.target.value)}
-                      autoFocus
-                      rows={2}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && e.metaKey) {
-                          e.preventDefault();
-                          savePartnershipSpendCell();
-                        }
-                        if (e.key === "Escape") {
-                          psSkipBlurRef.current = true;
-                          setPsEdit(null);
-                          setPsEditVal("");
-                        }
-                      }}
-                      onBlur={() => {
-                        if (psSkipBlurRef.current) {
-                          psSkipBlurRef.current = false;
-                          return;
-                        }
-                        savePartnershipSpendCell();
-                      }}
-                      style={{ width: "100%", minWidth: width, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 10, resize: "vertical" }}
-                    />
-                  );
-                }
-                return (
-                  <input
-                    type={["pay", "new_pay", "paid_pl", "organic_views", "ad_views", "ad_spend", "purchase_value", "num_videos"].includes(field) ? "number" : "text"}
-                    step="any"
-                    value={psEditVal}
-                    onChange={(e) => setPsEditVal(e.target.value)}
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        savePartnershipSpendCell();
-                      }
-                      if (e.key === "Escape") {
-                        psSkipBlurRef.current = true;
-                        setPsEdit(null);
-                        setPsEditVal("");
-                      }
-                    }}
-                    onBlur={() => {
-                      if (psSkipBlurRef.current) {
-                        psSkipBlurRef.current = false;
-                        return;
-                      }
-                      savePartnershipSpendCell();
-                    }}
-                    style={{ width: width, padding: "3px 6px", borderRadius: 3, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 11, textAlign: align }}
-                  />
-                );
-              };
-
-              const sticky1 = { position: "sticky", left: 0, zIndex: 2, background: t.card };
-              const sticky2 = { position: "sticky", left: 100, zIndex: 2, background: t.card, boxShadow: `4px 0 8px -4px ${t.border}` };
-
+          {PIPELINE_SOP_TABS.map((sopTab) => {
+            const data = sheetData[sopTab];
+            if (!data?.rows?.length) {
               return (
-                <>
-                  {sectionsOrdered.map((section) => {
-                    const rows = currentSpend.filter((x) => x.section === section);
-                    const secPay = rows.reduce((s, r) => s + (Number(r.pay) || 0), 0);
-                    return (
-                      <div key={section} style={{ marginBottom: 28 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-                          <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{partnershipSectionLabel(section)}</div>
-                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: t.textMuted }}>Σ Pay {fmt(secPay)}</span>
-                            <button type="button" onClick={() => insertPartnershipRow(section)} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                              + Add row
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 2200 }}>
-                            <thead>
-                              <tr style={{ background: t.cardAlt }}>
-                                {[
-                                  ["Status", 100],
-                                  ["Creator", 120],
-                                  ["Pay", 72],
-                                  ["New Pay", 72],
-                                  ["P/L", 72],
-                                  ["Paid P/L", 72],
-                                  ["Platform", 88],
-                                  ["Ad Usage", 72],
-                                  ["O Views", 78],
-                                  ["Ad Views", 78],
-                                  ["Ad Spend", 78],
-                                  ["P Value", 78],
-                                  ["ROAS", 56],
-                                  ["Contract", 100],
-                                  ["Content Type", 100],
-                                  ["# Vids", 56],
-                                  ["Delivered", 72],
-                                  ["Paid", 56],
-                                  ["Name", 100],
-                                  ["Email", 120],
-                                  ["Address", 120],
-                                  ["Notes", 160],
-                                ].map(([label, w], i) => (
-                                  <th
-                                    key={label + i}
-                                    style={{
-                                      padding: "8px 6px",
-                                      textAlign: ["Status", "Creator", "Contract", "Content Type", "Name", "Email", "Address", "Notes", "Platform", "Ad Usage"].includes(label) ? "left" : "right",
-                                      fontSize: 9,
-                                      fontWeight: 700,
-                                      color: t.textFaint,
-                                      textTransform: "uppercase",
-                                      whiteSpace: "nowrap",
-                                      minWidth: w,
-                                      ...(i === 0 ? { ...sticky1, background: t.cardAlt, zIndex: 3 } : {}),
-                                      ...(i === 1 ? { ...sticky2, left: 100, background: t.cardAlt, zIndex: 3 } : {}),
-                                    }}
-                                  >
-                                    {label}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rows.map((r) => {
-                                const matched = findSpendCreator(r);
-                                const pl = spendComputePl(r);
-                                const roasV = spendComputeRoas(r) ?? (r.roas != null ? Number(r.roas) : null);
-                                const cells = [
-                                  { field: "status", w: 100, align: "left" },
-                                  { field: "_creator", w: 120, align: "left" },
-                                  { field: "pay", w: 72 },
-                                  { field: "new_pay", w: 72 },
-                                  { field: "_pl", w: 72 },
-                                  { field: "paid_pl", w: 72 },
-                                  { field: "platform", w: 88, align: "left" },
-                                  { field: "ad_usage", w: 72, align: "left" },
-                                  { field: "organic_views", w: 78 },
-                                  { field: "ad_views", w: 78 },
-                                  { field: "ad_spend", w: 78 },
-                                  { field: "purchase_value", w: 78 },
-                                  { field: "_roas", w: 56 },
-                                  { field: "contract", w: 100, align: "left" },
-                                  { field: "content_type", w: 100, align: "left" },
-                                  { field: "num_videos", w: 56 },
-                                  { field: "deliverable_met", w: 72, center: true },
-                                  { field: "creator_paid", w: 56, center: true },
-                                  { field: "creator_name", w: 100, align: "left" },
-                                  { field: "creator_email", w: 120, align: "left" },
-                                  { field: "creator_address", w: 120, align: "left" },
-                                  { field: "notes", w: 160, align: "left" },
-                                ];
-                                return (
-                                  <tr key={r.id} style={{ borderBottom: `1px solid ${t.border}08` }}>
-                                    {cells.map((c, ci) => {
-                                      const field = c.field;
-                                      if (field === "_pl") {
-                                        return (
-                                          <td key={`pl-${r.id}`} style={{ padding: "6px 6px", textAlign: "right", color: t.textMuted, whiteSpace: "nowrap" }}>
-                                            {pl == null ? "—" : fmtSigned(pl)}
-                                          </td>
-                                        );
-                                      }
-                                      if (field === "_roas") {
-                                        return (
-                                          <td key={`roas-${r.id}`} style={{ padding: "6px 6px", textAlign: "right", color: t.textMuted, fontVariantNumeric: "tabular-nums" }}>
-                                            {roasV == null ? "—" : roasV.toFixed(2)}
-                                          </td>
-                                        );
-                                      }
-                                      if (field === "_creator") {
-                                        const isEdit = psEdit?.rowId === r.id && psEdit?.field === "creator_handle";
-                                        return (
-                                          <td
-                                            key={`creator-${r.id}`}
-                                            style={{ padding: "6px 6px", ...sticky2, background: t.card, minWidth: 120 }}
-                                            onDoubleClick={() => {
-                                              setPsEdit({ rowId: r.id, field: "creator_handle" });
-                                              setPsEditVal(psVal(r, "creator_handle"));
-                                            }}
-                                          >
-                                            {isEdit ? (
-                                              renderPsInput(r, "creator_handle", 112, "left")
-                                            ) : (
-                                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                                <span style={{ color: t.text, fontWeight: 600 }}>{r.creator_handle || "—"}</span>
-                                                {matched ? (
-                                                  <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      navigate("creatorDetail", { creatorId: matched.id });
-                                                    }}
-                                                    style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.green, cursor: "pointer", fontWeight: 600 }}
-                                                  >
-                                                    Open
-                                                  </button>
-                                                ) : null}
-                                              </div>
-                                            )}
-                                          </td>
-                                        );
-                                      }
-                                      const isEdit = psEdit?.rowId === r.id && psEdit?.field === field;
-                                      const st = {
-                                        padding: "6px 6px",
-                                        textAlign: c.center ? "center" : c.align || "right",
-                                        color: t.textMuted,
-                                        fontSize: 11,
-                                        fontVariantNumeric: "tabular-nums",
-                                        ...(ci === 0 ? { ...sticky1 } : {}),
-                                        ...(ci === 1 ? { ...sticky2 } : {}),
-                                      };
-                                      let disp = "—";
-                                      if (field === "status") disp = r.status || "—";
-                                      else if (["pay", "new_pay", "paid_pl", "ad_spend", "purchase_value"].includes(field)) {
-                                        const x = r[field];
-                                        disp = x != null ? "$" + Number(x).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—";
-                                      } else if (field === "organic_views" || field === "ad_views" || field === "num_videos") {
-                                        const x = r[field];
-                                        disp = x != null ? Number(x).toLocaleString() : "—";
-                                      } else if (field === "deliverable_met" || field === "creator_paid") {
-                                        disp = r[field] ? "✓" : "☐";
-                                      } else if (field === "notes") {
-                                        const n = r.notes;
-                                        disp = n ? (String(n).length > 40 ? String(n).slice(0, 40) + "…" : String(n)) : "—";
-                                      } else {
-                                        const x = r[field];
-                                        disp = x != null && x !== "" ? String(x) : "—";
-                                      }
-                                      return (
-                                        <td
-                                          key={field}
-                                          style={st}
-                                          onDoubleClick={() => {
-                                            if (field === "deliverable_met" || field === "creator_paid") {
-                                              setPsEdit({ rowId: r.id, field });
-                                              setPsEditVal(psVal(r, field));
-                                              return;
-                                            }
-                                            setPsEdit({ rowId: r.id, field });
-                                            setPsEditVal(psVal(r, field));
-                                          }}
-                                        >
-                                          {isEdit ? renderPsInput(r, field, c.w - 12, c.align === "left" ? "left" : "right") : disp}
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                );
-                              })}
-                              <tr style={{ background: t.cardAlt, fontWeight: 800 }}>
-                                <td colSpan={2} style={{ padding: "8px 10px", ...sticky1, background: t.cardAlt, zIndex: 1 }}>
-                                  Section total
-                                </td>
-                                <td style={{ padding: "8px 6px", textAlign: "right", color: t.text }}>{fmt(secPay)}</td>
-                                <td colSpan={19} />
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div style={{ padding: "14px 16px", borderRadius: 10, border: `2px solid ${t.border}`, background: t.cardAlt, fontSize: 14, fontWeight: 800, color: t.text }}>Grand total (Pay): {fmt(grandPay)}</div>
-                </>
+                <div key={sopTab} style={{ marginBottom: 24, color: t.textFaint, fontSize: 13 }}>
+                  {sopTab}: no data
+                </div>
               );
-            })()
-          )}
+            }
+            return (
+              <div key={sopTab} style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 12 }}>{sopTab}</div>
+                {renderSheetTable(sopTab)}
+              </div>
+            );
+          })}
         </div>
-      )}
+      ) : null}
 
-      {tab === "tts" && <TTSWeeklyTab t={t} S={S} />}
-      {tab === "instagram" && <IGWeeklyTab t={t} S={S} />}
-      {["ugc", "youtube"].includes(tab) && <WeeklyMetricsTab channel={tab} t={t} S={S} />}
-
-      {tab === "sops" && <SOPsTab t={t} S={S} />}
-      {tab === "kpis" && <TeamKPIsTab t={t} S={S} />}
+      <div style={{ marginTop: 16, fontSize: 11, color: t.textFaint, opacity: 0.85 }}>
+        Data from Google Sheets · Last fetched: {lastFetchedRaw ? new Date(lastFetchedRaw).toLocaleString() : "—"}
+      </div>
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // APP

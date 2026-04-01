@@ -481,6 +481,76 @@ app.post("/api/reformat-all", async (req, res) => {
   }
 });
 
+// ── Google Sheets proxy (formatted values = formula results as shown in Sheets) ──
+const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID || "19uhZsRjNX43_VkNfStr_PwjVMO-5kCPZ";
+const GOOGLE_SHEETS_API_KEY = process.env.GOOGLE_SHEETS_API_KEY || "AIzaSyBdTkuWEXGuuoxKPzyTteD7EBOQcg5wkCc";
+const sheetsCache = new Map();
+const SHEETS_CACHE_TTL = 120000;
+
+function sheetsEncodeRange(tabName) {
+  const safe = String(tabName).replace(/'/g, "''");
+  return encodeURIComponent(`'${safe}'`);
+}
+
+app.get("/api/sheets/:tab", async (req, res) => {
+  const tab = decodeURIComponent(req.params.tab);
+  const cached = sheetsCache.get(tab);
+  if (cached && Date.now() - cached.fetchedAt < SHEETS_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const range = sheetsEncodeRange(tab);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}&valueRenderOption=FORMATTED_VALUE`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      console.error("[sheets] API error:", err.error?.message || resp.status);
+      return res.status(resp.status).json({ error: err.error?.message || `HTTP ${resp.status}` });
+    }
+
+    const data = await resp.json();
+    const result = {
+      tab,
+      rows: data.values || [],
+      rowCount: (data.values || []).length,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    sheetsCache.set(tab, { data: result, fetchedAt: Date.now() });
+    console.log(`[sheets] Fetched "${tab}": ${result.rowCount} rows`);
+    res.json(result);
+  } catch (e) {
+    console.error("[sheets] Fetch error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/sheets-tabs", async (req, res) => {
+  const cached = sheetsCache.get("__tabs__");
+  if (cached && Date.now() - cached.fetchedAt < SHEETS_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}?key=${GOOGLE_SHEETS_API_KEY}&fields=sheets.properties.title`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const tabs = (data.sheets || []).map((s) => s.properties.title);
+    const payload = { tabs };
+    sheetsCache.set("__tabs__", { data: payload, fetchedAt: Date.now() });
+    res.json(payload);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/sheets-refresh", (req, res) => {
+  sheetsCache.clear();
+  res.json({ status: "ok", message: "Cache cleared" });
+});
+
 // Static + SPA
 app.use(express.static(path.join(__dirname, "dist")));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "dist", "index.html")));
