@@ -1,11 +1,15 @@
-import { useState, useRef, useCallback, useEffect, memo, createContext, useContext } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
 
 // ═══ UPDATE THIS WITH EVERY PUSH ═══
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.5";
+const APP_VERSION = "1.3.6";
 const CHANGELOG = [
+  { version: "1.3.6", date: "2025-04-01", changes: [
+    "Platform selection changed to compact multi-select dropdown — reduces dead space in Brief Details",
+    "Dropdown shows selected platforms as comma-separated text, click to toggle options",
+  ]},
   { version: "1.3.5", date: "2025-04-01", changes: [
     "Softened rejection criteria language — now framed as revision requirements, not instant rejections",
   ]},
@@ -469,6 +473,8 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [managerSel, setManagerSel] = useState(pf.manager ?? DEFAULTS.manager);
   const [contentQty, setContentQty] = useState(pf.contentQuantity ?? DEFAULTS.contentQuantity);
   const [otherPlatformDraft, setOtherPlatformDraft] = useState("");
+  const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false);
+  const platformDropRef = useRef(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState(() => {
     const p = pf.platforms ?? DEFAULTS.platforms;
     if (Array.isArray(p) && p.length) return [...p];
@@ -625,6 +631,19 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
     };
   }, []);
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (platformDropRef.current && !platformDropRef.current.contains(e.target)) setPlatformDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const platformSummaryText = useMemo(() => {
+    if (!selectedPlatforms.length) return "None selected";
+    return selectedPlatforms.join(", ");
+  }, [selectedPlatforms]);
+
   const togglePlatform = (name) => {
     setSelectedPlatforms((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
   };
@@ -705,18 +724,6 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-            {showCustomManager && (
-              <div style={{ ...S.fg, marginBottom: 0 }}>
-                <input
-                  style={S.input}
-                  defaultValue={vals.current.customManager}
-                  onChange={(e) => { vals.current.customManager = e.target.value; }}
-                  onFocus={(e) => { e.target.style.borderColor = t.green; }}
-                  onBlur={(e) => { e.target.style.borderColor = t.border; }}
-                  placeholder="Enter your name"
-                />
-              </div>
-            )}
           </div>
           <div style={S.fg}>
             <label style={S.label}># of Videos Needed</label>
@@ -735,44 +742,165 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
               placeholder="e.g. 6"
             />
           </div>
-          <div style={{ ...S.fg, minWidth: 0 }}>
+          <div ref={platformDropRef} style={{ ...S.fg, minWidth: 0, position: "relative" }}>
             <label style={S.label}>Platform</label>
-            <div style={S.chipGrid}>
-              {PLATFORMS.map((p) => (
-                <div key={p} style={S.chip(selectedPlatforms.includes(p))} onClick={() => togglePlatform(p)}>
-                  {selectedPlatforms.includes(p) ? "✓ " : ""}{p}
-                </div>
-              ))}
-              {selectedPlatforms.filter((p) => !PLATFORMS.includes(p)).map((p) => (
-                <div key={`c-${p}`} style={S.chip(true)} onClick={() => togglePlatform(p)}>
-                  ✓ {p}
-                </div>
-              ))}
+            <div
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPlatformDropdownOpen((o) => !o); } }}
+              onClick={() => setPlatformDropdownOpen((o) => !o)}
+              style={{
+                ...S.select,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0, color: selectedPlatforms.length ? t.text : t.textFaint }}>
+                {platformSummaryText}
+              </span>
+              <span style={{ opacity: 0.55, fontSize: 10, flexShrink: 0 }}>▾</span>
             </div>
+            {platformDropdownOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: "100%",
+                  marginTop: 4,
+                  zIndex: 50,
+                  background: t.card,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 8,
+                  boxShadow: t.shadow || "0 4px 16px rgba(0,0,0,0.2)",
+                  padding: "4px 0",
+                  maxHeight: 240,
+                  overflowY: "auto",
+                }}
+              >
+                {PLATFORMS.map((p) => {
+                  const sel = selectedPlatforms.includes(p);
+                  return (
+                    <div key={p}>
+                      <div
+                        onClick={() => togglePlatform(p)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        style={{
+                          padding: "8px 14px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          cursor: "pointer",
+                          fontSize: 13,
+                          color: t.text,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: 4,
+                            border: `1px solid ${sel ? t.green : t.border}`,
+                            background: sel ? t.green : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {sel ? <span style={{ fontSize: 10, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span> : null}
+                        </span>
+                        <span>{p}</span>
+                      </div>
+                      {p === "Other" && selectedPlatforms.includes("Other") && (
+                        <div
+                          style={{ padding: "4px 14px 10px", borderBottom: `1px solid ${t.border}` }}
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <input
+                              style={{ ...S.input, flex: 1, minWidth: 120, marginBottom: 0 }}
+                              value={otherPlatformDraft}
+                              onChange={(e) => setOtherPlatformDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.preventDefault();
+                                addCustomPlatform();
+                              }}
+                              onFocus={(e) => { e.target.style.borderColor = t.green; }}
+                              onBlur={(e) => { e.target.style.borderColor = t.border; }}
+                              placeholder="e.g. Snapchat, Twitter/X, Pinterest..."
+                            />
+                            <button
+                              type="button"
+                              onClick={addCustomPlatform}
+                              style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {selectedPlatforms
+                  .filter((p) => !PLATFORMS.includes(p))
+                  .map((p) => (
+                      <div
+                        key={`extra-${p}`}
+                        onClick={() => togglePlatform(p)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        style={{
+                          padding: "8px 14px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          cursor: "pointer",
+                          fontSize: 13,
+                          color: t.text,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: 4,
+                            border: `1px solid ${t.green}`,
+                            background: t.green,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span style={{ fontSize: 10, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span>
+                        </span>
+                        <span>{p}</span>
+                      </div>
+                  ))}
+              </div>
+            )}
           </div>
         </div>
-        {selectedPlatforms.includes("Other") && (
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+        {showCustomManager && (
+          <div style={{ ...S.fg, marginTop: 14, marginBottom: 0 }}>
+            <label style={S.label}>Enter your name</label>
             <input
-              style={{ ...S.input, flex: 1, minWidth: 160, marginBottom: 0 }}
-              value={otherPlatformDraft}
-              onChange={(e) => setOtherPlatformDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                addCustomPlatform();
-              }}
+              style={S.input}
+              defaultValue={vals.current.customManager}
+              onChange={(e) => { vals.current.customManager = e.target.value; }}
               onFocus={(e) => { e.target.style.borderColor = t.green; }}
               onBlur={(e) => { e.target.style.borderColor = t.border; }}
-              placeholder="e.g. Snapchat, Twitter/X, Pinterest..."
+              placeholder="Enter your name"
             />
-            <button
-              type="button"
-              onClick={addCustomPlatform}
-              style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
-            >
-              Add
-            </button>
           </div>
         )}
       </div>
