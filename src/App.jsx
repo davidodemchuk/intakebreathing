@@ -4,8 +4,14 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext,
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.1";
+const APP_VERSION = "2.0.2";
 const CHANGELOG = [
+  { version: "2.0.2", date: "2025-04-01", changes: [
+    "ScrapeCreators API fully wired — paste TikTok or Instagram URL to fetch video data",
+    "Video preview with thumbnail, caption, author, and engagement stats",
+    "Download Original button for fetched videos",
+    "ScrapeCreators API key field added to Settings if not already present",
+  ]},
   { version: "2.0.1", date: "2025-04-01", changes: [
     "Code audit cleanup — removed dead code, fixed bugs, eliminated redundancies",
   ]},
@@ -344,94 +350,19 @@ const VIDEO_REFORMAT_GROUPS = [
   },
 ];
 
-/** Read at call time so Settings saves apply without reload */
-function getScrapeCreatorsKey() {
-  try {
-    return localStorage.getItem("intake-scrape-key") || "";
-  } catch {
-    return "";
-  }
+function formatCount(n) {
+  const x = Number(n);
+  if (!x || x === 0) return "0";
+  if (x >= 1000000) return (x / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (x >= 1000) return (x / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(Math.round(x));
 }
 
-function extractTikTokVideo(data) {
-  const ad = data?.aweme_detail;
-  if (!ad) return null;
-  const v = ad.video;
-  const w = v?.width;
-  const h = v?.height;
-  let playUrl = v?.play_addr?.url_list?.[0] || null;
-  if (!playUrl && Array.isArray(v?.bit_rate) && v.bit_rate[0]?.play_addr?.url_list?.[0]) {
-    playUrl = v.bit_rate[0].play_addr.url_list[0];
-  }
-  const thumb =
-    v?.cover?.url_list?.[0] ||
-    v?.origin_cover?.url_list?.[0] ||
-    v?.dynamic_cover?.url_list?.[0] ||
-    null;
-  const desc = ad.desc || "";
-  const author = ad.author?.nickname || ad.author?.unique_id || "—";
-  const st = ad.statistics || {};
-  return {
-    source: "tiktok",
-    videoUrl: playUrl,
-    thumbUrl: thumb,
-    caption: desc,
-    author,
-    width: w,
-    height: h,
-    stats: {
-      play: st.play_count,
-      like: st.digg_count,
-      share: st.share_count,
-      comment: st.comment_count,
-    },
-  };
-}
-
-function extractInstagramVideo(data) {
-  const media = data?.graphql?.shortcode_media || data?.items?.[0] || data;
-  let videoUrl =
-    data?.video_url ||
-    media?.video_url ||
-    media?.video_versions?.[0]?.url ||
-    data?.graphql?.shortcode_media?.video_url;
-  if (!videoUrl && Array.isArray(media?.video_versions)) {
-    const sorted = [...media.video_versions].sort((a, b) => (b.width || 0) - (a.width || 0));
-    videoUrl = sorted[0]?.url;
-  }
-  const thumb =
-    data?.thumbnail_url ||
-    data?.display_url ||
-    media?.display_url ||
-    media?.image_versions2?.candidates?.[0]?.url ||
-    data?.graphql?.shortcode_media?.display_url;
-  const caption =
-    (typeof data?.caption === "string" ? data.caption : data?.caption?.text) ||
-    media?.edge_media_to_caption?.edges?.[0]?.node?.text ||
-    "";
-  const author =
-    data?.owner?.username ||
-    media?.owner?.username ||
-    data?.user?.username ||
-    data?.graphql?.shortcode_media?.owner?.username ||
-    "—";
-  const w = data?.dimensions?.width || media?.dimensions?.width || data?.graphql?.shortcode_media?.dimensions?.width;
-  const h = data?.dimensions?.height || media?.dimensions?.height || data?.graphql?.shortcode_media?.dimensions?.height;
-  return {
-    source: "instagram",
-    videoUrl: videoUrl || null,
-    thumbUrl: thumb || null,
-    caption,
-    author,
-    width: w,
-    height: h,
-    stats: {
-      play: data?.video_view_count ?? media?.video_view_count,
-      like: data?.like_count ?? media?.edge_media_preview_like?.count,
-      comment: data?.comment_count ?? media?.edge_media_to_comment?.count,
-      share: data?.share_count,
-    },
-  };
+/** Heuristic: TikTok often returns duration in ms */
+function durationToSeconds(raw) {
+  const n = Number(raw) || 0;
+  if (n <= 0) return 0;
+  return n > 2000 ? Math.round(n / 1000) : Math.round(n);
 }
 
 function gcd(a, b) {
@@ -1806,7 +1737,7 @@ function VideoReformatter({ onBack }) {
   const [urlInput, setUrlInput] = useState("");
   const [fetchLoading, setFetchLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
-  const [fetched, setFetched] = useState(null);
+  const [fetchedVideo, setFetchedVideo] = useState(null);
   const [objectUrl, setObjectUrl] = useState(null);
   const [fileDims, setFileDims] = useState(null);
   const [remoteDims, setRemoteDims] = useState(null);
@@ -1824,6 +1755,12 @@ function VideoReformatter({ onBack }) {
     };
   }, []);
 
+  useEffect(() => {
+    setFetchedVideo(null);
+    setFetchError(null);
+    setRemoteDims(null);
+  }, [urlInput]);
+
   /** Prefer uploaded file dimensions when both URL and file exist */
   const displayDims = fileDims || remoteDims;
 
@@ -1839,7 +1776,7 @@ function VideoReformatter({ onBack }) {
     objectUrlRef.current = u;
     setObjectUrl(u);
     setFileDims(null);
-    setFetched(null);
+    setFetchedVideo(null);
     setRemoteDims(null);
     setFetchError(null);
   };
@@ -1854,10 +1791,15 @@ function VideoReformatter({ onBack }) {
   };
 
   const handleFetch = async () => {
-    const key = getScrapeCreatorsKey();
-    if (!key) {
-      setFetchError("Add your ScrapeCreators API key in Settings");
-      setFetched(null);
+    let scrapeKey = "";
+    try {
+      scrapeKey = localStorage.getItem("intake-scrape-key") || "";
+    } catch {
+      scrapeKey = "";
+    }
+    if (!scrapeKey.trim()) {
+      setFetchError("Add your ScrapeCreators API key in Settings first.");
+      setFetchedVideo(null);
       return;
     }
     const url = urlInput.trim();
@@ -1865,37 +1807,107 @@ function VideoReformatter({ onBack }) {
       setFetchError("Paste a video URL first.");
       return;
     }
-    const isTikTok = /tiktok\.com/i.test(url);
-    const isIg = /instagram\.com/i.test(url);
-    if (!isTikTok && !isIg) {
-      setFetchError("URL must be a TikTok or Instagram link.");
+    let platform;
+    if (/tiktok\.com/i.test(url)) platform = "tiktok";
+    else if (/instagram\.com/i.test(url)) platform = "instagram";
+    else {
+      setFetchError("Please paste a TikTok or Instagram URL");
+      setFetchedVideo(null);
       return;
     }
     setFetchError(null);
-    setFetched(null);
+    setFetchedVideo(null);
     setRemoteDims(null);
     setFetchLoading(true);
     try {
-      const endpoint = isTikTok
-        ? `https://api.scrapecreators.com/v2/tiktok/video?url=${encodeURIComponent(url)}`
-        : `https://api.scrapecreators.com/v1/instagram/post?url=${encodeURIComponent(url)}`;
-      const res = await fetch(endpoint, { headers: { "x-api-key": key } });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setFetchError(data?.message || data?.error || `Request failed (${res.status})`);
+      let videoData;
+      if (platform === "tiktok") {
+        const res = await Promise.race([
+          fetch("https://api.scrapecreators.com/v2/tiktok/video?url=" + encodeURIComponent(url), {
+            headers: { "x-api-key": scrapeKey },
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+        ]);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || data?.error || `Request failed (${res.status})`);
+        }
+        const ad = data.aweme_detail;
+        const v = ad?.video;
+        const rawDur = v?.duration ?? ad?.music?.duration ?? 0;
+        videoData = {
+          platform: "TikTok",
+          author: ad?.author?.nickname || "Unknown",
+          authorHandle: ad?.author?.unique_id || "",
+          caption: ad?.desc || "",
+          videoUrl: v?.play_addr?.url_list?.[0] || v?.bit_rate?.[0]?.play_addr?.url_list?.[0] || "",
+          coverUrl: v?.cover?.url_list?.[0] || v?.ai_dynamic_cover?.url_list?.[0] || "",
+          width: v?.width || 0,
+          height: v?.height || 0,
+          duration: durationToSeconds(rawDur),
+          stats: {
+            views: ad?.statistics?.play_count || 0,
+            likes: ad?.statistics?.digg_count || 0,
+            comments: ad?.statistics?.comment_count || 0,
+            shares: ad?.statistics?.share_count || 0,
+          },
+        };
+      } else {
+        const res = await Promise.race([
+          fetch("https://api.scrapecreators.com/v1/instagram/post?url=" + encodeURIComponent(url), {
+            headers: { "x-api-key": scrapeKey },
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+        ]);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || data?.error || `Request failed (${res.status})`);
+        }
+        const igCaption =
+          data.caption?.text ||
+          data.edge_media_to_caption?.edges?.[0]?.node?.text ||
+          (typeof data.caption === "string" ? data.caption : "") ||
+          "";
+        let videoUrl = data.video_url || data.video_versions?.[0]?.url || "";
+        if (!videoUrl && Array.isArray(data.video_versions)) {
+          const sorted = [...data.video_versions].sort((a, b) => (b?.width || 0) - (a?.width || 0));
+          videoUrl = sorted[0]?.url || "";
+        }
+        const coverUrl =
+          data.thumbnail_url ||
+          data.display_url ||
+          data.image_versions2?.candidates?.[0]?.url ||
+          "";
+        const uname = data.owner?.username || data.user?.username || "";
+        videoData = {
+          platform: "Instagram",
+          author: uname || "Unknown",
+          authorHandle: uname || "",
+          caption: igCaption,
+          videoUrl,
+          coverUrl,
+          width: data.original_width || data.dimensions?.width || 0,
+          height: data.original_height || data.dimensions?.height || 0,
+          duration: durationToSeconds(data.video_duration || 0),
+          stats: {
+            views: data.video_view_count || data.play_count || 0,
+            likes: data.like_count || data.edge_media_preview_like?.count || 0,
+            comments: data.comment_count || data.edge_media_to_comment?.count || 0,
+            shares: 0,
+          },
+        };
+      }
+      if (!videoData.videoUrl && !videoData.coverUrl) {
+        setFetchError("Could not read video from API response. The post may be private or unavailable.");
         return;
       }
-      const parsed = isTikTok ? extractTikTokVideo(data) : extractInstagramVideo(data);
-      if (!parsed || (!parsed.videoUrl && !parsed.thumbUrl)) {
-        setFetchError("Could not read video from API response. The post may be private or the response format changed.");
-        return;
-      }
-      setFetched(parsed);
-      if (parsed.width && parsed.height) {
-        setRemoteDims({ w: parsed.width, h: parsed.height, ar: aspectRatioLabel(parsed.width, parsed.height) });
+      setFetchedVideo(videoData);
+      if (videoData.width && videoData.height) {
+        setRemoteDims({ w: videoData.width, h: videoData.height, ar: aspectRatioLabel(videoData.width, videoData.height) });
       }
     } catch (e) {
-      setFetchError(e.message || "Network error — if this persists, the API may block browser requests (CORS).");
+      const msg = e?.message || "Something went wrong.";
+      setFetchError(msg === "TIMEOUT" ? "Request timed out. Try again." : msg);
     } finally {
       setFetchLoading(false);
     }
@@ -2014,7 +2026,7 @@ function VideoReformatter({ onBack }) {
         </button>
       </div>
       {fetchLoading && (
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Fetching video data…</div>
+        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Fetching video data...</div>
       )}
       {fetchError && (
         <div style={{ fontSize: 13, color: t.red, marginBottom: 14, padding: "12px 14px", background: t.red + "10", borderRadius: 8, border: `1px solid ${t.red}35` }}>
@@ -2022,68 +2034,137 @@ function VideoReformatter({ onBack }) {
         </div>
       )}
 
-      {fetched && (
+      {fetchedVideo && (
         <div
           style={{
             background: t.card,
             border: `1px solid ${t.border}`,
-            borderRadius: 16,
+            borderRadius: 12,
             padding: 20,
             marginBottom: 24,
             boxShadow: t.shadow,
           }}
         >
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, 200px) 1fr", gap: 16, alignItems: "start" }}>
-            {fetched.thumbUrl ? (
-              <img src={fetched.thumbUrl} alt="" style={{ width: "100%", borderRadius: 10, objectFit: "cover", aspectRatio: "9/16", background: t.cardAlt }} />
-            ) : (
-              <div style={{ aspectRatio: "9/16", background: t.cardAlt, borderRadius: 10 }} />
-            )}
-            <div>
-              <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>@{fetched.author}</div>
-              <div style={{ fontSize: 14, color: t.text, lineHeight: 1.5, marginBottom: 12 }}>{fetched.caption || "—"}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
-                {fetched.stats?.play != null && <span>▶ {Number(fetched.stats.play).toLocaleString()} plays</span>}
-                {fetched.stats?.like != null && <span>♥ {Number(fetched.stats.like).toLocaleString()}</span>}
-                {fetched.stats?.share != null && <span>↗ {Number(fetched.stats.share).toLocaleString()}</span>}
-                {fetched.stats?.comment != null && <span>💬 {Number(fetched.stats.comment).toLocaleString()}</span>}
-              </div>
-              {displayDims && (
-                <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12 }}>
-                  <strong style={{ color: t.text }}>Original:</strong> {displayDims.w}×{displayDims.h}px · aspect {displayDims.ar}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 20,
+              alignItems: "flex-start",
+            }}
+          >
+            <div style={{ flexShrink: 0 }}>
+              {fetchedVideo.coverUrl ? (
+                <img
+                  src={fetchedVideo.coverUrl}
+                  alt=""
+                  style={{ width: 200, maxWidth: "100%", height: "auto", minHeight: 120, borderRadius: 8, objectFit: "cover", display: "block", background: t.cardAlt }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 200,
+                    maxWidth: "100%",
+                    minHeight: 200,
+                    borderRadius: 8,
+                    background: t.isLight ? "#1a1a22" : "#0a0a10",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 48,
+                  }}
+                >
+                  🎥
                 </div>
               )}
-              {fetched.videoUrl && (
-                <>
-                  <div style={{ marginBottom: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
-                    <video
-                      src={fetched.videoUrl}
-                      controls
-                      playsInline
-                      style={{ width: "100%", maxHeight: 360, display: "block" }}
-                      onLoadedMetadata={(e) => {
-                        const el = e.target;
-                        if (el.videoWidth && el.videoHeight) {
-                          setRemoteDims({ w: el.videoWidth, h: el.videoHeight, ar: aspectRatioLabel(el.videoWidth, el.videoHeight) });
-                        }
-                      }}
-                    />
+            </div>
+            <div style={{ flex: "1 1 240px", paddingLeft: 20, minWidth: 0 }}>
+              <div style={{ marginBottom: 10 }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "4px 10px",
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    background: fetchedVideo.platform === "Instagram" ? t.purple + (t.isLight ? "22" : "18") : "#fe2c55" + (t.isLight ? "22" : "28"),
+                    color: fetchedVideo.platform === "Instagram" ? t.purple : "#fe2c55",
+                    border: fetchedVideo.platform === "Instagram" ? `1px solid ${t.purple}40` : "1px solid #fe2c5540",
+                  }}
+                >
+                  {fetchedVideo.platform}
+                </span>
+              </div>
+              <div style={{ marginBottom: 10, lineHeight: 1.4 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{fetchedVideo.author}</span>
+                {fetchedVideo.authorHandle ? (
+                  <span style={{ fontSize: 14, color: t.textFaint, fontWeight: 500 }}> @{fetchedVideo.authorHandle}</span>
+                ) : null}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: t.textSecondary,
+                  lineHeight: 1.55,
+                  marginBottom: 14,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {fetchedVideo.caption || "—"}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
+                {[
+                  { label: "Views", v: fetchedVideo.stats?.views },
+                  { label: "Likes", v: fetchedVideo.stats?.likes },
+                  { label: "Comments", v: fetchedVideo.stats?.comments },
+                  { label: "Shares", v: fetchedVideo.stats?.shares },
+                ].map((row) => (
+                  <div key={row.label} style={{ textAlign: "center", minWidth: 56 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{formatCount(row.v)}</div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{row.label}</div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => window.open(fetched.videoUrl, "_blank", "noopener,noreferrer")}
-                    style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: t.blue, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Download Original
-                  </button>
-                </>
-              )}
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 14 }}>
+                {fetchedVideo.width && fetchedVideo.height
+                  ? `${fetchedVideo.width} × ${fetchedVideo.height} (${aspectRatioLabel(fetchedVideo.width, fetchedVideo.height)})${fetchedVideo.duration ? ` · ${fetchedVideo.duration}s` : ""}`
+                  : displayDims
+                    ? `${displayDims.w} × ${displayDims.h} (${displayDims.ar})${fetchedVideo.duration ? ` · ${fetchedVideo.duration}s` : ""}`
+                    : fetchedVideo.duration
+                      ? `${fetchedVideo.duration}s`
+                      : "—"}
+              </div>
+              {fetchedVideo.videoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => window.open(fetchedVideo.videoUrl, "_blank", "noopener,noreferrer")}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: 8,
+                    border: `1px solid ${t.blue}`,
+                    background: "transparent",
+                    color: t.blue,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Download Original
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ fontSize: 13, fontWeight: 600, color: t.textSecondary, marginBottom: 10 }}>Or upload a video file directly</div>
+      {(fetchedVideo || displayDims) && renderFormatGrid()}
+
+      <div style={{ fontSize: 13, fontWeight: 600, color: t.textSecondary, marginTop: 8, marginBottom: 10 }}>Or upload a video file directly</div>
       <input ref={fileInputRef} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" style={{ display: "none" }} onChange={(e) => loadFile(e.target.files?.[0])} />
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -2130,7 +2211,6 @@ function VideoReformatter({ onBack }) {
         </div>
       )}
 
-      {displayDims && renderFormatGrid()}
     </div>
   );
 }
@@ -2816,7 +2896,7 @@ export default function App() {
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>ScrapeCreators API Key</div>
               <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-                Used for fetching TikTok and Instagram videos in the Video Reformatter tool. Get your key from{" "}
+                Used for fetching TikTok and Instagram videos in the Video Reformatter. Get your key from{" "}
                 <span style={{ color: t.blue, fontWeight: 600 }}>app.scrapecreators.com</span>.
               </div>
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
