@@ -39,8 +39,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.7.0";
+const APP_VERSION = "5.8.0";
 const CHANGELOG = [
+  { version: "5.8.0", date: "2026-04-01", changes: [
+    "One-click 'Download All Formats' button — ZIP with 1x1, 4x5, 9x16, 16x9",
+  ]},
   { version: "5.7.0", date: "2026-04-01", changes: [
     "Manager authentication — password-protected dashboard",
     "Login persists across sessions via Supabase app_settings",
@@ -4574,6 +4577,7 @@ function VideoReformatter({ onBack }) {
   const [video, setVideo] = useState(null); // fetched video data
   const [downloading, setDownloading] = useState({}); // {formatId: true}
   const [downloadError, setDownloadError] = useState(null);
+  const [batchDownloading, setBatchDownloading] = useState(false);
 
   // Fetch video from ScrapeCreators
   const fetchVideo = async () => {
@@ -4716,6 +4720,49 @@ function VideoReformatter({ onBack }) {
       setDownloadError(`Download failed: ${e.message}`);
     } finally {
       setDownloading((prev) => ({ ...prev, original: false }));
+    }
+  };
+
+  const downloadAll = async () => {
+    if (!video) return;
+    setBatchDownloading(true);
+    setDownloadError(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 600000);
+    try {
+      const res = await fetch("/api/reformat-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cacheId: video.cacheId || null,
+          videoUrl: video.cacheId ? null : video.videoUrl,
+          authorHandle: video.authorHandle || "video",
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server returned ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${video.authorHandle || "video"}_all_formats.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      if (e.name === "AbortError") {
+        setDownloadError("Batch processing timed out. Try downloading formats individually.");
+      } else {
+        setDownloadError(`Batch download failed: ${e.message}`);
+      }
+    } finally {
+      clearTimeout(timeout);
+      setBatchDownloading(false);
     }
   };
 
@@ -4892,11 +4939,45 @@ function VideoReformatter({ onBack }) {
               <button
                 type="button"
                 onClick={downloadOriginal}
-                disabled={downloading.original}
-                style={{ ...S.btnP, padding: "10px 20px", fontSize: 13, opacity: downloading.original ? 0.6 : 1 }}
+                disabled={downloading.original || batchDownloading}
+                style={{ ...S.btnP, padding: "10px 20px", fontSize: 13, opacity: downloading.original || batchDownloading ? 0.6 : 1 }}
               >
                 {downloading.original ? "Downloading..." : "Download Original"}
               </button>
+              {(video.cacheId || video.videoUrl) ? (
+                <button
+                  type="button"
+                  onClick={() => void downloadAll()}
+                  disabled={batchDownloading}
+                  style={{
+                    padding: "12px 24px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: batchDownloading ? t.cardAlt : t.green,
+                    color: batchDownloading ? t.textMuted : (t.isLight ? "#fff" : "#000"),
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: batchDownloading ? "wait" : "pointer",
+                    opacity: batchDownloading ? 0.7 : 1,
+                    marginTop: 8,
+                    width: "100%",
+                  }}
+                >
+                  {batchDownloading ? "Processing 4 formats..." : "⬇ Download All Formats (ZIP)"}
+                </button>
+              ) : null}
+              {!batchDownloading ? (
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
+                  1×1 Square · 4×5 Feed · 9×16 Story · 16×9 Landscape
+                </div>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 4 }}>This may take 1-2 minutes...</div>
+                  <div style={{ height: 3, borderRadius: 2, background: t.border, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: t.green, borderRadius: 2, animation: "pulse 1.5s ease-in-out infinite", width: "60%" }} />
+                  </div>
+                </div>
+              )}
               {video.cacheId ? (
                 <div style={{ fontSize: 11, color: t.green, marginTop: 6 }}>✓ Video cached — ready to reformat</div>
               ) : (
@@ -4910,10 +4991,10 @@ function VideoReformatter({ onBack }) {
       {/* Format cards — always show as reference, clickable when video is fetched */}
       <div style={{ marginTop: video ? 0 : 32 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>
-          {video ? "Reformat & Download" : "Format Reference"}
+          {video ? "Individual Formats" : "Format Reference"}
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>
-          {video ? "Click any format to download the reformatted video. Uses blurred background when changing aspect ratios." : "Fetch a video above to enable downloads. Use these specs as a reference for manual reformatting."}
+          {video ? "Or download formats individually:" : "Fetch a video above to enable downloads. Use these specs as a reference for manual reformatting."}
         </div>
 
         {VIDEO_REFORMAT_GROUPS.map((group) => (
@@ -4922,7 +5003,7 @@ function VideoReformatter({ onBack }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
               {group.items.map((item) => {
                 const isLoading = !!downloading[item.id];
-                const canClick = !!video && !!(video.cacheId || video.videoUrl) && !isLoading;
+                const canClick = !!video && !!(video.cacheId || video.videoUrl) && !isLoading && !batchDownloading;
                 return (
                   <div
                     key={item.id}

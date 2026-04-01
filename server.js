@@ -6,6 +6,7 @@ import https from "https";
 import http from "http";
 import { fileURLToPath } from "url";
 import { execFile } from "child_process";
+import archiver from "archiver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -247,6 +248,139 @@ app.post("/api/proxy-download", async (req, res) => {
     stream.on("error", () => { if (needsCleanup) try { fs.unlinkSync(filePath); } catch {} });
   } catch (e) {
     if (needsCleanup) try { fs.unlinkSync(filePath); } catch {}
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Batch reformat — all 4 ad ratios in a ZIP ──
+app.post("/api/reformat-all", async (req, res) => {
+  const { videoUrl, cacheId, authorHandle } = req.body;
+  if (!videoUrl && !cacheId) return res.status(400).json({ error: "Missing video source" });
+
+  const formats = [
+    { name: "1x1_Square", width: 1080, height: 1080 },
+    { name: "4x5_Feed", width: 1080, height: 1350 },
+    { name: "9x16_Story", width: 1080, height: 1920 },
+    { name: "16x9_Landscape", width: 1920, height: 1080 },
+  ];
+
+  const tmp = os.tmpdir();
+  let inp;
+  let needsCleanupInp = false;
+  const outputFiles = [];
+
+  if (cacheId && videoCache.has(cacheId)) {
+    inp = videoCache.get(cacheId).filePath;
+  } else if (videoUrl) {
+    inp = path.join(tmp, `batch-in-${Date.now()}.mp4`);
+    needsCleanupInp = true;
+    try {
+      await download(videoUrl, inp);
+      const sz = fs.statSync(inp).size;
+      if (sz < 5000) throw new Error("Download too small — video URL may have expired.");
+    } catch (e) {
+      if (needsCleanupInp) try { fs.unlinkSync(inp); } catch {}
+      return res.status(500).json({ error: e.message });
+    }
+  } else {
+    return res.status(400).json({ error: "Video not found in cache. Re-fetch the video." });
+  }
+
+  let srcW = 1080;
+  let srcH = 1920;
+  try {
+    const probe = await new Promise((ok, no) =>
+      execFile(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_streams", inp], { timeout: 15000, maxBuffer: 2097152 }, (e, o) => (e ? no(e) : ok(JSON.parse(o)))),
+    );
+    const vs = probe.streams?.find((s) => s.codec_type === "video");
+    if (vs) {
+      srcW = vs.width || 1080;
+      srcH = vs.height || 1920;
+    }
+  } catch {}
+
+  const prefix = (authorHandle || "video").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const ts = Date.now();
+
+  try {
+    console.log(`[batch] Processing ${formats.length} formats from ${inp.split("/").pop()}...`);
+
+    for (let i = 0; i < formats.length; i++) {
+      const fmt = formats[i];
+      const outPath = path.join(tmp, `${prefix}_${fmt.name}_${ts}_${i}.mp4`);
+      const w = fmt.width;
+      const h = fmt.height;
+      const srcA = srcW / srcH;
+      const tgtA = w / h;
+
+      let vf;
+      if (Math.abs(srcA - tgtA) < 0.05) {
+        vf = ["-vf", `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black`];
+      } else {
+        vf = [
+          "-filter_complex",
+          `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=20:20[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`,
+        ];
+      }
+
+      console.log(`[batch] ${fmt.name} (${w}x${h})...`);
+      await new Promise((ok, no) => {
+        execFile(
+          FFMPEG,
+          ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", outPath],
+          { timeout: 300000, maxBuffer: 10485760 },
+          (e, _, stderr) => (e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok()),
+        );
+      });
+
+      outputFiles.push({ path: outPath, name: `${prefix}_${fmt.name}.mp4` });
+      console.log(`[batch] ${fmt.name} done.`);
+    }
+
+    const zipName = `${prefix}_all_formats.zip`;
+    res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+    res.setHeader("Content-Type", "application/zip");
+
+    const archive = archiver("zip", { zlib: { level: 1 } });
+    archive.on("error", (e) => {
+      console.error("[batch] Archive error:", e);
+      if (!res.headersSent) res.status(500).json({ error: "ZIP creation failed" });
+    });
+
+    const cleanupBatch = () => {
+      for (const f of outputFiles) {
+        try {
+          fs.unlinkSync(f.path);
+        } catch {}
+      }
+      if (needsCleanupInp) {
+        try {
+          fs.unlinkSync(inp);
+        } catch {}
+      }
+      console.log("[batch] ZIP finished, temp files cleaned.");
+    };
+
+    res.on("finish", cleanupBatch);
+
+    archive.pipe(res);
+    for (const f of outputFiles) {
+      archive.file(f.path, { name: f.name });
+    }
+
+    await archive.finalize();
+  } catch (e) {
+    for (const f of outputFiles) {
+      try {
+        fs.unlinkSync(f.path);
+      } catch {}
+    }
+    if (needsCleanupInp) {
+      try {
+        fs.unlinkSync(inp);
+      } catch {}
+    }
+    console.error("[batch] ERROR:", e.message);
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
 });
