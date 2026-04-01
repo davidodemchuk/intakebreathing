@@ -1,5 +1,14 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
 import SEED_CREATORS from "./seedCreators.json";
+import {
+  migrateLocalStorageToSupabase,
+  dbLoadCreators,
+  dbLoadBriefs,
+  dbUpsertCreator,
+  dbInsertBrief,
+  dbDeleteBrief,
+  dbUpdateBriefForm,
+} from "./supabaseDb.js";
 
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
@@ -27,8 +36,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.10.0";
+const APP_VERSION = "4.0.0";
 const CHANGELOG = [
+  { version: "4.0.0", date: "2026-04-01", changes: [
+    "Supabase database integration — creators and briefs now stored in a real database",
+    "Data persists across devices and browsers",
+    "Foundation for creator portal (creators can access their own data)",
+    "One-time migration moves existing localStorage data to Supabase",
+  ]},
   { version: "3.10.0", date: "2026-04-01", changes: [
     "Per-platform editable handles — Instagram, TikTok, YouTube, Twitter each get their own handle",
     "PlatformCard component — clickable to open profile, editable handle with save/cancel",
@@ -5461,65 +5476,71 @@ export default function App() {
     catch {}
   };
 
-  // ── Load from storage on mount ──
+  // ── Load from Supabase on mount ──
   useEffect(() => {
-    const themeVal = storageGet("intake-theme");
-    if (themeVal) setIsDark(themeVal === "dark");
+    let cancelled = false;
 
-    const libVal = storageGet("intake-library");
-    if (libVal) {
-      try {
-        const parsed = JSON.parse(libVal);
-        if (Array.isArray(parsed) && parsed.length > 0) setLibrary(parsed);
-      } catch {}
-    }
+    async function loadData() {
+      await migrateLocalStorageToSupabase();
 
-    const keyVal = storageGet("intake-apikey");
-    if (keyVal) setApiKey(keyVal);
-
-    const scrapeVal = storageGet("intake-scrape-key");
-    if (scrapeVal) setScrapeKey(scrapeVal);
-
-    const creatorsVal = storageGet("intake-creators");
-    if (creatorsVal) {
-      try {
-        const parsed = JSON.parse(creatorsVal);
-        if (Array.isArray(parsed)) setCreators(parsed.map(hydrateCreator));
-      } catch {}
-    } else {
-      setCreators(JSON.parse(JSON.stringify(SEED_CREATORS)).map(hydrateCreator));
-    }
-
-    setStorageReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    setCreators((prev) =>
-      prev.map((c) => {
-        const clean = String(c.handle || "").replace("@", "").trim();
-        return hydrateCreator({
-          ...c,
-          tiktokHandle: c.tiktokHandle || clean,
-          instagramHandle: c.instagramHandle || clean,
-          youtubeHandle: c.youtubeHandle || "",
-          twitterHandle: c.twitterHandle || "",
+      const applyPlatformHandleDefaults = (list) =>
+        list.map((c) => {
+          const clean = String(c.handle || "").replace("@", "").trim();
+          return hydrateCreator({
+            ...c,
+            tiktokHandle: c.tiktokHandle || clean,
+            instagramHandle: c.instagramHandle || clean,
+            youtubeHandle: c.youtubeHandle || "",
+            twitterHandle: c.twitterHandle || "",
+          });
         });
-      })
-    );
-  }, [storageReady]);
 
-  // ── Save library whenever it changes ──
-  useEffect(() => {
-    if (!storageReady) return;
-    storageSet("intake-library", JSON.stringify(library));
-  }, [library, storageReady]);
+      const dbCreators = await dbLoadCreators();
+      if (!cancelled && dbCreators && dbCreators.length > 0) {
+        setCreators(applyPlatformHandleDefaults(dbCreators.map((c) => hydrateCreator(c))));
+        console.log(`[init] Loaded ${dbCreators.length} creators from Supabase`);
+      } else if (!cancelled) {
+        console.log("[init] No creators in Supabase, loading seed data...");
+        const seedLoaded = SEED_CREATORS.map((c, i) => hydrateCreator({ ...c, id: c.id || `seed-${i}` }));
+        setCreators(seedLoaded);
+        for (const c of seedLoaded) {
+          await dbUpsertCreator(c);
+        }
+        const fresh = await dbLoadCreators();
+        if (!cancelled && fresh && fresh.length > 0) setCreators(applyPlatformHandleDefaults(fresh.map((c) => hydrateCreator(c))));
+      }
 
-  // ── Save creators roster ──
-  useEffect(() => {
-    if (!storageReady) return;
-    storageSet("intake-creators", JSON.stringify(creators));
-  }, [creators, storageReady]);
+      const dbBriefs = await dbLoadBriefs();
+      if (!cancelled && dbBriefs && dbBriefs.length > 0) {
+        setLibrary(dbBriefs);
+        console.log(`[init] Loaded ${dbBriefs.length} briefs from Supabase`);
+      } else if (!cancelled) {
+        const libVal = localStorage.getItem("intake-library");
+        if (libVal) {
+          try {
+            const parsed = JSON.parse(libVal);
+            if (Array.isArray(parsed) && parsed.length > 0) setLibrary(parsed);
+          } catch {}
+        }
+      }
+
+      const themeVal = storageGet("intake-theme");
+      if (themeVal && !cancelled) setIsDark(themeVal === "dark");
+
+      const keyVal = storageGet("intake-apikey");
+      if (keyVal && !cancelled) setApiKey(keyVal);
+
+      const scrapeVal = storageGet("intake-scrape-key");
+      if (scrapeVal && !cancelled) setScrapeKey(scrapeVal);
+
+      if (!cancelled) setStorageReady(true);
+    }
+
+    loadData();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Save theme preference ──
   useEffect(() => {
@@ -5566,31 +5587,58 @@ export default function App() {
   const S = getS(t);
   const ctx = { t, S };
 
-  const saveBrief = useCallback((brief, formData) => {
-    const existing = formData.shareId != null && String(formData.shareId).trim() !== "";
-    const shareId = existing ? String(formData.shareId).trim() : genShareId();
-    const fd = { ...formData, shareId };
-    setCurrentBrief(brief);
-    setCurrentFormData(fd);
-    setLibrary(prev => [{ id: Date.now(), shareId, name: fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName), brief, formData: fd, date: new Date().toLocaleDateString() }, ...prev]);
-    setFormKey(k => k + 1);
-    navigate("display");
-  }, [navigate]);
+  const saveBrief = useCallback(
+    async (brief, formData) => {
+      const existing = formData.shareId != null && String(formData.shareId).trim() !== "";
+      const shareId = existing ? String(formData.shareId).trim() : genShareId();
+      const fd = { ...formData, shareId };
+      const briefObj = {
+        name: fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName) || "Brief",
+        brief,
+        formData: fd,
+        shareId,
+      };
+      const inserted = await dbInsertBrief(briefObj);
+      const entry =
+        inserted || {
+          id: Date.now(),
+          shareId,
+          name: briefObj.name,
+          brief,
+          formData: fd,
+          date: new Date().toLocaleDateString(),
+        };
 
-  const openLibraryItem = useCallback((item) => {
-    let fd = item.formData;
-    if (!fd.shareId) {
-      const shareId = genShareId();
-      fd = { ...fd, shareId };
-      setLibrary((prev) => prev.map((x) => (x.id === item.id ? { ...x, formData: fd, shareId } : x)));
-    }
-    setCurrentBrief(item.brief);
-    setCurrentFormData(fd);
-    navigate("display");
-  }, [navigate]);
+      setCurrentBrief(brief);
+      setCurrentFormData(fd);
+      setLibrary((prev) => [entry, ...prev]);
+      setFormKey((k) => k + 1);
+      navigate("display");
+    },
+    [navigate]
+  );
+
+  const openLibraryItem = useCallback(
+    (item) => {
+      let fd = item.formData || item.form_data;
+      if (!fd || typeof fd !== "object") fd = {};
+      const brief = item.brief || item.brief_data || {};
+      if (!fd.shareId) {
+        const shareId = genShareId();
+        fd = { ...fd, shareId };
+        setLibrary((prev) => prev.map((x) => (x.id === item.id ? { ...x, formData: fd, shareId } : x)));
+        dbUpdateBriefForm(item.id, { form_data: fd, share_id: shareId }).catch((e) => console.error("[save] Brief share id update failed:", e));
+      }
+      setCurrentBrief(brief);
+      setCurrentFormData(fd);
+      navigate("display");
+    },
+    [navigate]
+  );
 
   const deleteBrief = useCallback((id) => {
-    setLibrary(prev => prev.filter(item => item.id !== id));
+    setLibrary((prev) => prev.filter((item) => item.id !== id));
+    dbDeleteBrief(id).catch((e) => console.error("[save] Brief delete failed:", e));
   }, []);
 
   const updateCreator = useCallback((id, updates) => {
@@ -5620,6 +5668,7 @@ export default function App() {
             merged[key] = val;
           }
         }
+        dbUpsertCreator(merged).catch((e) => console.error("[save] Creator update failed:", e));
         return merged;
       })
     );
@@ -5784,11 +5833,21 @@ export default function App() {
         campaigns: [],
         payments: [],
       };
-      setCreators((p) => [hydrateCreator(row), ...p]);
-      setAddHandleInput("");
-      setCreatorImportToast("Add your ScrapeCreators API key in Settings to auto-pull creator data");
-      setTimeout(() => setCreatorImportToast(null), 8000);
-      navigate("creatorDetail", { creatorId: id });
+      const hydrated = hydrateCreator(row);
+      const inserted = await dbUpsertCreator(hydrated);
+      if (inserted) {
+        setCreators((p) => [inserted, ...p]);
+        setAddHandleInput("");
+        setCreatorImportToast("Add your ScrapeCreators API key in Settings to auto-pull creator data");
+        setTimeout(() => setCreatorImportToast(null), 8000);
+        navigate("creatorDetail", { creatorId: inserted.id });
+      } else {
+        setCreators((p) => [hydrated, ...p]);
+        setAddHandleInput("");
+        setCreatorImportToast("Add your ScrapeCreators API key in Settings to auto-pull creator data");
+        setTimeout(() => setCreatorImportToast(null), 8000);
+        navigate("creatorDetail", { creatorId: id });
+      }
       return;
     }
 
@@ -5811,7 +5870,7 @@ export default function App() {
       const ttBio = payload?.ttData?.bio || "";
       const igFromBio = ttBio.match(/(?:ig|insta|instagram)[:\s]*@?([a-zA-Z0-9_.]+)/i)?.[1] || "";
       const ytFromBio = ttBio.match(/(?:yt|youtube)[:\s]*@?([a-zA-Z0-9_.]+)/i)?.[1] || "";
-      const id = `c-${Date.now()}`;
+      const localId = `c-${Date.now()}`;
       const stub = {
         niche: "",
         quality: "Standard",
@@ -5820,7 +5879,7 @@ export default function App() {
       };
       const patch = ai ? mergeAiFieldsIntoExisting(stub, ai) : {};
       const base = {
-        id,
+        id: localId,
         status: "Active",
         handle: `@${cleanHandle}`,
         name: payload.nickname || "",
@@ -5867,13 +5926,25 @@ export default function App() {
       };
       const merged = { ...base, ...patch };
       const newCreator = { ...merged, ...enrichPatchWithCpm(stub, patch, merged) };
-      setCreators((p) => [hydrateCreator(newCreator), ...p]);
-      setAddHandleInput("");
-      if (payload.notes.length) {
-        setCreatorImportToast(payload.notes.filter(Boolean).join(" "));
-        setTimeout(() => setCreatorImportToast(null), 10000);
+      const hydratedNew = hydrateCreator(newCreator);
+      const inserted = await dbUpsertCreator(hydratedNew);
+      if (inserted) {
+        setCreators((p) => [inserted, ...p]);
+        setAddHandleInput("");
+        if (payload.notes.length) {
+          setCreatorImportToast(payload.notes.filter(Boolean).join(" "));
+          setTimeout(() => setCreatorImportToast(null), 10000);
+        }
+        navigate("creatorDetail", { creatorId: inserted.id });
+      } else {
+        setCreators((p) => [hydratedNew, ...p]);
+        setAddHandleInput("");
+        if (payload.notes.length) {
+          setCreatorImportToast(payload.notes.filter(Boolean).join(" "));
+          setTimeout(() => setCreatorImportToast(null), 10000);
+        }
+        navigate("creatorDetail", { creatorId: localId });
       }
-      navigate("creatorDetail", { creatorId: id });
     } catch (e) {
       const msg = e?.message || String(e);
       if (msg === "NOT_FOUND" || e?.status === 404) {
@@ -6029,10 +6100,13 @@ export default function App() {
                 id: next[ix].id,
                 videoLog: Array.isArray(next[ix].videoLog) ? next[ix].videoLog : [],
               });
+              dbUpsertCreator(next[ix]).catch((e) => console.error("[save] CSV creator update failed:", e));
               updateCount++;
             } else {
               const id = `c-import-${Date.now()}-${newCount}-${Math.random().toString(36).slice(2, 7)}`;
-              next.push(hydrateCreator({ id, ...rowObj }));
+              const added = hydrateCreator({ id, ...rowObj });
+              next.push(added);
+              dbUpsertCreator(added).catch((e) => console.error("[save] CSV creator insert failed:", e));
               idxByHandle.set(key, next.length - 1);
               newCount++;
             }
@@ -6195,7 +6269,7 @@ export default function App() {
 
   const handleGenerate = useCallback(async (formData) => {
     if (formData.mode === "template") {
-      saveBrief(generateBrief(formData), formData);
+      await saveBrief(generateBrief(formData), formData);
       return;
     }
 
@@ -6259,8 +6333,10 @@ export default function App() {
       deferredSuccess = true;
       stopStepAnimation(true);
       setTimeout(() => {
-        saveBrief(brief, formData);
-        setAiLoading(false);
+        void (async () => {
+          await saveBrief(brief, formData);
+          setAiLoading(false);
+        })();
       }, 600);
     } catch (err) {
       if (cancelledRef.current) return;
@@ -6284,8 +6360,8 @@ export default function App() {
     setAiError(null);
   };
 
-  const handleRegenTemplate = useCallback(() => {
-    if (currentFormData) saveBrief(generateBrief(currentFormData), { ...currentFormData, mode: "template" });
+  const handleRegenTemplate = useCallback(async () => {
+    if (currentFormData) await saveBrief(generateBrief(currentFormData), { ...currentFormData, mode: "template" });
   }, [currentFormData, saveBrief]);
 
   const handleRegenAI = useCallback(() => {
@@ -6787,6 +6863,14 @@ export default function App() {
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
             <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable IB-Ai.</div>
+
+            <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database</div>
+              <div style={{ fontSize: 13, color: t.green, fontWeight: 500 }}>✓ Connected to Supabase</div>
+              <div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>
+                {creators.length} creators · {library.length} briefs synced
+              </div>
+            </div>
 
             {/* API Key Section */}
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
