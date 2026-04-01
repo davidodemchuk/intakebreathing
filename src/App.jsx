@@ -27,8 +27,12 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.6.1";
+const APP_VERSION = "3.6.2";
 const CHANGELOG = [
+  { version: "3.6.2", date: "2026-04-01", changes: [
+    "Estimated rate now uses CPM calculation from actual video performance, not AI guessing",
+    "Shows CPM, average views, and calculated rate per video with full breakdown",
+  ]},
   { version: "3.6.1", date: "2026-04-01", changes: [
     "Creator detail auto-detects primary platform — links to Instagram or TikTok based on where they're biggest",
     "Platform cards are now clickable — opens the creator's profile on that platform",
@@ -898,6 +902,7 @@ function normalizeCreatorRow(c) {
           }
         : { niche: false, quality: false, costPerVideo: false },
     tiktokBestVideo: c.tiktokBestVideo && typeof c.tiktokBestVideo === "object" ? c.tiktokBestVideo : null,
+    cpmData: c.cpmData && typeof c.cpmData === "object" ? c.cpmData : null,
     outreachStatus: c.outreachStatus ?? null,
     lastContactDate: c.lastContactDate ?? null,
     contactMethod: c.contactMethod ?? null,
@@ -972,6 +977,116 @@ function formatMetricShort(n) {
   if (x < 1000) return String(Math.round(x));
   if (x < 1_000_000) return `${(x / 1000).toFixed(x >= 10_000 ? 0 : 1)}K`;
   return `${(x / 1_000_000).toFixed(x >= 10_000_000 ? 1 : 2)}M`.replace(/\.0M$/, "M");
+}
+
+/**
+ * Calculate suggested rate per video based on CPM and actual view data.
+ * Returns { cpmLow, cpmHigh, cpmTier, avgViews, platform, videoCount, rateLow, rateHigh, rateDisplay, explanation }
+ */
+function calculateCreatorCPM(creator) {
+  const igFollowers = creator.instagramData?.followers || 0;
+  const ttFollowers = creator.tiktokData?.followers || 0;
+  const totalFollowers = Math.max(igFollowers, ttFollowers);
+
+  let cpmLow, cpmHigh, tier;
+  if (totalFollowers < 10000) {
+    cpmLow = 10;
+    cpmHigh = 20;
+    tier = "Nano";
+  } else if (totalFollowers < 50000) {
+    cpmLow = 15;
+    cpmHigh = 25;
+    tier = "Micro";
+  } else if (totalFollowers < 200000) {
+    cpmLow = 20;
+    cpmHigh = 35;
+    tier = "Mid-tier";
+  } else if (totalFollowers < 1000000) {
+    cpmLow = 25;
+    cpmHigh = 40;
+    tier = "Macro";
+  } else {
+    cpmLow = 30;
+    cpmHigh = 50;
+    tier = "Mega";
+  }
+
+  const ttAvgViews = creator.tiktokData?.avgViews || creator.tiktokAvgViews || 0;
+  const igRecentPosts = creator.instagramRecentPosts || [];
+  const igAvgViews =
+    igRecentPosts.length > 0
+      ? Math.round(igRecentPosts.reduce((sum, p) => sum + (p.likes || 0), 0) / igRecentPosts.length)
+      : 0;
+
+  let avgViews, platform, videoCount;
+  if (ttAvgViews > 0 && ttFollowers > 0) {
+    avgViews = ttAvgViews;
+    platform = "TikTok";
+    videoCount = (creator.tiktokData?.recentVideos || []).length || 15;
+  } else if (igAvgViews > 0) {
+    avgViews = igAvgViews * 12;
+    platform = "Instagram (estimated from likes)";
+    videoCount = igRecentPosts.length;
+  } else {
+    return null;
+  }
+
+  const rateLow = Math.round((avgViews / 1000) * cpmLow);
+  const rateHigh = Math.round((avgViews / 1000) * cpmHigh);
+
+  const finalLow = Math.max(50, rateLow);
+  const finalHigh = Math.max(75, rateHigh);
+
+  const cappedLow = Math.min(finalLow, 5000);
+  const cappedHigh = Math.min(finalHigh, 10000);
+
+  const explanation =
+    `Based on ${formatMetricShort(avgViews)} average views across ${videoCount} recent ${platform.includes("Instagram") ? "posts" : "videos"} on ${platform.split(" (")[0]}. ` +
+    `${tier} tier CPM range: $${cpmLow}-${cpmHigh} per 1,000 views. ` +
+    `Calculation: ${formatMetricShort(avgViews)} views ÷ 1,000 × $${cpmLow}-${cpmHigh} CPM = $${cappedLow}-${cappedHigh} per video.`;
+
+  return {
+    cpmLow,
+    cpmHigh,
+    cpmTier: tier,
+    avgViews,
+    platform: platform.split(" (")[0],
+    videoCount,
+    rateLow: cappedLow,
+    rateHigh: cappedHigh,
+    rateDisplay: cappedLow === cappedHigh ? `$${cappedLow}` : `$${cappedLow}-${cappedHigh}`,
+    explanation,
+  };
+}
+
+/** After enrichment, attach cpmData and optionally auto-fill costPerVideo from CPM (or legacy AI rate). */
+function enrichPatchWithCpm(creatorBefore, patch, mergedCreator) {
+  const prevAf =
+    creatorBefore && creatorBefore.aiAutoFilled && typeof creatorBefore.aiAutoFilled === "object"
+      ? creatorBefore.aiAutoFilled
+      : { niche: false, quality: false, costPerVideo: false };
+  const baseAf = patch && patch.aiAutoFilled && typeof patch.aiAutoFilled === "object" ? patch.aiAutoFilled : {};
+  const emptyCost = !String((creatorBefore && creatorBefore.costPerVideo) || "").trim();
+  const cpmCalc = calculateCreatorCPM(mergedCreator);
+  const updates = { ...(patch || {}) };
+
+  if (cpmCalc) updates.cpmData = cpmCalc;
+
+  if (emptyCost) {
+    if (cpmCalc) updates.costPerVideo = cpmCalc.rateDisplay;
+    else if (updates.aiAnalysis?.estimatedRate) updates.costPerVideo = updates.aiAnalysis.estimatedRate;
+  }
+
+  updates.aiAutoFilled = {
+    ...prevAf,
+    ...baseAf,
+    costPerVideo:
+      emptyCost && String(updates.costPerVideo || mergedCreator.costPerVideo || "").trim()
+        ? true
+        : baseAf.costPerVideo ?? prevAf.costPerVideo ?? false,
+  };
+
+  return updates;
 }
 
 async function enrichTikTokFromApi(handle, apiKey) {
@@ -1281,7 +1396,6 @@ Based on this data, return ONLY a JSON object with:
 {
   "suggestedNiche": "their primary content niche, pick the best 2-3 from: Lifestyle, Gen Z, Gym Bro, Medical, Skincare, UGC Creator, Family, Foodie, Athlete, Breathing, Women's Fitness, Holistic Wellness, Running, Pets, Gaming, ASMR, Comedy",
   "contentStyle": "1-2 sentence description of their content style and what makes them unique",
-  "estimatedRate": "estimated cost per video in USD based on follower count and engagement (e.g. '$150-250')",
   "fitScore": <integer 1-10, how good a fit for Intake Breathing UGC, 10 = perfect>,
   "fitReason": "1 sentence explaining why they would or wouldn't be a good fit for nasal breathing/sleep/athletic performance content",
   "suggestedCampaigns": "what type of Intake campaigns they'd be best for (e.g. 'Athletic performance, gym content')",
@@ -1328,7 +1442,6 @@ function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
   } else if (!creator.quality || creator.quality === "Standard") {
     out.quality = aiAnalysis.qualityTier === "High" ? "High" : "Standard";
   }
-  if (!String(creator.costPerVideo || "").trim()) out.costPerVideo = aiAnalysis.estimatedRate || creator.costPerVideo;
   if (aiAnalysis.ibScore != null && Number.isFinite(Number(aiAnalysis.ibScore))) {
     out.ibScore = Number(aiAnalysis.ibScore);
     out.ibScoreLabel = aiAnalysis.scoreLabel || creator.ibScoreLabel;
@@ -1342,7 +1455,7 @@ function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
         : (!creator.quality || creator.quality === "Standard") && aiAnalysis.qualityTier
           ? true
           : prev.quality ?? false,
-    costPerVideo: !String(creator.costPerVideo || "").trim() && aiAnalysis.estimatedRate ? true : prev.costPerVideo ?? false,
+    costPerVideo: prev.costPerVideo ?? false,
   };
   return out;
 }
@@ -1798,8 +1911,6 @@ Return ONLY a JSON object:
   "suggestedCampaigns": [
     {"name": "campaign type", "reason": "why this creator fits this campaign"}
   ],
-  "estimatedRate": "<conservative dollar range - err LOW. For creators under 10K followers: $50-100. 10K-50K: $75-200. 50K-200K: $150-400. 200K-1M: $300-800. 1M+: $500-1500. These are UGC rates not influencer rates.>",
-  "estimatedRateReason": "<2 sentences explaining how you arrived at this rate range. Reference follower count, engagement, content quality, and market rates for UGC creators at this tier.>",
   "bestPlatform": "<'Instagram' or 'TikTok'>",
   "bestPlatformReason": "<1-2 sentences explaining why this is their stronger platform>",
   "runnerUpPlatform": "<the other platform or 'YouTube' etc>",
@@ -1808,9 +1919,7 @@ Return ONLY a JSON object:
   "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>"
 }
 
-For estimatedRate, be VERY CONSERVATIVE. These are UGC creator rates, not influencer sponsorship rates.
-Most micro-creators (under 50K followers) charge $50-200 per video.
-Don't inflate based on follower count alone — UGC rates are based on content quality and production value, not reach.`;
+Suggested creator rates are computed in-app from CPM and actual view data — do not estimate dollar rates in your response.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -4464,7 +4573,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         onCreditUsed: onScrapeCreditUsed,
       });
       const patch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(c, payload.aiAnalysis) : {};
-      updateCreator(c.id, {
+      const platformUpdate = {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...payload.ttData },
         instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...payload.igData },
         tiktokBestVideo: payload.tiktokBestVideo ?? c.tiktokBestVideo,
@@ -4482,7 +4591,12 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         snapchatData: payload.snapchatData || c.snapchatData,
         facebookData: payload.facebookData || c.facebookData,
         lastEnriched: new Date().toISOString(),
+      };
+      const mergedCreator = { ...c, ...platformUpdate, ...patch };
+      updateCreator(c.id, {
+        ...platformUpdate,
         ...patch,
+        ...enrichPatchWithCpm(c, patch, mergedCreator),
         ...(!c.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
       });
       const pf = payload.platformsFound ?? 0;
@@ -4535,7 +4649,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       });
       if (ai) {
         const patch = mergeAiFieldsIntoExisting(c, ai);
-        updateCreator(c.id, patch);
+        const mergedCreator = { ...c, ...patch };
+        updateCreator(c.id, { ...patch, ...enrichPatchWithCpm(c, patch, mergedCreator) });
         setEnrichMsg("IB Score updated.");
       } else {
         setEnrichMsg("Could not parse AI response.");
@@ -4941,17 +5056,63 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             </div>
           ) : null}
 
-          {ai.estimatedRate ? (
-            <ExpandableInsight
-              t={t}
-              label="Estimated Rate"
-              value={ai.estimatedRate}
-              valueColor={t.green}
-              valueFontSize={16}
-              explanation={ai.estimatedRateReason || "Rate estimated based on follower count, engagement quality, and standard UGC market rates."}
-              isAi={af.costPerVideo}
-            />
-          ) : null}
+          {(() => {
+            const cpmData = c.cpmData || calculateCreatorCPM(c);
+            const aiRate = ai.estimatedRate;
+
+            if (!cpmData && !aiRate) return null;
+
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Estimated Rate per Video</div>
+
+                {cpmData ? (
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: t.green, marginBottom: 8 }}>
+                      {cpmData.rateDisplay}
+                      <span style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginLeft: 8 }}>per video</span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+                      <div style={{ padding: 10, background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>CPM Range</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>${cpmData.cpmLow}-${cpmData.cpmHigh}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>{cpmData.cpmTier} tier</div>
+                      </div>
+                      <div style={{ padding: 10, background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Avg Views</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{formatMetricShort(cpmData.avgViews)}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>per {cpmData.platform === "Instagram" ? "post" : "video"}</div>
+                      </div>
+                      <div style={{ padding: 10, background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Sample Size</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{cpmData.videoCount}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>recent {cpmData.platform === "Instagram" ? "posts" : "videos"}</div>
+                      </div>
+                    </div>
+
+                    <ExpandableInsight
+                      t={t}
+                      label=""
+                      value="How this was calculated"
+                      valueColor={t.textMuted}
+                      valueFontSize={12}
+                      explanation={cpmData.explanation}
+                    />
+                  </div>
+                ) : aiRate ? (
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: t.green, marginBottom: 4 }}>
+                      {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green, marginRight: 4 }}>✦</span> : null}
+                      {aiRate}
+                      <span style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginLeft: 8 }}>per video (AI estimate)</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.textFaint }}>Enrich this creator to get a CPM-based calculation from actual video data.</div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
 
           {ai.bestPlatform ? (
             <div style={{ marginBottom: 16 }}>
@@ -5496,7 +5657,7 @@ export default function App() {
         const tt = payload.ttData;
         const engagementRate = payload.engagementRate;
         const mergePatch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(cr, payload.aiAnalysis) : {};
-        updateCreator(cr.id, {
+        const platformUpdate = {
           tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(cr.tiktokData || {}), ...tt },
           instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(cr.instagramData || {}), ...payload.igData },
           tiktokBestVideo: payload.tiktokBestVideo ?? cr.tiktokBestVideo,
@@ -5514,7 +5675,12 @@ export default function App() {
           snapchatData: payload.snapchatData || cr.snapchatData,
           facebookData: payload.facebookData || cr.facebookData,
           lastEnriched: new Date().toISOString(),
+        };
+        const mergedCreator = { ...cr, ...platformUpdate, ...mergePatch };
+        updateCreator(cr.id, {
+          ...platformUpdate,
           ...mergePatch,
+          ...enrichPatchWithCpm(cr, mergePatch, mergedCreator),
           ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         });
         const ib = payload.aiAnalysis?.ibScore ?? cr.ibScore;
@@ -5614,21 +5780,25 @@ export default function App() {
       });
       const ai = payload.aiAnalysis;
       const id = `c-${Date.now()}`;
-      const newCreator = {
+      const stub = {
+        niche: "",
+        quality: "Standard",
+        costPerVideo: "",
+        aiAutoFilled: { niche: false, quality: false, costPerVideo: false },
+      };
+      const patch = ai ? mergeAiFieldsIntoExisting(stub, ai) : {};
+      const base = {
         id,
         status: "Active",
         handle: `@${cleanHandle}`,
         name: payload.nickname || "",
         email: "",
-        niche: ai?.suggestedNiche || "",
         address: "",
         totalVideos: 0,
         notes: "",
-        quality: ai ? normalizeQualityTier(ai.qualityTier) : "Standard",
         tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
         instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
         instagramHandle: cleanHandle,
-        costPerVideo: ai?.estimatedRate || "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
         bestVideos: [],
@@ -5653,11 +5823,6 @@ export default function App() {
         lastEnriched: new Date().toISOString(),
         aiAnalysis: ai || null,
         tiktokBestVideo: payload.tiktokBestVideo ?? null,
-        aiAutoFilled: {
-          niche: !!(ai?.suggestedNiche && String(ai.suggestedNiche).trim()),
-          quality: !!ai,
-          costPerVideo: !!(ai?.estimatedRate && String(ai.estimatedRate).trim()),
-        },
         outreachStatus: null,
         lastContactDate: null,
         contactMethod: null,
@@ -5665,6 +5830,8 @@ export default function App() {
         campaigns: [],
         payments: [],
       };
+      const merged = { ...base, ...patch };
+      const newCreator = { ...merged, ...enrichPatchWithCpm(stub, patch, merged) };
       setCreators((p) => [hydrateCreator(newCreator), ...p]);
       setAddHandleInput("");
       if (payload.notes.length) {
@@ -5706,7 +5873,7 @@ export default function App() {
         onCreditUsed: bumpScrapeCredit,
       });
       const merged = mergeAiFieldsIntoExisting(existing, payload.aiAnalysis);
-      updateCreator(existingId, {
+      const platformUpdate = {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(existing.tiktokData || {}), ...payload.ttData },
         instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(existing.instagramData || {}), ...payload.igData },
         tiktokBestVideo: payload.tiktokBestVideo ?? existing.tiktokBestVideo,
@@ -5724,8 +5891,13 @@ export default function App() {
         snapchatData: payload.snapchatData || existing.snapchatData,
         facebookData: payload.facebookData || existing.facebookData,
         lastEnriched: new Date().toISOString(),
-        ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
+      };
+      const mergedCreator = { ...existing, ...platformUpdate, ...merged };
+      updateCreator(existingId, {
+        ...platformUpdate,
         ...merged,
+        ...enrichPatchWithCpm(existing, merged, mergedCreator),
+        ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
       });
       if (payload.notes.length) {
         setCreatorImportToast(payload.notes[0]);
