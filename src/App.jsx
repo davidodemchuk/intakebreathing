@@ -1,9 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
 import SEED_CREATORS from "./seedCreators.json";
 
-const NAV_ICON =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAFIklEQVR4nL1WTWtUZxQ+H/feuZOZmNzJpx2hIcGNUkGI2QhBXIi4VHQTFFGEFgS1UdCVG5eSklWVbLLyBwREF2JwkZWg2CYoNGlpI5rJhzdpZsa5977vOV0kE5KJEwlIH5jFcF/Oc57zjQCQAoAol8tdQ8RfRCQBAA++DWIiclX1xqdPn4YBIIUAAEEQ/EhEv66Tud+IrIqEiFwR+SkMwweYy+VuIOKQiBgAcHZjiYjUcRzc4YkaY9Baa5jZUdWfMZfLqaruWhkiQhzHUCwWAQC03rNMJgOpVApExBCR46hqDLvMGRGpMUYOHz48e/Pixdbm5uastRYQ18SqKhARFIvF5ZGREfvq1auWhoYGFpHY2S0ZIqqIQCaTqYyOjtru7m5ZWlr6zXGcLemIogjb29uDxcXFYGJiQvfs2YNxHHs75gwRt4WKmaVcLsPg4OBMd3f392fOnHk/Pj6+P51Oq7WW1iMAKysrcPny5SXf90MA6LTWKgAgBkFQL/6AiGCt3fhPRBBFEXR1dX2cmppKP3r0aOX8+fP7giAgay2oKlYdtdZiY2Pjv77vxwsLC62u66qq1idERFXVUi6Xi1QVERF0DfTw4cOPfX19HX19fSuLi4vdRGSttVzrrKqCqm7kFqBOGxCRiAjevXv379OnT0OSJEBEqKrg+z7v3bv3wO3bt3+fnZ39IZvNWmMM19pQ1aotrSoHANimkIgkSRI6cuTI22fPnnUBQLrW2OTk5PSJEyfaoihqBADcbPBroFoyRATXdcOhoaE0AKTiOE6MMdYYY6MoikVE7t+/XyqVSllm1t2QbSNkZikWizQwMPDh0KFD31lr0fM813EcdhyHmdkhIurt7VVVxWrYdoONkCKiiAi1tLTMvHjxoimfz7eICBDRhgIRqTJUjh079v7Nmzf7XdcVEaEvWt9JITNTqVSq3Lx5k/L5fNZai7i5vACqhaNElL537x6papmIvtivG4q2mlgjZGZZXV2FkydPFi4dutQgIj4iSu3jqmOqCv39/fmBgYE/yuUy+b4vjuOA67rquq56nqee5ykzWwCIthESEUVRBAcPHmz2PK9hfS7WDdP61PAGBwf3ZTKZ2UKhwGEY6vz8PMzPz2uhUNBCoaA9PT3/HD16tFAul4GI1lIXBIGuD2Nsb2+fffPjxidvT09NpjKm7eqrFgoifx8fHC2NjY1nP8zSTyTQyM4kIlEolOHfuXPz8+XP/1q1bTkdHB8RxDBAEgQZBoK2trZJKpczVq1enVHXFWquqKlofm7+tqmpZVaettZOqOmWMeWeMeXflypWC67ra1tYmQRDo5sZXZsZKpRI+fvy41N/f32mtZWau22eqCpVKxabTaR4bG/tw584dV0RSAIAAgNbaaHl5OZ0kScN6YW2dpY7j2DiOube3d+rp06ddzJz5UuFUYYwRZqaFhYU/jx8/TjMzM12e54GIVEMONVtra+MbY9jzPDsxMXFgdHT0L0SEKIrEWgu1vyRJ1FpLiPh5eHjYnZ6ezjc3N2+pUtd1tdbhbbO0OgDa2trmXr58qU1NTe11JQLY169fz546dSqVJMk+APjqEHAAYMuJoarEzDo3N9d54cKFt2fPns3FcazMjJtPCEQkVf08MjLiF4vFvO/7Ul3AOyCue0QhIlQqFSiXyztayGaz4HmeikjtYKpFgojujmciMwsz7+S1GmNARL62MQwRrZ2JAP/vIUwAkArD8IGqXieiak6/FeJ1ZdfDMHwAAKn/ABI0BQkB+dutAAAAAElFTkSuQmCC";
-
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
 const CREATOR_COLUMNS = [
@@ -5917,7 +5914,13 @@ export default function App() {
             return (
               <div className="no-print" style={S.nav}>
                 <div style={S.navLogo}>
-                  <img src={NAV_ICON} alt="Intake" style={{ width: 28, height: 28, cursor: "pointer" }} onClick={() => navigate("library")} />
+                  <img
+                    src="/favicon-32.png"
+                    alt="Intake"
+                    style={{ width: 28, height: 28, cursor: "pointer" }}
+                    onError={(e) => { e.target.style.display = "none"; }}
+                    onClick={() => navigate("library")}
+                  />
                   <div onClick={() => navigate("library")} style={{ cursor: "pointer" }}>
                     <div style={S.navTitle}>Intake Breathing</div>
                     <div style={S.navSub}>{NAV_SUB_LABELS.ugcArmy}</div>
@@ -5935,7 +5938,13 @@ export default function App() {
           return (
             <div className="no-print" style={S.nav}>
               <div style={S.navLogo}>
-                <img src={NAV_ICON} alt="Intake" style={{ width: 28, height: 28, cursor: "pointer" }} onClick={() => navigate("home")} />
+                <img
+                  src="/favicon-32.png"
+                  alt="Intake"
+                  style={{ width: 28, height: 28, cursor: "pointer" }}
+                  onError={(e) => { e.target.style.display = "none"; }}
+                  onClick={() => navigate("home")}
+                />
                 <div onClick={() => navigate("home")} style={{ cursor: "pointer" }}>
                   <div style={S.navTitle}>Intake Breathing</div>
                   <div style={S.navSub}>{navSubText}</div>
