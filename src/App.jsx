@@ -4,8 +4,13 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 const CHANGELOG = [
+  { version: "1.1.0", date: "2025-03-31", changes: [
+    "AI-powered proof point auto-selection — stats update based on product, audience, problem, mission, and campaign fields",
+    "Debounced 2-second delay to avoid excessive API calls",
+    "Visual loading indicator on proof points section during AI suggestion",
+  ]},
   { version: "1.0.0", date: "2025-03-31", changes: [
     "Initial release — UGC Brief Command Center",
     "AI Generate with Claude Sonnet API",
@@ -271,6 +276,8 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [selectedStats, setSelectedStats] = useState(prefill ? [...prefill.selectedStats] : [...DEFAULTS.selectedStats]);
   const [showCustomProduct, setShowCustomProduct] = useState((prefill?.productName || DEFAULTS.productName) === "Other");
   const [showCustomVibe, setShowCustomVibe] = useState((prefill?.vibe || DEFAULTS.vibe) === "Other");
+  const [statsLoading, setStatsLoading] = useState(false);
+  const debounceTimer = useRef(null);
   const vals = useRef({
     productName: prefill?.productName || DEFAULTS.productName,
     customProductName: prefill?.customProductName ?? DEFAULTS.customProductName,
@@ -279,12 +286,68 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     customVibe: prefill?.customVibe ?? DEFAULTS.customVibe,
     mission: prefill?.mission || "",
     problem: prefill?.problem ?? DEFAULTS.problem,
+    ageRange: prefill?.ageRange ?? DEFAULTS.ageRange,
+    gender: prefill?.gender ?? DEFAULTS.gender,
     platform: prefill?.platform || DEFAULTS.platform,
     videoLength: prefill?.videoLength || DEFAULTS.videoLength,
     tone: prefill?.tone || DEFAULTS.tone,
     notes: prefill?.notes || "",
   });
   const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+
+  const suggestStats = useCallback(async () => {
+    const key = localStorage.getItem("intake-apikey");
+    if (!key) return;
+
+    const v = vals.current;
+    const context = [v.productName, v.campaignName, v.mission, v.vibe, v.problem, v.ageRange, v.gender].filter(Boolean).join(", ");
+    if (context.length < 10) return;
+
+    setStatsLoading(true);
+    try {
+      const statIds = STAT_OPTIONS.map(s => s.id).join(", ");
+      const res = await Promise.race([
+        fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "x-api-key": key,
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 100,
+            messages: [{ role: "user", content: `You are helping select proof points for a UGC creator brief. Given this campaign context: "${context}". Available stat IDs: ${statIds}. The stats are: ${STAT_OPTIONS.map(s => s.id + "=" + s.label).join(", ")}. Return ONLY a JSON array of the most relevant stat IDs for this campaign, e.g. ["snoring","sleep","sizes"]. Pick 3-5 most relevant. Return ONLY the JSON array, nothing else.` }],
+          }),
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000)),
+      ]);
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      const text = data.content.map(i => i.text || "").join("");
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        try {
+          const ids = JSON.parse(match[0]);
+          if (!Array.isArray(ids)) return;
+          const validIds = ids.filter(id => STAT_OPTIONS.some(s => s.id === id));
+          if (validIds.length > 0) setSelectedStats(validIds);
+        } catch { /* ignore malformed JSON */ }
+      }
+    } catch { /* ignore */ }
+    finally { setStatsLoading(false); }
+  }, []);
+
+  const triggerStatsSuggest = useCallback(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => suggestStats(), 2000);
+  }, [suggestStats]);
+
+  useEffect(() => {
+    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+  }, []);
+
   const go = useCallback((mode) => {
     const v = vals.current;
     if (!v.problem.trim()) { alert("Please describe the core problem."); return; }
@@ -322,7 +385,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
         <div style={S.secLabel}>🎯 Product & Campaign</div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Product *</label>
-            <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); }}>
+            <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); triggerStatsSuggest(); }}>
               {PRODUCTS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
             {showCustomProduct && <div style={S.fg}><label style={S.label}>Product Name</label>
@@ -330,7 +393,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
             </div>}
           </div>
           <div style={S.fg}><label style={S.label}>Campaign Vibe</label>
-            <select style={S.select} defaultValue={vals.current.vibe} onChange={e => { const v = e.target.value; vals.current.vibe = v; setShowCustomVibe(v === "Other"); }}>
+            <select style={S.select} defaultValue={vals.current.vibe} onChange={e => { const v = e.target.value; vals.current.vibe = v; setShowCustomVibe(v === "Other"); triggerStatsSuggest(); }}>
               {VIBES.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
             {showCustomVibe && <div style={S.fg}><label style={S.label}>Campaign Vibe</label>
@@ -340,31 +403,31 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
         </div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Campaign Name</label>
-            <input style={S.input} defaultValue={vals.current.campaignName} onChange={e=>{vals.current.campaignName=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder='e.g. "The Level Up"' /></div>
+            <input style={S.input} defaultValue={vals.current.campaignName} onChange={e=>{vals.current.campaignName=e.target.value; triggerStatsSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder='e.g. "The Level Up"' /></div>
           <div style={S.fg}><label style={S.label}>One-Line Mission</label>
-            <input style={S.input} defaultValue={vals.current.mission} onChange={e=>{vals.current.mission=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="The soul of this campaign" /></div>
+            <input style={S.input} defaultValue={vals.current.mission} onChange={e=>{vals.current.mission=e.target.value; triggerStatsSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="The soul of this campaign" /></div>
         </div>
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>👤 Audience & Problem</div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Age Range</label>
-            <select style={S.select} value={ageRange} onChange={e=>setAgeRange(e.target.value)}>
+            <select style={S.select} value={ageRange} onChange={e=>{ const v = e.target.value; vals.current.ageRange = v; setAgeRange(v); triggerStatsSuggest(); }}>
               {AGE_RANGES.map((a)=><option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div style={S.fg}><label style={S.label}>Gender</label>
-            <select style={S.select} value={gender} onChange={e=>setGender(e.target.value)}>
+            <select style={S.select} value={gender} onChange={e=>{ const v = e.target.value; vals.current.gender = v; setGender(v); triggerStatsSuggest(); }}>
               {GENDERS.map((g)=><option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>
         <div style={S.fg}><label style={S.label}>Core Problem *</label>
-          <textarea style={S.textarea} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="What misconception, frustration, or emotional block are we solving? Write it like you'd explain it to a creator." rows={4} />
+          <textarea style={S.textarea} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value; triggerStatsSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="What misconception, frustration, or emotional block are we solving? Write it like you'd explain it to a creator." rows={4} />
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>📊 Proof Points — tap to include</div>
+        <div style={S.secLabel}>📊 Proof Points {statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— AI selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by AI, tap to adjust</span>}</div>
         <div style={S.chipGrid}>
           {STAT_OPTIONS.map(st => <div key={st.id} style={S.chip(selectedStats.includes(st.id))} onClick={()=>toggleStat(st.id)}>{selectedStats.includes(st.id) ? "✓ " : ""}{st.label}</div>)}
         </div>
