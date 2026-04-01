@@ -1986,7 +1986,7 @@ function ToolsPage({ onBack, onOpenVideo }) {
         <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-start" }}><Icon name="video" size={32} color={t.blue} /></div>
         <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-          Paste a TikTok or Instagram URL — fetch the video and see reformat options for Meta, YouTube, and TikTok ads
+          Paste a TikTok or Instagram URL or upload a file — download the original and use the ad format reference for Meta, YouTube, and TikTok placements
         </div>
       </div>
     </div>
@@ -2002,7 +2002,6 @@ function VideoReformatter({ onBack }) {
   const [objectUrl, setObjectUrl] = useState(null);
   const [fileDims, setFileDims] = useState(null);
   const [remoteDims, setRemoteDims] = useState(null);
-  const [selected, setSelected] = useState(() => new Set());
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
   const objectUrlRef = useRef(null);
@@ -2040,15 +2039,6 @@ function VideoReformatter({ onBack }) {
     setFetchedVideo(null);
     setRemoteDims(null);
     setFetchError(null);
-  };
-
-  const toggleFormat = (id) => {
-    setSelected((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
   };
 
   const handleFetch = async () => {
@@ -2174,79 +2164,45 @@ function VideoReformatter({ onBack }) {
     }
   };
 
-  const renderFormatGrid = () => (
-    <>
-      <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12, marginTop: 8 }}>
-        Reformat options
+  const renderFormatReference = () => (
+    <div style={{ marginTop: 32 }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 8 }}>Format Reference — Ad Specs by Platform</div>
+      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 20, lineHeight: 1.55 }}>
+        Use these specs when resizing your video in your editor (CapCut, Premiere, Canva, etc.)
       </div>
       {VIDEO_REFORMAT_GROUPS.map((group) => (
         <div key={group.title} style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>{group.title}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
-            {group.items.map((item) => {
-              const on = selected.has(item.id);
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => toggleFormat(item.id)}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "45"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = on ? t.green + "50" : t.border; }}
-                  style={{
-                    background: t.card,
-                    border: `1px solid ${on ? t.green + "50" : t.border}`,
-                    borderRadius: 12,
-                    padding: 14,
-                    cursor: "pointer",
-                    boxShadow: t.shadow,
-                    transition: "border-color 0.15s",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <span
-                      style={{
-                        width: 18,
-                        height: 18,
-                        borderRadius: 4,
-                        border: `1px solid ${on ? t.green : t.border}`,
-                        background: on ? t.green : "transparent",
-                        flexShrink: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginTop: 2,
-                      }}
-                    >
-                      {on ? <Icon name="checkSm" size={11} color={t.isLight ? "#fff" : "#000"} /> : null}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.name}</div>
-                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
-                        {item.dimensions} · {item.ratio}
-                      </div>
-                      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, lineHeight: 1.4 }}>{item.placement}</div>
-                      {item.recommended && (
-                        <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: t.green }}>Recommended</div>
-                      )}
-                    </div>
+            {group.items.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  background: t.card,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, flex: "1 1 auto", minWidth: 0 }}>{item.name}</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
+                    {item.ratio} · {item.dimensions}
                   </div>
                 </div>
-              );
-            })}
+                <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.45 }}>{item.placement}</div>
+                {item.recommended ? (
+                  <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: t.green }}>★ Recommended</div>
+                ) : null}
+              </div>
+            ))}
           </div>
         </div>
       ))}
-      <button
-        type="button"
-        onClick={() =>
-          alert(
-            "Server-side video processing (FFmpeg) coming soon. Use the format specs above as a guide for your editor, or download the original and resize manually.",
-          )
-        }
-        style={{ ...S.genBtn, marginTop: 8 }}
-      >
-        Reformat & Download
-      </button>
-    </>
+      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6, marginTop: 8, paddingTop: 4 }}>
+        Tip: Most short-form UGC works best as 9:16 (1080×1920). If you&apos;re repurposing for multiple placements, create a 9:16 master and crop from there.
+      </div>
+    </div>
   );
 
   return (
@@ -2254,7 +2210,7 @@ function VideoReformatter({ onBack }) {
       <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 20 }}>← Back to Tools</button>
       <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginBottom: 8 }}>Video Reformatter</div>
       <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 24, lineHeight: 1.5 }}>
-        Fetch a TikTok or Instagram video by URL, or upload a file. Pick target formats for ads and placements.
+        Paste a URL to fetch a preview and download the original, or upload a file. Use the format reference below when resizing in your editor.
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 700, color: t.green, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Paste URL</div>
@@ -2405,12 +2361,12 @@ function VideoReformatter({ onBack }) {
                   type="button"
                   onClick={() => window.open(fetchedVideo.videoUrl, "_blank", "noopener,noreferrer")}
                   style={{
-                    padding: "10px 18px",
+                    padding: "12px 22px",
                     borderRadius: 8,
-                    border: `1px solid ${t.blue}`,
-                    background: "transparent",
-                    color: t.blue,
-                    fontSize: 13,
+                    border: "none",
+                    background: t.green,
+                    color: t.isLight ? "#fff" : "#000",
+                    fontSize: 14,
                     fontWeight: 700,
                     cursor: "pointer",
                   }}
@@ -2422,8 +2378,6 @@ function VideoReformatter({ onBack }) {
           </div>
         </div>
       )}
-
-      {(fetchedVideo || displayDims) && renderFormatGrid()}
 
       <div style={{ fontSize: 13, fontWeight: 600, color: t.textSecondary, marginTop: 8, marginBottom: 10 }}>Or upload a video file directly</div>
       <input ref={fileInputRef} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" style={{ display: "none" }} onChange={(e) => loadFile(e.target.files?.[0])} />
@@ -2471,6 +2425,8 @@ function VideoReformatter({ onBack }) {
           )}
         </div>
       )}
+
+      {renderFormatReference()}
 
     </div>
   );
