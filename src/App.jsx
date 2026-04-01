@@ -4,8 +4,13 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext,
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.2";
+const APP_VERSION = "2.0.3";
 const CHANGELOG = [
+  { version: "2.0.3", date: "2025-04-01", changes: [
+    "Nav bar is now dynamic — shows relevant links based on which section you're in",
+    "Dashboard home shows minimal nav, UGC Army shows brief-related links, Tools shows tools links",
+    "Back to Dashboard button always visible when inside a section",
+  ]},
   { version: "2.0.2", date: "2025-04-01", changes: [
     "ScrapeCreators API fully wired — paste TikTok or Instagram URL to fetch video data",
     "Video preview with thumbnail, caption, author, and engagement stats",
@@ -140,6 +145,31 @@ const THEMES = {
 };
 
 const ThemeContext = createContext();
+
+const NAV_SECTIONS = {
+  dashboard: ["home"],
+  ugcArmy: ["create", "display", "library"],
+  tools: ["tools", "videotool"],
+  pipeline: ["pipeline"],
+  influencer: ["influencer"],
+  settings: ["settings"],
+};
+
+function getCurrentSection(view) {
+  for (const [section, views] of Object.entries(NAV_SECTIONS)) {
+    if (views.includes(view)) return section;
+  }
+  return "dashboard";
+}
+
+const NAV_SUB_LABELS = {
+  dashboard: "Creator Partnerships",
+  ugcArmy: "UGC Army",
+  tools: "Tools",
+  pipeline: "Channel Pipeline",
+  influencer: "Influencer Buys",
+  settings: "Settings",
+};
 
 // ═══════════════════════════════════════════════════════════
 // DYNAMIC STYLES — generated per theme
@@ -2592,23 +2622,51 @@ export default function App() {
 
         {storageReady && <>
 
-        {/* NAV */}
-        <div className="no-print" style={S.nav}>
-          <div style={S.navLogo} onClick={()=>setView("home")}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill={t.green}/><path d="M7 12h10M12 7v10" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
-            <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>CREATOR PARTNERSHIPS</div></div>
-          </div>
-          <div style={S.navLinks}>
-            <button style={S.navBtn(view === "home")} onClick={() => setView("home")}>Home</button>
-            <button style={S.navBtn(view === "create")} onClick={() => { setView("create"); setFormKey((k) => k + 1); }}>New Brief</button>
-            <button style={S.navBtn(view === "library")} onClick={() => setView("library")}>Library{library.length > 0 && ` (${library.length})`}</button>
-            <button style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
-            <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
-            <button type="button" onClick={()=>setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
-              <div style={S.themeKnob(isDark)} />
-            </button>
-          </div>
-        </div>
+        {/* NAV — context-aware */}
+        {(() => {
+          const section = getCurrentSection(view);
+          const navSubText = NAV_SUB_LABELS[section] ?? NAV_SUB_LABELS.dashboard;
+          const dashBtn = { ...S.navBtn(false), color: t.textFaint, fontWeight: 600 };
+          return (
+            <div className="no-print" style={S.nav}>
+              <div style={S.navLogo} onClick={() => setView("home")}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill={t.green}/><path d="M7 12h10M12 7v10" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>{navSubText}</div></div>
+              </div>
+              <div style={S.navLinks}>
+                {section !== "dashboard" && (
+                  <button type="button" style={dashBtn} onClick={() => setView("home")}>← Dashboard</button>
+                )}
+                {section === "ugcArmy" && (
+                  <>
+                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { setView("create"); setFormKey((k) => k + 1); }}>New Brief</button>
+                    <button type="button" style={S.navBtn(view === "library")} onClick={() => setView("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
+                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                  </>
+                )}
+                {section === "tools" && (
+                  <>
+                    <button type="button" style={S.navBtn(view === "tools" || view === "videotool")} onClick={() => setView("tools")}>All Tools</button>
+                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                  </>
+                )}
+                {section === "pipeline" && (
+                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                )}
+                {section === "influencer" && (
+                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                )}
+                {section === "dashboard" && (
+                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                )}
+                <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
+                <button type="button" onClick={() => setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
+                  <div style={S.themeKnob(isDark)} />
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {currentRole === ROLES.CREATOR && (
           <div className="no-print" style={{ background: t.orange + (t.isLight ? "18" : "15"), borderBottom: `1px solid ${t.orange}35`, padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap", fontSize: 13, color: t.text }}>
