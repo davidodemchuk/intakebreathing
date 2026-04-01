@@ -13,6 +13,8 @@ const CREATOR_COLUMNS = [
   { key: "email", label: "Email", width: 200, editable: true, isLink: "mailto" },
   { key: "tt", label: "TT", width: 36, isLink: "external" },
   { key: "ig", label: "IG", width: 36, isLink: "external" },
+  { key: "ibScore", label: "IB", width: 44, sortable: true, align: "right" },
+  { key: "platforms", label: "Plat", width: 50, sortable: false },
   { key: "videos", label: "Videos", width: 60, sortable: true, align: "right" },
   { key: "avgViews", label: "Avg Views", width: 72, sortable: true, align: "right" },
   { key: "engRate", label: "Eng %", width: 52, sortable: true, align: "right" },
@@ -27,8 +29,16 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.2.0";
+const APP_VERSION = "3.3.0";
 const CHANGELOG = [
+  { version: "3.3.0", date: "2026-04-01", changes: [
+    "11-platform creator enrichment: Instagram (profile+posts+reels), TikTok (profile+videos+shop), YouTube, Twitter/X, LinkedIn, Snapchat, Facebook",
+    "IB Score system — Intake-branded 1-100 creator score with 5-category breakdown",
+    "Instagram-heavy scoring: IG metrics worth 45% of IB Score",
+    "Creator detail view completely redesigned with platform cards, playable videos, IB Score hero",
+    "TikTok Shop detection — see if creators are selling products",
+    "Cross-platform presence mapped for every creator",
+  ]},
   { version: "3.2.0", date: "2026-04-01", changes: [
     "Homepage stripped back and rebuilt — clean, minimal, polished design",
     "Removed decorative clutter: no background avatars, no gradient borders, no dot grid",
@@ -768,11 +778,18 @@ const DEFAULT_INSTAGRAM_DATA = {
 // payments tracks cost per creator per campaign
 
 const ENRICH_STEPS = [
-  { id: "tt_profile", label: "Pulling TikTok profile...", duration: 2000 },
-  { id: "tt_videos", label: "Fetching recent videos...", duration: 3000 },
-  { id: "ig_profile", label: "Checking Instagram profile...", duration: 2000 },
-  { id: "ai_analyze", label: "IB-Ai analyzing creator fit...", duration: 4000 },
-  { id: "saving", label: "Saving to database...", duration: 1000 },
+  { id: "tt_profile", label: "TikTok Profile" },
+  { id: "tt_videos", label: "TikTok Videos" },
+  { id: "tt_shop", label: "TikTok Shop" },
+  { id: "ig_profile", label: "Instagram Profile" },
+  { id: "ig_posts", label: "Instagram Posts" },
+  { id: "ig_reels", label: "Instagram Reels" },
+  { id: "youtube", label: "YouTube" },
+  { id: "twitter", label: "Twitter/X" },
+  { id: "linkedin", label: "LinkedIn" },
+  { id: "snapchat", label: "Snapchat" },
+  { id: "facebook", label: "Facebook" },
+  { id: "ai_score", label: "IB-Ai calculating score" },
 ];
 
 /** Canonical CSV/spreadsheet field fixes keyed by normalized handle (no @). */
@@ -824,6 +841,22 @@ function normalizeCreatorRow(c) {
     tiktokData: { ...DEFAULT_TIKTOK_DATA, ...tt },
     instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...ig },
     engagementRate: c.engagementRate != null && c.engagementRate !== "" ? c.engagementRate : null,
+    ibScore: c.ibScore != null && c.ibScore !== "" ? Number(c.ibScore) : null,
+    ibScoreLabel: c.ibScoreLabel || null,
+    ibScoreBreakdown: c.ibScoreBreakdown && typeof c.ibScoreBreakdown === "object" ? c.ibScoreBreakdown : null,
+    tiktokEngRate: c.tiktokEngRate != null && c.tiktokEngRate !== "" ? c.tiktokEngRate : null,
+    instagramEngRate: c.instagramEngRate != null && c.instagramEngRate !== "" ? c.instagramEngRate : null,
+    instagramAvgLikes: c.instagramAvgLikes != null ? c.instagramAvgLikes : null,
+    instagramAvgComments: c.instagramAvgComments != null ? c.instagramAvgComments : null,
+    instagramRecentPosts: Array.isArray(c.instagramRecentPosts) ? c.instagramRecentPosts : [],
+    instagramRecentReels: Array.isArray(c.instagramRecentReels) ? c.instagramRecentReels : [],
+    tiktokShopData: c.tiktokShopData && typeof c.tiktokShopData === "object" ? c.tiktokShopData : null,
+    youtubeData: c.youtubeData && typeof c.youtubeData === "object" ? c.youtubeData : null,
+    twitterData: c.twitterData && typeof c.twitterData === "object" ? c.twitterData : null,
+    linkedinData: c.linkedinData && typeof c.linkedinData === "object" ? c.linkedinData : null,
+    snapchatData: c.snapchatData && typeof c.snapchatData === "object" ? c.snapchatData : null,
+    facebookData: c.facebookData && typeof c.facebookData === "object" ? c.facebookData : null,
+    lastEnriched: c.lastEnriched || null,
     aiAnalysis: c.aiAnalysis && typeof c.aiAnalysis === "object" ? c.aiAnalysis : null,
     outreachStatus: c.outreachStatus ?? null,
     lastContactDate: c.lastContactDate ?? null,
@@ -1254,6 +1287,11 @@ function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
     out.quality = aiAnalysis.qualityTier === "High" ? "High" : "Standard";
   }
   if (!String(creator.costPerVideo || "").trim()) out.costPerVideo = aiAnalysis.estimatedRate || creator.costPerVideo;
+  if (aiAnalysis.ibScore != null && Number.isFinite(Number(aiAnalysis.ibScore))) {
+    out.ibScore = Number(aiAnalysis.ibScore);
+    out.ibScoreLabel = aiAnalysis.scoreLabel || creator.ibScoreLabel;
+    out.ibScoreBreakdown = aiAnalysis.scoreBreakdown || creator.ibScoreBreakdown;
+  }
   return out;
 }
 
@@ -1263,6 +1301,563 @@ function fitScoreBadgeStyle(score, t) {
   if (n >= 8) return { bg: t.green + "22", color: t.green, label: "Great Fit" };
   if (n >= 5) return { bg: t.orange + "22", color: t.orange, label: "Potential Fit" };
   return { bg: t.red + "18", color: t.red, label: "Low Fit" };
+}
+
+/** IB Score 1–100 → tier color */
+function ibScoreTierColor(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return "#64748b";
+  if (n >= 90) return "#00FEA9";
+  if (n >= 75) return "#22c55e";
+  if (n >= 60) return "#3b82f6";
+  if (n >= 40) return "#f59e0b";
+  return "#ef4444";
+}
+
+function platformLettersForCreator(c) {
+  const parts = [];
+  const tt = c.tiktokData;
+  const ig = c.instagramData;
+  if (tt?.lastEnriched || tt?.followers != null) parts.push("TT");
+  if (ig?.lastEnriched && !ig?.enrichError) parts.push("IG");
+  if (c.youtubeData?.subscribers != null || c.youtubeData?.lastEnriched) parts.push("YT");
+  if (c.twitterData?.followers != null || c.twitterData?.lastEnriched) parts.push("X");
+  if (c.linkedinData?.lastEnriched) parts.push("LI");
+  if (c.snapchatData?.lastEnriched) parts.push("SN");
+  if (c.facebookData?.followers != null || c.facebookData?.lastEnriched) parts.push("FB");
+  return parts.join("·");
+}
+
+/** Build all enrichment structs from 11 parallel API raw responses. */
+function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingInstagramData = {}) {
+  const ttProfile = raw.ttProfileRaw;
+  const ttVideos = raw.ttVideosRaw;
+  const ttShop = raw.ttShopRaw;
+  const igProfile = raw.igProfileRaw;
+  const igPosts = raw.igPostsRaw;
+  const igReels = raw.igReelsRaw;
+  const ytData = raw.ytData;
+  const twData = raw.twData;
+  const liData = raw.liData;
+  const snapData = raw.snapData;
+  const fbData = raw.fbData;
+
+  let tiktokData = null;
+  if (ttProfile) {
+    const { user, stats } = parseTikTokUserStats(ttProfile);
+    tiktokData = {
+      ...DEFAULT_TIKTOK_DATA,
+      ...tiktokDataFromUserStats(user, stats),
+      lastEnriched: new Date().toISOString(),
+    };
+  }
+
+  let ttRecentVideos = [];
+  let ttAvgViews = 0;
+  let ttAvgLikes = 0;
+  let ttAvgComments = 0;
+  let ttAvgShares = 0;
+  let ttEngRate = null;
+  let ttBestVideo = null;
+
+  if (ttVideos) {
+    const vidRoot = ttVideos?.data ?? ttVideos;
+    const videos = vidRoot.itemList || vidRoot.videos || vidRoot.aweme_list || [];
+    const recent = videos.slice(0, 15);
+    if (recent.length > 0) {
+      let totalV = 0;
+      let totalL = 0;
+      let totalC = 0;
+      let totalS = 0;
+      let bestViews = 0;
+      ttRecentVideos = recent.map((v) => {
+        const views = v.stats?.playCount || v.statistics?.play_count || 0;
+        const likes = v.stats?.diggCount || v.statistics?.digg_count || 0;
+        const comments = v.stats?.commentCount || v.statistics?.comment_count || 0;
+        const shares = v.stats?.shareCount || v.statistics?.share_count || 0;
+        const vid = v.id || v.aweme_id || "";
+        totalV += views;
+        totalL += likes;
+        totalC += comments;
+        totalS += shares;
+        const entry = {
+          id: vid,
+          caption: v.desc || "",
+          views,
+          likes,
+          comments,
+          shares,
+          cover: v.video?.cover?.url_list?.[0] || v.video?.origin_cover?.url_list?.[0] || v.video?.dynamic_cover?.url_list?.[0] || "",
+          playUrl: v.video?.play_addr?.url_list?.[0] || v.video?.download_addr?.url_list?.[0] || "",
+          date: v.createTime
+            ? new Date(v.createTime * 1000).toISOString().split("T")[0]
+            : v.create_time
+              ? new Date(v.create_time * 1000).toISOString().split("T")[0]
+              : "",
+          url: `https://www.tiktok.com/@${cleanHandle}/video/${vid}`,
+        };
+        if (views > bestViews) {
+          bestViews = views;
+          ttBestVideo = entry;
+        }
+        return entry;
+      });
+      const count = recent.length;
+      ttAvgViews = Math.round(totalV / count);
+      ttAvgLikes = Math.round(totalL / count);
+      ttAvgComments = Math.round(totalC / count);
+      ttAvgShares = Math.round(totalS / count);
+      const followers = tiktokData?.followers || 1;
+      ttEngRate = parseFloat((((ttAvgLikes + ttAvgComments + ttAvgShares) / followers) * 100).toFixed(2));
+    }
+  }
+
+  if (tiktokData) {
+    tiktokData = {
+      ...DEFAULT_TIKTOK_DATA,
+      ...tiktokData,
+      recentVideos: ttRecentVideos,
+      avgViews: ttAvgViews || null,
+      avgLikes: ttAvgLikes || null,
+      avgComments: ttAvgComments || null,
+      avgShares: ttAvgShares || null,
+      bestVideo: ttBestVideo,
+    };
+  } else if (ttRecentVideos.length) {
+    tiktokData = {
+      ...DEFAULT_TIKTOK_DATA,
+      recentVideos: ttRecentVideos,
+      avgViews: ttAvgViews || null,
+      avgLikes: ttAvgLikes || null,
+      avgComments: ttAvgComments || null,
+      avgShares: ttAvgShares || null,
+      bestVideo: ttBestVideo,
+      lastEnriched: new Date().toISOString(),
+    };
+  }
+
+  const tiktokShopData = ttShop
+    ? {
+        hasShop: !!(ttShop.products?.length || ttShop.showcase_products?.length || ttShop.data?.products?.length),
+        productCount: ttShop.products?.length || ttShop.showcase_products?.length || ttShop.data?.products?.length || 0,
+        products: (ttShop.products || ttShop.showcase_products || ttShop.data?.products || []).slice(0, 5).map((p) => ({
+          name: p.title || p.product_name || "",
+          price: p.price || p.original_price || "",
+          image: p.cover?.url_list?.[0] || p.images?.[0]?.url_list?.[0] || "",
+        })),
+        lastEnriched: new Date().toISOString(),
+      }
+    : null;
+
+  const igP = igProfile ? igProfile.data ?? igProfile : null;
+  let instagramData = igP
+    ? {
+        followers: igP.follower_count || igP.edge_followed_by?.count || null,
+        following: igP.following_count || igP.edge_follow?.count || null,
+        posts: igP.media_count || igP.edge_owner_to_timeline_media?.count || null,
+        bio: igP.biography || "",
+        avatarUrl: igP.profile_pic_url_hd || igP.profile_pic_url || "",
+        verified: igP.is_verified || false,
+        fullName: igP.full_name || "",
+        externalUrl: igP.external_url || "",
+        category: igP.category_name || igP.category || "",
+        isBusiness: igP.is_business_account || false,
+        isPrivate: igP.is_private || false,
+        lastEnriched: new Date().toISOString(),
+        enrichError: null,
+      }
+    : {
+        ...DEFAULT_INSTAGRAM_DATA,
+        ...existingInstagramData,
+        lastEnriched: new Date().toISOString(),
+        enrichError: "Profile not found — handle may differ from TikTok",
+      };
+
+  let igRecentPosts = [];
+  let igAvgLikes = 0;
+  let igAvgComments = 0;
+  let igEngRate = null;
+
+  if (igPosts) {
+    const pr = igPosts?.data ?? igPosts;
+    const posts = pr.items || pr.edge_owner_to_timeline_media?.edges?.map((e) => e.node) || [];
+    const recent = posts.slice(0, 12);
+    if (recent.length > 0) {
+      let totalL = 0;
+      let totalC = 0;
+      igRecentPosts = recent.map((p) => {
+        const likes = p.like_count || p.edge_media_preview_like?.count || 0;
+        const comments = p.comment_count || p.edge_media_to_comment?.count || 0;
+        totalL += likes;
+        totalC += comments;
+        return {
+          id: p.id || p.pk || "",
+          caption: p.caption?.text || p.edge_media_to_caption?.edges?.[0]?.node?.text || "",
+          likes,
+          comments,
+          mediaType: p.media_type || (p.is_video ? "video" : "image"),
+          imageUrl: p.thumbnail_url || p.display_url || p.image_versions2?.candidates?.[0]?.url || "",
+          videoUrl: p.video_url || "",
+          url: `https://www.instagram.com/p/${p.shortcode || p.code || ""}/`,
+          date: p.taken_at ? new Date(p.taken_at * 1000).toISOString().split("T")[0] : "",
+        };
+      });
+      const count = recent.length;
+      igAvgLikes = Math.round(totalL / count);
+      igAvgComments = Math.round(totalC / count);
+      const igFollowers = instagramData?.followers || 1;
+      igEngRate = parseFloat((((igAvgLikes + igAvgComments) / igFollowers) * 100).toFixed(2));
+    }
+  }
+
+  let igRecentReels = [];
+  if (igReels) {
+    const rr = igReels?.data ?? igReels;
+    const reels = rr.items || rr.reels || [];
+    igRecentReels = reels.slice(0, 10).map((r) => ({
+      id: r.id || r.pk || "",
+      caption: r.caption?.text || "",
+      playCount: r.play_count || r.video_view_count || 0,
+      likes: r.like_count || 0,
+      comments: r.comment_count || 0,
+      videoUrl: r.video_url || r.video_versions?.[0]?.url || "",
+      coverUrl: r.image_versions2?.candidates?.[0]?.url || r.thumbnail_url || "",
+      url: `https://www.instagram.com/reel/${r.code || ""}/`,
+      date: r.taken_at ? new Date(r.taken_at * 1000).toISOString().split("T")[0] : "",
+    }));
+  }
+
+  const youtubeData = ytData
+    ? {
+        subscribers: ytData.stats?.subscriberCount || ytData.statistics?.subscriberCount || ytData.data?.subscriberCount || null,
+        totalViews: ytData.stats?.viewCount || ytData.statistics?.viewCount || null,
+        videoCount: ytData.stats?.videoCount || ytData.statistics?.videoCount || null,
+        description: ytData.description || ytData.snippet?.description || "",
+        avatarUrl: ytData.avatar || ytData.snippet?.thumbnails?.default?.url || "",
+        channelUrl: ytData.customUrl ? `https://youtube.com/${ytData.customUrl}` : "",
+        lastEnriched: new Date().toISOString(),
+      }
+    : null;
+
+  const twitterData = twData
+    ? {
+        followers: twData.followers_count || twData.public_metrics?.followers_count || null,
+        following: twData.following_count || twData.friends_count || null,
+        tweets: twData.statuses_count || twData.public_metrics?.tweet_count || null,
+        bio: twData.description || "",
+        verified: twData.verified || twData.is_blue_verified || false,
+        avatarUrl: twData.profile_image_url_https || twData.profile_image_url || "",
+        lastEnriched: new Date().toISOString(),
+      }
+    : null;
+
+  const linkedinData = liData
+    ? {
+        headline: liData.headline || "",
+        summary: liData.summary || "",
+        connections: liData.connections_count || liData.connectionsCount || null,
+        location: liData.location || "",
+        profileUrl: liData.url || liData.profile_url || "",
+        lastEnriched: new Date().toISOString(),
+      }
+    : null;
+
+  const snapchatData = snapData
+    ? {
+        displayName: snapData.display_name || snapData.displayName || "",
+        bitmoji: snapData.bitmoji_avatar || snapData.bitmojiAvatarUrl || "",
+        snapcodeUrl: snapData.snapcode_image_url || "",
+        lastEnriched: new Date().toISOString(),
+      }
+    : null;
+
+  const facebookData = fbData
+    ? {
+        followers: fbData.followers_count || fbData.follower_count || null,
+        likes: fbData.likes_count || fbData.fan_count || null,
+        bio: fbData.about || fbData.bio || "",
+        category: fbData.category || "",
+        avatarUrl: fbData.profile_pic_url || fbData.profilePicUrl || "",
+        profileUrl: fbData.url || "",
+        lastEnriched: new Date().toISOString(),
+      }
+    : null;
+
+  const { user: u2, stats: s2 } = ttProfile ? parseTikTokUserStats(ttProfile) : { user: {}, stats: {} };
+  const videoDescriptions = ttRecentVideos
+    .slice(0, 5)
+    .map((v) => v.caption)
+    .filter(Boolean)
+    .join("\n");
+  const engagementRate = igEngRate || ttEngRate || null;
+
+  return {
+    tiktokData,
+    tiktokRecentVideos: ttRecentVideos,
+    tiktokBestVideo: ttBestVideo,
+    tiktokAvgViews: ttAvgViews,
+    tiktokAvgLikes: ttAvgLikes,
+    tiktokAvgComments: ttAvgComments,
+    tiktokAvgShares: ttAvgShares,
+    tiktokEngRate: ttEngRate,
+    tiktokShopData,
+    instagramData,
+    instagramRecentPosts: igRecentPosts,
+    instagramRecentReels: igRecentReels,
+    instagramAvgLikes: igAvgLikes,
+    instagramAvgComments: igAvgComments,
+    instagramEngRate: igEngRate,
+    youtubeData,
+    twitterData,
+    linkedinData,
+    snapchatData,
+    facebookData,
+    engagementRate,
+    videoDescriptions,
+    user: u2,
+    stats: s2,
+    ttCaptions: ttRecentVideos.slice(0, 5).map((v) => v.caption).filter(Boolean).join(" | "),
+    igCaptions: igRecentPosts.slice(0, 5).map((p) => p.caption).filter(Boolean).join(" | "),
+  };
+}
+
+async function runIbScoreClaude(ctx) {
+  const key = String(ctx.apiKey || "").trim();
+  if (!key) return null;
+  const {
+    cleanHandle,
+    tiktokData,
+    instagramData,
+    tiktokShopData,
+    ttCaptions,
+    igCaptions,
+    igEngRate,
+    ttEngRate,
+    igAvgLikes,
+    igAvgComments,
+    igRecentReels,
+    youtubeData,
+    twitterData,
+    linkedinData,
+    facebookData,
+    snapchatData,
+  } = ctx;
+
+  const prompt = `You are the IB Score calculator for Intake Breathing, a magnetic nasal dilator company for better breathing, sleep, and athletic performance.
+
+CREATOR: @${cleanHandle}
+NAME: ${tiktokData?.displayName || instagramData?.fullName || "Unknown"}
+
+INSTAGRAM (primary platform — weight 45%):
+  Followers: ${instagramData?.followers ?? "unknown"}
+  Posts: ${instagramData?.posts ?? "unknown"}
+  IG Engagement Rate: ${igEngRate ?? "unknown"}%
+  Avg Likes per post: ${igAvgLikes || "unknown"}
+  Avg Comments per post: ${igAvgComments || "unknown"}
+  Bio: ${instagramData?.bio || "none"}
+  Category: ${instagramData?.category || "unknown"}
+  Verified: ${instagramData?.verified || false}
+  Business Account: ${instagramData?.isBusiness || false}
+  Recent post captions: ${igCaptions || "none"}
+  Reels count pulled: ${Array.isArray(igRecentReels) ? igRecentReels.length : 0}
+
+TIKTOK (weight 30%):
+  Followers: ${tiktokData?.followers ?? "unknown"}
+  Total Hearts: ${tiktokData?.hearts ?? "unknown"}
+  TT Videos: ${tiktokData?.videoCount ?? "unknown"}
+  TT Engagement Rate: ${ttEngRate ?? "unknown"}%
+  Avg Views per video: ${tiktokData?.avgViews ?? "unknown"}
+  Bio: ${tiktokData?.bio || "none"}
+  Verified: ${tiktokData?.verified || false}
+  Has TikTok Shop: ${tiktokShopData?.hasShop || false} (${tiktokShopData?.productCount || 0} products)
+  Recent video captions: ${ttCaptions || "none"}
+
+CROSS-PLATFORM PRESENCE (weight 10%):
+  YouTube: ${youtubeData ? `${youtubeData.subscribers} subscribers` : "not found"}
+  Twitter/X: ${twitterData ? `${twitterData.followers} followers` : "not found"}
+  LinkedIn: ${linkedinData ? "present" : "not found"}
+  Facebook: ${facebookData ? `${facebookData.followers || "unknown"} followers` : "not found"}
+  Snapchat: ${snapchatData ? "present" : "not found"}
+
+Return ONLY a JSON object:
+{
+  "ibScore": <number 1-100>,
+  "scoreBreakdown": {
+    "instagramScore": <0-45>,
+    "tiktokScore": <0-30>,
+    "crossPlatform": <0-10>,
+    "contentAlignment": <0-15>
+  },
+  "scoreLabel": <"Elite" | "Excellent" | "Strong" | "Promising" | "Low Fit">,
+  "oneSentence": "<one sentence summary>",
+  "contentStyle": "<2 sentences>",
+  "whyIntake": "<1 sentence>",
+  "risk": "<red flags or 'None identified'>",
+  "suggestedCampaigns": "<comma-separated>",
+  "estimatedRate": "<dollar range>",
+  "suggestedNiche": "<comma-separated>",
+  "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>",
+  "bestPlatform": "<'Instagram' or 'TikTok'>"
+}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "x-api-key": key,
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 600,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) return null;
+  const aiData = await res.json();
+  const aiText = (aiData.content || []).map((i) => i.text || "").join("") || "";
+  const aiMatch = aiText.match(/\{[\s\S]*\}/);
+  if (!aiMatch) return null;
+  try {
+    const parsed = JSON.parse(aiMatch[0]);
+    if (typeof parsed.ibScore === "string") parsed.ibScore = parseInt(parsed.ibScore, 10);
+    if (!Number.isFinite(parsed.ibScore)) parsed.ibScore = null;
+    parsed.qualityTier = normalizeQualityTier(parsed.qualityTier);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey, onStep, opts) {
+  const sk = String(scrapeKey || "").trim();
+  const ak = String(aiKey || "").trim();
+  const skipAi = !!opts?.skipAi;
+  const igHandle = String(opts?.instagramHandle || "").replace(/^@/, "").trim() || cleanHandle;
+  const bump = opts?.onCreditUsed;
+  const h = encodeURIComponent(cleanHandle);
+  const igEnc = encodeURIComponent(igHandle);
+  const base = "https://api.scrapecreators.com";
+
+  const fetchOne = async (url, stepId) => {
+    try {
+      const res = await fetch(url, { headers: { "x-api-key": sk } });
+      if (!res.ok) {
+        onStep?.(stepId, "fail");
+        return null;
+      }
+      const j = await res.json().catch(() => null);
+      bump?.();
+      onStep?.(stepId, "ok");
+      return j;
+    } catch {
+      onStep?.(stepId, "fail");
+      return null;
+    }
+  };
+
+  const [
+    ttProfileRaw,
+    ttVideosRaw,
+    ttShopRaw,
+    igProfileRaw,
+    igPostsRaw,
+    igReelsRaw,
+    ytRaw,
+    twRaw,
+    liRaw,
+    snapRaw,
+    fbRaw,
+  ] = await Promise.all([
+    fetchOne(`${base}/v1/tiktok/profile?handle=${h}`, "tt_profile"),
+    fetchOne(`${base}/v3/tiktok/profile/videos?handle=${h}`, "tt_videos"),
+    fetchOne(`${base}/v1/tiktok/user/showcase?handle=${h}`, "tt_shop"),
+    fetchOne(`${base}/v1/instagram/profile?handle=${igEnc}`, "ig_profile"),
+    fetchOne(`${base}/v2/instagram/user/posts?handle=${igEnc}`, "ig_posts"),
+    fetchOne(`${base}/v1/instagram/user/reels?handle=${igEnc}`, "ig_reels"),
+    fetchOne(`${base}/v1/youtube/channel?handle=${h}`, "youtube"),
+    fetchOne(`${base}/v1/twitter/profile?handle=${h}`, "twitter"),
+    fetchOne(`${base}/v1/linkedin/profile?handle=${h}`, "linkedin"),
+    fetchOne(`${base}/v1/snapchat/profile?handle=${h}`, "snapchat"),
+    fetchOne(`${base}/v1/facebook/profile?handle=${h}`, "facebook"),
+  ]);
+
+  if (opts?.requireTikTokProfile && !ttProfileRaw) {
+    const e = new Error("NOT_FOUND");
+    e.status = 404;
+    throw e;
+  }
+
+  const processed = processElevenPlatformApiResults(cleanHandle, igHandle, {
+    ttProfileRaw,
+    ttVideosRaw,
+    ttShopRaw,
+    igProfileRaw,
+    igPostsRaw,
+    igReelsRaw,
+    ytData: ytRaw,
+    twData: twRaw,
+    liData: liRaw,
+    snapData: snapRaw,
+    fbData: fbRaw,
+  }, opts?.existingInstagramData || {});
+
+  let aiAnalysis = null;
+  if (!skipAi && ak) {
+    onStep?.("ai_score", "run");
+    aiAnalysis = await runIbScoreClaude({
+      apiKey: ak,
+      cleanHandle,
+      tiktokData: processed.tiktokData,
+      instagramData: processed.instagramData,
+      tiktokShopData: processed.tiktokShopData,
+      ttCaptions: processed.ttCaptions,
+      igCaptions: processed.igCaptions,
+      igEngRate: processed.instagramEngRate,
+      ttEngRate: processed.tiktokEngRate,
+      igAvgLikes: processed.instagramAvgLikes,
+      igAvgComments: processed.instagramAvgComments,
+      igRecentReels: processed.instagramRecentReels,
+      youtubeData: processed.youtubeData,
+      twitterData: processed.twitterData,
+      linkedinData: processed.linkedinData,
+      facebookData: processed.facebookData,
+      snapchatData: processed.snapchatData,
+    });
+    onStep?.("ai_score", aiAnalysis ? "ok" : "fail");
+  } else {
+    onStep?.("ai_score", skipAi ? "skip" : "fail");
+  }
+
+  const notes = [];
+  if (!ak && !skipAi) notes.push("Add your Anthropic API key in Settings to enable IB Score");
+
+  const nickname = processed.tiktokData?.displayName || processed.instagramData?.fullName || "";
+
+  const platformsFound = [
+    ttProfileRaw,
+    ttVideosRaw,
+    ttShopRaw,
+    igProfileRaw,
+    igPostsRaw,
+    igReelsRaw,
+    ytRaw,
+    twRaw,
+    liRaw,
+    snapRaw,
+    fbRaw,
+  ].filter(Boolean).length;
+
+  return {
+    ...processed,
+    aiAnalysis,
+    notes,
+    nickname,
+    igData: processed.instagramData,
+    ttData: processed.tiktokData,
+    platformsFound,
+  };
 }
 
 async function fetchTikTokProfileRaw(cleanHandle, scrapeKey, onCreditUsed) {
@@ -1300,61 +1895,36 @@ async function fetchTikTokVideosRaw(cleanHandle, scrapeKey, onCreditUsed) {
 
 /** Full ScrapeCreators + optional IB-Ai pipeline for one handle (TikTok + videos + IG + AI). onStep(id) fires after each phase starts. opts.skipAi: skip Anthropic. opts.instagramHandle: override IG handle. opts.existingInstagramData: merge base for IG errors. */
 async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opts) {
-  const sk = String(scrapeKey || "").trim();
-  const ak = String(aiKey || "").trim();
-  const skipAi = !!opts?.skipAi;
-  const igHandleOverride = String(opts?.instagramHandle || "").replace(/^@/, "").trim();
-  const igHandle = igHandleOverride || cleanHandle;
-  const notes = [];
-  const bump = opts?.onCreditUsed;
-  onStep?.("tt_profile");
-  const ttRaw = await fetchTikTokProfileRaw(cleanHandle, sk, bump);
-  const { user, stats } = parseTikTokUserStats(ttRaw);
-  onStep?.("tt_videos");
-  const vidRaw = await fetchTikTokVideosRaw(cleanHandle, sk, bump);
-  const tops = topVideosForAi(vidRaw || {});
-  const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
-
-  const fc = Number(stats?.followerCount ?? stats?.follower_count ?? 0);
-  const vidMetrics = buildTikTokRecentVideosAndMetrics(vidRaw, cleanHandle, fc);
-  const { engagementRate: erFromVideos, ...vidFields } = vidMetrics;
-  const ttData = { ...tiktokDataFromUserStats(user, stats), ...vidFields };
-  const engagementRate = erFromVideos;
-
-  onStep?.("ig_profile");
-  const igData = await fetchInstagramEnrichment(igHandle, sk, opts?.existingInstagramData || {}, bump);
-  if (igData.enrichError) notes.push(igData.enrichError);
-
-  onStep?.("ai_analyze");
-  let aiAnalysis = null;
-  if (!skipAi) {
-    if (ak) {
-      aiAnalysis = await runCreatorAiAnalysis({
-        cleanHandle,
-        user,
-        stats,
-        videoDescriptions,
-        apiKey: ak,
-      });
-      if (!aiAnalysis) notes.push("Add your Anthropic API key in Settings to enable AI analysis");
-    } else {
-      notes.push("Add your Anthropic API key in Settings to enable AI analysis");
-    }
-  }
-
-  const nickname = user?.nickname || user?.uniqueId || "";
-
-  onStep?.("saving");
+  const out = await runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey, onStep, opts);
   return {
-    user,
-    stats,
-    ttData,
-    igData,
-    aiAnalysis,
-    engagementRate,
-    videoDescriptions,
-    nickname,
-    notes,
+    user: out.user,
+    stats: out.stats,
+    ttData: out.ttData,
+    igData: out.igData,
+    aiAnalysis: out.aiAnalysis,
+    engagementRate: out.engagementRate,
+    videoDescriptions: out.videoDescriptions,
+    nickname: out.nickname,
+    notes: out.notes,
+    tiktokShopData: out.tiktokShopData,
+    youtubeData: out.youtubeData,
+    twitterData: out.twitterData,
+    linkedinData: out.linkedinData,
+    snapchatData: out.snapchatData,
+    facebookData: out.facebookData,
+    tiktokRecentVideos: out.tiktokRecentVideos,
+    tiktokBestVideo: out.tiktokBestVideo,
+    tiktokAvgViews: out.tiktokAvgViews,
+    tiktokAvgLikes: out.tiktokAvgLikes,
+    tiktokAvgComments: out.tiktokAvgComments,
+    tiktokAvgShares: out.tiktokAvgShares,
+    tiktokEngRate: out.tiktokEngRate,
+    instagramRecentPosts: out.instagramRecentPosts,
+    instagramRecentReels: out.instagramRecentReels,
+    instagramAvgLikes: out.instagramAvgLikes,
+    instagramAvgComments: out.instagramAvgComments,
+    instagramEngRate: out.instagramEngRate,
+    platformsFound: out.platformsFound,
   };
 }
 
@@ -3587,7 +4157,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   });
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState(null);
-  const [showEngHint, setShowEngHint] = useState(false);
+  const [enrichStepMap, setEnrichStepMap] = useState(null);
+  const [contentTab, setContentTab] = useState("tiktok");
+  const [expandedTtId, setExpandedTtId] = useState(null);
   const [igPullBusy, setIgPullBusy] = useState(false);
 
   const campaignNames = useMemo(() => {
@@ -3669,9 +4241,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       }
     }
     setEnriching(true);
-    setEnrichMsg("Pulling live data from TikTok...");
+    setEnrichMsg(null);
+    setEnrichStepMap(Object.fromEntries(ENRICH_STEPS.map((s) => [s.id, "pending"])));
+    const onStep = (id, status) => {
+      setEnrichStepMap((prev) => ({ ...prev, [id]: status === "ok" ? "ok" : status === "fail" ? "fail" : status === "skip" ? "skip" : status === "run" ? "run" : "pending" }));
+    };
     try {
-      const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak, null, {
+      const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak, onStep, {
         instagramHandle: c.instagramHandle,
         existingInstagramData: c.instagramData,
         onCreditUsed: onScrapeCreditUsed,
@@ -3681,57 +4257,74 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...payload.ttData },
         instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...payload.igData },
         engagementRate: payload.engagementRate,
+        tiktokEngRate: payload.tiktokEngRate,
+        instagramEngRate: payload.instagramEngRate,
+        instagramAvgLikes: payload.instagramAvgLikes,
+        instagramAvgComments: payload.instagramAvgComments,
+        instagramRecentPosts: payload.instagramRecentPosts,
+        instagramRecentReels: payload.instagramRecentReels,
+        tiktokShopData: payload.tiktokShopData,
+        youtubeData: payload.youtubeData || c.youtubeData,
+        twitterData: payload.twitterData || c.twitterData,
+        linkedinData: payload.linkedinData || c.linkedinData,
+        snapchatData: payload.snapchatData || c.snapchatData,
+        facebookData: payload.facebookData || c.facebookData,
+        lastEnriched: new Date().toISOString(),
         ...patch,
         ...(!c.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
       });
-      const f = formatMetricShort(payload.ttData.followers);
-      const h = formatMetricShort(payload.ttData.hearts);
-      const extra = payload.notes.length ? ` ${payload.notes[0]}` : "";
-      setEnrichMsg(`Profile enriched — ${f} followers, ${h} hearts.${extra}`);
+      const pf = payload.platformsFound ?? 0;
+      const ib = payload.aiAnalysis?.ibScore;
+      setEnrichMsg(
+        `Enrichment complete — ${pf}/11 platforms found · ${ib != null ? `${ib} IB Score` : "— IB Score"}`
+      );
     } catch (err) {
       setEnrichMsg(err.message || "Enrichment failed.");
     } finally {
       setEnriching(false);
+      setEnrichStepMap(null);
     }
   };
 
   const refreshProfile = async () => {
-    if (!window.confirm("This will use about 2–3 ScrapeCreators API credits. Continue?")) return;
+    if (!window.confirm("This will use up to 11 ScrapeCreators API credits plus IB-Ai. Continue?")) return;
     await runFullEnrich(true);
   };
 
   const reanalyzeOnly = async () => {
     const ak = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
-    const sk = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
     if (!ak.trim()) {
-      alert("Add your Anthropic API key in Settings to enable AI analysis");
+      alert("Add your Anthropic API key in Settings to enable IB Score");
       return;
     }
     setEnriching(true);
-    setEnrichMsg("IB-Ai re-analyzing…");
+    setEnrichMsg("IB-Ai calculating IB Score…");
     try {
-      const vidRaw = sk ? await fetchTikTokVideosRaw(cleanHandle, sk, onScrapeCreditUsed) : null;
-      const tops = topVideosForAi(vidRaw || {});
-      const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
-      const ttD = c.tiktokData || {};
-      const user = { nickname: c.name, signature: ttD.bio, verified: ttD.verified };
-      const stats = {
-        followerCount: ttD.followers,
-        followingCount: ttD.following,
-        heartCount: ttD.hearts,
-        videoCount: ttD.videoCount,
-      };
-      const ai = await runCreatorAiAnalysis({
-        cleanHandle,
-        user,
-        stats,
-        videoDescriptions,
+      const tt = c.tiktokData || {};
+      const ig = c.instagramData || {};
+      const ai = await runIbScoreClaude({
         apiKey: ak.trim(),
+        cleanHandle,
+        tiktokData: tt,
+        instagramData: ig,
+        tiktokShopData: c.tiktokShopData,
+        ttCaptions: (Array.isArray(tt.recentVideos) ? tt.recentVideos : []).slice(0, 5).map((v) => v.caption).filter(Boolean).join(" | "),
+        igCaptions: (c.instagramRecentPosts || []).slice(0, 5).map((p) => p.caption).filter(Boolean).join(" | "),
+        igEngRate: c.instagramEngRate,
+        ttEngRate: c.tiktokEngRate,
+        igAvgLikes: c.instagramAvgLikes,
+        igAvgComments: c.instagramAvgComments,
+        igRecentReels: c.instagramRecentReels || [],
+        youtubeData: c.youtubeData,
+        twitterData: c.twitterData,
+        linkedinData: c.linkedinData,
+        facebookData: c.facebookData,
+        snapchatData: c.snapchatData,
       });
       if (ai) {
         const patch = mergeAiFieldsIntoExisting(c, ai);
         updateCreator(c.id, patch);
-        setEnrichMsg("IB-Ai analysis updated.");
+        setEnrichMsg("IB Score updated.");
       } else {
         setEnrichMsg("Could not parse AI response.");
       }
@@ -3792,635 +4385,339 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     cursor: "pointer",
   };
 
+
+  const ib = c.ibScore != null ? Number(c.ibScore) : null;
+  const ibLabel = c.ibScoreLabel || c.aiAnalysis?.scoreLabel || "";
+  const ibCol = ibScoreTierColor(ib);
+  const br = c.ibScoreBreakdown || c.aiAnalysis?.scoreBreakdown || {};
+  const ai = c.aiAnalysis || {};
+  const ytD = c.youtubeData || {};
+  const twD = c.twitterData || {};
+  const liD = c.linkedinData || {};
+  const snD = c.snapchatData || {};
+  const fbD = c.facebookData || {};
+  const shop = c.tiktokShopData || {};
+  const ttList = (ttD.recentVideos || []).slice(0, 10);
+  const igPostsList = (c.instagramRecentPosts || []).slice(0, 10);
+  const igReelsList = (c.instagramRecentReels || []).slice(0, 10);
+
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flex: "1 1 320px", minWidth: 0 }}>
-          {ttD.avatarUrl ? (
-            <img src={ttD.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 32, objectFit: "cover", flexShrink: 0, border: `1px solid ${t.border}` }} />
+      {enriching && enrichStepMap ? (
+        <div style={{ marginBottom: 16, padding: 14, background: t.cardAlt, borderRadius: 12, border: `1px solid ${t.border}` }}>
+          {ENRICH_STEPS.map((step) => {
+            const st = enrichStepMap[step.id];
+            return (
+              <div key={step.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, fontSize: 12, color: st === "ok" ? t.green : st === "fail" ? t.red : t.textFaint }}>
+                <span style={{ width: 16 }}>{st === "ok" ? "✓" : st === "fail" ? "✗" : "…"}</span>
+                {step.label}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px", minWidth: 0 }}>
+          {ttD.avatarUrl || igD.avatarUrl ? (
+            <img src={ttD.avatarUrl || igD.avatarUrl} alt="" style={{ width: 48, height: 48, objectFit: "cover", flexShrink: 0, border: `1px solid ${t.border}` }} />
           ) : (
-            <div style={{ width: 64, height: 64, borderRadius: 32, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: t.textMuted, flexShrink: 0 }}>
-              {handleLetter}
-            </div>
+            <div style={{ width: 48, height: 48, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: t.textMuted }}>{handleLetter}</div>
           )}
           <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 28, fontWeight: 800, color: t.text, textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
-                {c.handle}
-              </a>
-              {ttD.verified ? (
-                <span title="Verified on TikTok" style={{ color: "#1d9bf0", fontSize: 20, lineHeight: 1 }} aria-hidden>
-                  ✓
-                </span>
-              ) : null}
-              {c.name?.trim() ? <span style={{ fontSize: 16, color: t.textMuted, fontWeight: 500 }}>{c.name.trim()}</span> : null}
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: "4px 12px",
-                  borderRadius: 20,
-                  background: c.status === "Active" ? t.green + "18" : c.status === "One-time" ? t.orange + "18" : t.red + "18",
-                  color: c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red,
-                  border: `1px solid ${c.status === "Active" ? t.green + "35" : c.status === "One-time" ? t.orange + "35" : t.red + "35"}`,
-                }}
-              >
-                {c.status}
-              </span>
-              {c.quality === "High" ? (
-                <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 12px", borderRadius: 20, background: "#f59e0b15", color: "#f59e0b", border: "1px solid #f59e0b30" }}>★ High</span>
-              ) : (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: t.cardAlt, color: t.textMuted, border: `1px solid ${t.border}` }}>Standard</span>
-              )}
-            </div>
-            {ttD.bio ? (
-              <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", lineHeight: 1.5, padding: "10px 12px", background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>"{ttD.bio}"</div>
-            ) : null}
+            <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "block" }}>{c.handle}</a>
+            {c.name?.trim() ? <div style={{ fontSize: 13, color: t.textMuted }}>{c.name.trim()}</div> : null}
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: c.status === "Active" ? t.green + "18" : t.cardAlt, color: c.status === "Active" ? t.green : t.textMuted, marginTop: 4, display: "inline-block" }}>{c.status}</span>
           </div>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-          <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>
-            ← Back
-          </button>
-          <button type="button" onClick={() => document.getElementById("creator-notes-section")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>
-            Edit
-          </button>
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: Number.isFinite(ib) ? ibCol : t.border, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${t.border}` }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>{Number.isFinite(ib) ? Math.round(ib) : "—"}</span>
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: ibCol, marginTop: 4 }}>{ibLabel || "IB Score"}</div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, padding: "9px 16px", fontSize: 13 }}>← Back</button>
           {!hasTTEnrichment ? (
-            <button
-              type="button"
-              disabled={enriching}
-              onClick={() => runFullEnrich(false)}
-              style={{ ...S.btnP, padding: "9px 18px", fontSize: 13, opacity: enriching ? 0.65 : 1 }}
-            >
-              {enriching ? "Pulling live data…" : "Enrich Profile"}
-            </button>
+            <button type="button" disabled={enriching} onClick={() => runFullEnrich(false)} style={{ ...S.btnP, padding: "9px 16px", fontSize: 13 }}>{enriching ? "…" : "Enrich Profile"}</button>
           ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 12, color: t.textMuted }}>Last enriched: {lastEnrichDateLabel}</span>
-              <button type="button" onClick={() => document.getElementById("creator-live-metrics")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 16px", fontSize: 13 }}>
-                View Data
-              </button>
-              <button
-                type="button"
-                disabled={enriching}
-                onClick={refreshProfile}
-                style={{ ...S.btnS, padding: "9px 16px", fontSize: 13, opacity: enriching ? 0.65 : 1 }}
-              >
-                {enriching ? "Refreshing…" : "Refresh"}
-              </button>
+            <>
+              <span style={{ fontSize: 11, color: t.textMuted }}>Last: {lastEnrichDateLabel}</span>
+              <button type="button" onClick={() => document.getElementById("creator-detail-content")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 14px", fontSize: 12 }}>View Data</button>
+              <button type="button" disabled={enriching} onClick={refreshProfile} style={{ ...S.btnS, padding: "9px 14px", fontSize: 12 }}>Refresh</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {ai.oneSentence ? (
+        <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", marginBottom: 20 }}>{ai.oneSentence}</div>
+      ) : null}
+
+      {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginBottom: 14 }}>{enrichMsg}</div> : null}
+
+      <div id="creator-detail-content" style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Platforms</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {(igD.followers != null || igD.lastEnriched) && !igD.enrichError ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#E1306C", marginBottom: 6 }}>Instagram</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(igD.followers)}</div>
+              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{igD.posts != null ? `${igD.posts} posts` : "—"} · {c.instagramEngRate != null ? `${Number(c.instagramEngRate).toFixed(2)}%` : "—"} eng</div>
+              {igD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>Category: {igD.category}</div> : null}
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{igD.verified ? "✓ Verified " : ""}{igD.isBusiness ? "· Business" : ""}</div>
+            </div>
+          ) : null}
+          {ttD.lastEnriched || ttD.followers != null ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>TikTok</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ttD.followers)}</div>
+              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{formatMetricShort(ttD.hearts)} hearts · {ttD.videoCount ?? "—"} videos</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{ttD.avgViews != null ? `${formatMetricShort(ttD.avgViews)} avg views` : "—"} · {c.tiktokEngRate != null ? `${Number(c.tiktokEngRate).toFixed(2)}%` : "—"} eng</div>
+              {shop.hasShop ? <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>TikTok Shop ({shop.productCount || 0})</div> : null}
+            </div>
+          ) : null}
+          {ytD.subscribers != null || ytD.lastEnriched ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>YouTube</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ytD.subscribers)}</div>
+              <div style={{ fontSize: 11, color: t.textFaint }}>subscribers</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{ytD.totalViews != null ? `${formatMetricShort(ytD.totalViews)} views` : "—"} · {ytD.videoCount ?? "—"} videos</div>
+            </div>
+          ) : null}
+          {twD.followers != null || twD.lastEnriched ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>X / Twitter</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(twD.followers)}</div>
+              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{twD.tweets != null ? `${twD.tweets} tweets` : "—"}</div>
+            </div>
+          ) : null}
+          {fbD.followers != null || fbD.lastEnriched ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>Facebook</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(fbD.followers)}</div>
+              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
+              {fbD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>Category: {fbD.category}</div> : null}
+            </div>
+          ) : null}
+          {liD.lastEnriched ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>LinkedIn</div>
+              <div style={{ fontSize: 12, color: t.text, lineHeight: 1.4 }}>{liD.headline || "—"}</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{liD.location || ""} {liD.connections != null ? `· ${liD.connections} conn.` : ""}</div>
+            </div>
+          ) : null}
+          {snD.lastEnriched ? (
+            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>Snapchat</div>
+              <div style={{ fontSize: 13, color: t.text }}>{snD.displayName || "Present"}</div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {Number.isFinite(ib) ? (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
+            <div style={{ width: 72, height: 72, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#fff", flexShrink: 0 }}>{Math.round(ib)}</div>
+            <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+              {["instagramScore", "tiktokScore", "crossPlatform", "contentAlignment"].map((key) => {
+                const max = key === "instagramScore" ? 45 : key === "tiktokScore" ? 30 : key === "crossPlatform" ? 10 : 15;
+                const val = Number(br[key]) || 0;
+                const pct = Math.min(100, (val / max) * 100);
+                const lab = key === "instagramScore" ? "Instagram" : key === "tiktokScore" ? "TikTok" : key === "crossPlatform" ? "Cross-Platform" : "Content Alignment";
+                return (
+                  <div key={key} style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>{lab} ({max})</div>
+                    <div style={{ height: 8, borderRadius: 4, background: t.border, overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: ibCol, borderRadius: 4 }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {ai.whyIntake ? <div style={{ fontSize: 13, color: t.textSecondary, marginTop: 8 }}><strong style={{ color: t.textFaint }}>Why Intake:</strong> {ai.whyIntake}</div> : null}
+              {ai.risk ? <div style={{ fontSize: 13, color: t.orange, marginTop: 8 }}><strong>Risk:</strong> {ai.risk}</div> : null}
+              {ai.suggestedCampaigns ? (
+                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {String(ai.suggestedCampaigns).split(",").map((x, i) => (
+                    <span key={i} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: t.cardAlt, border: `1px solid ${t.border}` }}>{x.trim()}</span>
+                  ))}
+                </div>
+              ) : null}
+              {ai.estimatedRate ? <div style={{ fontSize: 14, fontWeight: 700, color: t.green, marginTop: 10 }}>Estimated rate: {ai.estimatedRate}</div> : null}
+              {ai.bestPlatform ? <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>Best platform: <strong style={{ color: t.text }}>{ai.bestPlatform}</strong></div> : null}
+              <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, marginTop: 12, fontSize: 12, padding: "6px 12px" }}>Recalculate IB Score</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button type="button" onClick={() => setContentTab("tiktok")} style={{ ...S.btnS, padding: "6px 14px", fontSize: 12, background: contentTab === "tiktok" ? t.green + "22" : "transparent", borderColor: contentTab === "tiktok" ? t.green : t.border }}>TikTok Videos</button>
+          <button type="button" onClick={() => setContentTab("instagram")} style={{ ...S.btnS, padding: "6px 14px", fontSize: 12, background: contentTab === "instagram" ? t.green + "22" : "transparent", borderColor: contentTab === "instagram" ? t.green : t.border }}>Instagram Posts/Reels</button>
+        </div>
+        <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, overflow: "hidden" }}>
+          {contentTab === "tiktok" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 72px 56px 72px 72px 40px 32px", fontSize: 12, background: t.cardAlt }}>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>#</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Caption</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Views</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Likes</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Cmts</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Date</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>▶</div>
+              <div />
+              {ttList.length === 0 ? (
+                <div style={{ gridColumn: "1 / -1", padding: 16, color: t.textMuted }}>Not enriched yet</div>
+              ) : (
+                ttList.map((row, idx) => (
+                  <div key={row.id || idx} style={{ display: "contents" }}>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>{idx + 1}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.caption || "—"}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.views)}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.likes)}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.comments)}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, fontSize: 11 }}>{row.date || "—"}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>
+                      <button type="button" style={{ background: "none", border: "none", color: t.green, cursor: "pointer", fontSize: 12 }} onClick={() => setExpandedTtId(expandedTtId === row.id ? null : row.id)}>▶</button>
+                    </div>
+                    <div />
+                    {expandedTtId === row.id && row.playUrl ? (
+                      <div style={{ gridColumn: "1 / -1", padding: 8, background: t.card, borderTop: `1px solid ${t.border}` }}>
+                        <video src={row.playUrl} controls style={{ maxWidth: 320, maxHeight: 480, borderRadius: 8 }} />
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 56px 56px 56px 72px 48px", fontSize: 12, background: t.cardAlt }}>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>#</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Caption</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Likes</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint, textAlign: "right" }}>Cmts</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Type</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Date</div>
+              <div style={{ padding: "6px 8px", fontWeight: 700, color: t.textFaint }}>Link</div>
+              {[...igPostsList, ...igReelsList].length === 0 ? (
+                <div style={{ gridColumn: "1 / -1", padding: 16, color: t.textMuted }}>Not enriched yet</div>
+              ) : (
+                [...igPostsList, ...igReelsList].slice(0, 10).map((row, idx) => (
+                  <div key={row.id || idx} style={{ display: "contents" }}>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>{idx + 1}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(row.caption || "").slice(0, 80)}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.likes)}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, textAlign: "right" }}>{formatMetricShort(row.comments)}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, fontSize: 11 }}>{row.mediaType || "—"}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30`, fontSize: 11 }}>{row.date || "—"}</div>
+                    <div style={{ padding: "4px 8px", lineHeight: "32px", borderTop: `1px solid ${t.border}30` }}>
+                      {row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" style={{ color: t.green, fontSize: 11 }}>Open</a> : "—"}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
       </div>
-      {enrichMsg ? (
-        <div style={{ fontSize: 12, color: enrichMsg.includes("Profile enriched") || enrichMsg.includes("enriched") || enrichMsg.includes("IB-Ai analysis") ? t.green : t.orange, marginBottom: 16 }}>{enrichMsg}</div>
-      ) : null}
 
-      <div id="creator-live-metrics" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Live Metrics</div>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: t.textMuted }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: freshness.color, flexShrink: 0 }} title={freshness.text} />
-              {freshness.text}
-            </span>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 20 }}>
+        <div style={{ flex: "1 1 400px", minWidth: 280 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Profile</div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche</div>
+            <input value={c.niche || ""} onChange={(e) => updateCreator(c.id, { niche: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
           </div>
-        </div>
-        {!lastEnriched ? (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 12 }}>No live data yet</div>
-            <button type="button" disabled={enriching} onClick={() => runFullEnrich(false)} style={{ ...S.btnP, padding: "10px 20px", fontSize: 14 }}>
-              Enrich Profile
-            </button>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginBottom: 14 }}>
-              {[
-                { label: "Followers", val: ttD.followers != null ? formatMetricShort(ttD.followers) : "—" },
-                { label: "Total Hearts", val: ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—" },
-                { label: "TT Videos", val: ttD.videoCount != null ? String(ttD.videoCount) : "—" },
-                { label: "Avg Views", val: ttD.avgViews != null ? formatMetricShort(ttD.avgViews) : "—" },
-                { label: "Avg Likes", val: ttD.avgLikes != null ? formatMetricShort(ttD.avgLikes) : "—" },
-                {
-                  label: "Eng. Rate",
-                  val: (() => {
-                    const er = parseFloat(c.engagementRate);
-                    return Number.isFinite(er) ? `${er.toFixed(2)}%` : "—";
-                  })(),
-                },
-              ].map((s) => (
-                <div key={s.label} style={{ flex: "1 1 100px", textAlign: "center", minWidth: 90 }}>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: s.val === "—" ? t.textFaint : t.text }}>{s.val}</div>
-                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-            {igD.enrichError ? (
-              <div
-                style={{
-                  marginBottom: 14,
-                  padding: 14,
-                  borderRadius: 10,
-                  background: t.orange + "12",
-                  border: `1px solid ${t.orange}44`,
-                }}
-              >
-                <div style={{ fontSize: 13, color: t.orange, marginBottom: 10, fontWeight: 600 }}>
-                  ⚠ Instagram: {igD.enrichError}
-                </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram handle (if different from TikTok)</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                  <input
-                    value={c.instagramHandle || cleanHandle}
-                    onChange={(e) => updateCreator(c.id, { instagramHandle: e.target.value.replace(/^@/, "").trim() })}
-                    onBlur={onInstagramHandleBlur}
-                    placeholder="Instagram handle (if different from TikTok)"
-                    style={{ flex: "1 1 180px", minWidth: 140, padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-                  />
-                  <button type="button" disabled={igPullBusy} onClick={pullInstagramOnly} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>
-                    {igPullBusy ? "…" : "Retry"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginBottom: 14 }}>
-                {[
-                  { label: "IG Followers", val: igD.followers != null ? formatMetricShort(igD.followers) : "—" },
-                  { label: "IG Posts", val: igD.posts != null ? String(igD.posts) : "—" },
-                  { label: "IG Verified", val: igD.verified ? "✓ Yes" : "No" },
-                  { label: "IG Category", val: igD.category ? String(igD.category) : "—" },
-                ].map((s) => (
-                  <div key={s.label} style={{ flex: "1 1 100px", textAlign: "center", minWidth: 90 }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: s.val === "—" ? t.textFaint : t.text }}>{s.val}</div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!igD.enrichError && igD.followers == null && !igD.lastEnriched ? (
-              <div style={{ marginBottom: 14, fontSize: 13, color: t.textMuted }}>
-                Instagram not pulled yet.
-                <button type="button" disabled={igPullBusy} onClick={pullInstagramOnly} style={{ ...S.btnP, marginLeft: 10, padding: "6px 12px", fontSize: 12 }}>
-                  {igPullBusy ? "…" : "Enrich Instagram"}
-                </button>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setShowEngHint((v) => !v)}
-              style={{ background: "none", border: "none", color: t.textFaint, fontSize: 11, cursor: "pointer", padding: "4px 0", marginBottom: 10, textDecoration: "underline" }}
-            >
-              Engagement Rate Explained {showEngHint ? "▲" : "▼"}
-            </button>
-            {showEngHint ? (
-              <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.55, marginBottom: 12, padding: "10px 12px", background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                Engagement Rate = average (likes + comments + shares) per video ÷ followers × 100. Calculated from their 20 most recent TikTok videos. A rate of 3–6% is average, 6–10% is good, 10%+ is excellent.
-              </div>
-            ) : null}
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
-              <div style={{ fontSize: 11, color: t.textFaint }}>Last updated: {new Date(lastEnriched).toLocaleString()}</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="button" onClick={() => document.getElementById("creator-live-metrics")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "8px 16px", fontSize: 12 }}>
-                  View Data
-                </button>
-                <button type="button" disabled={enriching} onClick={refreshProfile} style={{ ...S.btnS, padding: "8px 16px", fontSize: 12, opacity: enriching ? 0.65 : 1 }}>
-                  {enriching ? "Refreshing…" : "Refresh"}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {Array.isArray(ttD.recentVideos) && ttD.recentVideos.length > 0 ? (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
-          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16, color: t.text }}>Recent TikTok Videos</div>
-          <div style={{ display: "flex", flexWrap: "nowrap", gap: 12, overflowX: "auto", paddingBottom: 6 }}>
-            {ttD.recentVideos.map((v) => {
-              const isBest = ttD.bestVideo && String(v.id) === String(ttD.bestVideo.id);
-              return (
-                <a
-                  key={v.id || v.url}
-                  href={v.url || ttUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    width: 180,
-                    flexShrink: 0,
-                    borderRadius: 10,
-                    overflow: "hidden",
-                    border: isBest ? `2px solid ${t.green}` : `1px solid ${t.border}`,
-                    background: t.cardAlt,
-                    textDecoration: "none",
-                    color: "inherit",
-                    display: "block",
-                  }}
-                >
-                  {isBest ? (
-                    <div style={{ fontSize: 10, fontWeight: 800, color: t.green, padding: "6px 8px", background: t.green + "14" }}>★ Best Performer</div>
-                  ) : null}
-                  {v.cover ? (
-                    <img src={v.cover} alt="" style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover", display: "block" }} />
-                  ) : (
-                    <div style={{ width: "100%", aspectRatio: "9/16", background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: t.textFaint }}>No thumb</div>
-                  )}
-                  <div style={{ padding: "8px 10px 10px" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{formatMetricShort(v.views || 0)} views</div>
-                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>
-                      ❤ {formatMetricShort(v.likes || 0)} · 💬 {formatMetricShort(v.comments || 0)}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: t.textFaint,
-                        marginTop: 6,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      {v.caption || "—"}
-                    </div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginTop: 6 }}>{v.date || "—"}</div>
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {c.aiAnalysis ? (
-        <div
-          style={{
-            background: `linear-gradient(145deg, ${t.green}10 0%, ${t.card} 45%)`,
-            border: `1px solid ${t.green}35`,
-            borderRadius: 14,
-            padding: 22,
-            marginBottom: 24,
-            boxShadow: t.shadow,
-            position: "relative",
-          }}
-        >
-          <div style={{ position: "absolute", top: 14, right: 16, fontSize: 10, fontWeight: 900, color: t.green, letterSpacing: "0.12em" }}>IB-Ai</div>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>IB-Ai Analysis</div>
-            <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>
-              Re-analyze
-            </button>
-          </div>
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
-            {(() => {
-              const fs = c.aiAnalysis.fitScore;
-              const badge = fitScoreBadgeStyle(fs, t);
-              return (
-                <div style={{ textAlign: "center", flexShrink: 0 }}>
-                  <div
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: 36,
-                      background: badge.bg,
-                      color: badge.color,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 26,
-                      fontWeight: 800,
-                      margin: "0 auto 6px",
-                      border: `1px solid ${t.border}`,
-                    }}
-                  >
-                    {Number.isFinite(Number(fs)) ? fs : "—"}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.label || "—"}</div>
-                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 4 }}>Fit Score</div>
-                </div>
-              );
-            })()}
-            <div style={{ flex: "1 1 260px", minWidth: 0, fontSize: 13, color: t.textSecondary, lineHeight: 1.55 }}>
-              {c.aiAnalysis.fitReason ? (
-                <div style={{ marginBottom: 10 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Why fit</span>
-                  <div style={{ color: t.text, marginTop: 4 }}>{c.aiAnalysis.fitReason}</div>
-                </div>
-              ) : null}
-              {c.aiAnalysis.contentStyle ? (
-                <div style={{ marginBottom: 10 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Content style</span>
-                  <div style={{ marginTop: 4 }}>{c.aiAnalysis.contentStyle}</div>
-                </div>
-              ) : null}
-              {c.aiAnalysis.suggestedCampaigns ? (
-                <div style={{ marginBottom: 10 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Suggested campaigns</span>
-                  <div style={{ marginTop: 4 }}>{c.aiAnalysis.suggestedCampaigns}</div>
-                </div>
-              ) : null}
-              {c.aiAnalysis.estimatedRate ? (
-                <div>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Estimated rate</span>
-                  <div style={{ marginTop: 4, fontWeight: 700, color: t.green }}>{c.aiAnalysis.estimatedRate}</div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div style={{ flex: "2 1 420px", minWidth: 300, display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16, color: t.text }}>About</div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Handle</div>
-              <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 18, fontWeight: 700, color: t.green }}>
-                {c.handle}
-              </a>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Name</div>
-              <input
-                value={c.name || ""}
-                onChange={(e) => updateCreator(c.id, { name: e.target.value })}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
-              />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche (comma separated)</div>
-              <input
-                value={c.niche || ""}
-                onChange={(e) => updateCreator(c.id, { niche: e.target.value })}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
-              />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
-                <select value={c.quality || "Standard"} onChange={(e) => updateCreator(c.id, { quality: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
-                  <option value="High">★ High</option>
-                  <option value="Standard">Standard</option>
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
-                <select value={c.status || "Active"} onChange={(e) => updateCreator(c.id, { status: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
-                  <option value="Active">Active</option>
-                  <option value="One-time">One-time</option>
-                  <option value="Off-boarded">Off-boarded</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Cost per video</div>
-              <div style={{ display: "flex", alignItems: "stretch" }}>
-                <span style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRight: "none", borderRadius: "8px 0 0 8px", padding: "10px 12px", color: t.textMuted, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center" }}>$</span>
-                <input
-                  value={String(c.costPerVideo || "").replace(/^\$/, "")}
-                  onChange={(e) => updateCreator(c.id, { costPerVideo: e.target.value })}
-                  placeholder="100"
-                  style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: "0 8px 8px 0", border: `1px solid ${t.border}`, borderLeft: "none", background: t.inputBg, color: t.inputText, fontSize: 14 }}
-                />
-              </div>
-            </div>
-            {(c.address || "").trim() ? (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Shipping Address</div>
-                <button type="button" onClick={() => setShowShipping((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: showShipping ? 10 : 0 }}>
-                  {showShipping ? "Hide" : "Show"} address {showShipping ? "▲" : "▼"}
-                </button>
-                {showShipping ? (
-                  <div>
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-                      <div style={{ flex: "1 1 200px", fontSize: 14, color: t.text, lineHeight: 1.5 }}>{(c.address || "").trim()}</div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard?.writeText((c.address || "").trim());
-                        }}
-                        style={{ ...S.btnS, padding: "6px 12px", fontSize: 12 }}
-                      >
-                        Copy
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Edit</div>
-                    <textarea
-                      value={c.address || ""}
-                      onChange={(e) => updateCreator(c.id, { address: e.target.value })}
-                      rows={3}
-                      placeholder="Shipping / mailing address"
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, resize: "vertical" }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div id="creator-notes-section" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, color: t.text }}>Notes &amp; Performance</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10, lineHeight: 1.5 }}>What this creator excels at, best hooks, audience fit, and performance highlights.</div>
-            <textarea
-              value={c.notes || ""}
-              onChange={(e) => updateCreator(c.id, { notes: e.target.value })}
-              rows={12}
-              style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.55, resize: "vertical", minHeight: 200 }}
-              placeholder="Strong hooks, audience notes, campaign wins, what to avoid…"
-            />
-          </div>
-
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Video Log</span>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: t.green + "15", color: t.green }}>{(Array.isArray(c.videoLog) ? c.videoLog : []).length}</span>
-              </div>
-              <button type="button" onClick={() => setShowVideoForm((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>
-                + Add Video
-              </button>
-            </div>
-
-            {showVideoForm ? (
-              <div style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, marginBottom: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>URL</div>
-                    <input value={videoDraft.url} onChange={(e) => setVideoDraft((d) => ({ ...d, url: e.target.value }))} placeholder="https://…" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Campaign</div>
-                    <input list={`camp-${c.id}`} value={videoDraft.campaign} onChange={(e) => setVideoDraft((d) => ({ ...d, campaign: e.target.value }))} placeholder="Campaign name" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                    <datalist id={`camp-${c.id}`}>
-                      {campaignNames.map((n) => (
-                        <option key={n} value={n} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Date</div>
-                    <input type="date" value={videoDraft.date} onChange={(e) => setVideoDraft((d) => ({ ...d, date: e.target.value }))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Platform</div>
-                    <select value={videoDraft.platform} onChange={(e) => setVideoDraft((d) => ({ ...d, platform: e.target.value }))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
-                      {VIDEO_LOG_PLATFORMS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Status</div>
-                    <select value={videoDraft.status} onChange={(e) => setVideoDraft((d) => ({ ...d, status: e.target.value }))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
-                      {VIDEO_LOG_STATUSES.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Views</div>
-                    <input value={videoDraft.views} onChange={(e) => setVideoDraft((d) => ({ ...d, views: e.target.value }))} placeholder="0" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Notes</div>
-                  <input value={videoDraft.notes} onChange={(e) => setVideoDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Optional" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                </div>
-                <button type="button" onClick={saveVideoLogEntry} style={{ ...S.btnP, padding: "8px 16px", fontSize: 13 }}>
-                  Save
-                </button>
-              </div>
-            ) : null}
-
-            {(Array.isArray(c.videoLog) ? c.videoLog : []).length === 0 ? (
-              <div style={{ fontSize: 13, color: t.textFaint, fontStyle: "italic" }}>No videos logged yet. Add one to track deliverables and performance.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {[...(Array.isArray(c.videoLog) ? c.videoLog : [])]
-                  .slice()
-                  .reverse()
-                  .map((v) => {
-                    const sp = statusPill(v.status);
-                    return (
-                      <div key={v.id || v.url} style={{ border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 14px", background: t.cardAlt }}>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                          <span style={{ fontSize: 12, color: t.textFaint }}>{v.date || "—"}</span>
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: t.card, border: `1px solid ${t.border}`, color: t.textMuted }}>{v.platform || "—"}</span>
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: sp.bg, color: sp.color, border: `1px solid ${sp.border}` }}>{sp.label}</span>
-                          {v.views ? <span style={{ fontSize: 11, color: t.textMuted }}>{Number(v.views).toLocaleString()} views</span> : null}
-                        </div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>{v.campaign || "Untitled"}</div>
-                        {v.url?.trim() ? (
-                          <a href={v.url.trim()} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>
-                            View →
-                          </a>
-                        ) : null}
-                        {v.notes?.trim() ? <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>{v.notes}</div> : null}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ flex: "1 1 300px", minWidth: 260, display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 14, color: t.text }}>Quick Contact</div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Email</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <input
-                  value={c.email || ""}
-                  onChange={(e) => updateCreator(c.id, { email: e.target.value })}
-                  placeholder="email@…"
-                  style={{ flex: "1 1 160px", minWidth: 140, padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
-                />
-                {c.email?.trim() ? (
-                  <a href={`mailto:${c.email.trim()}`} style={{ ...pillLink, textDecoration: "none" }}>
-                    Send Email
-                  </a>
-                ) : null}
-              </div>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram Handle</div>
-              <input
-                value={c.instagramHandle || cleanHandle}
-                onChange={(e) => updateCreator(c.id, { instagramHandle: e.target.value.replace(/^@/, "").trim() })}
-                onBlur={onInstagramHandleBlur}
-                placeholder="Instagram handle (if different from TikTok)"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
-              />
-            </div>
-            {ttD.bioLink ? (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>TikTok Bio Link</div>
-                <a href={/^https?:\/\//i.test(String(ttD.bioLink)) ? ttD.bioLink : `https://${ttD.bioLink}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: t.green, fontWeight: 600, wordBreak: "break-all" }}>
-                  {ttD.bioLink}
-                </a>
-              </div>
-            ) : null}
-            {igD.externalUrl ? (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram Bio Link</div>
-                <a href={/^https?:\/\//i.test(String(igD.externalUrl)) ? igD.externalUrl : `https://${igD.externalUrl}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: t.green, fontWeight: 600, wordBreak: "break-all" }}>
-                  {igD.externalUrl}
-                </a>
-              </div>
-            ) : null}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>TikTok</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <input
-                  value={c.tiktokUrl || ""}
-                  onChange={(e) => updateCreator(c.id, { tiktokUrl: e.target.value })}
-                  placeholder="Profile URL"
-                  style={{ flex: "1 1 160px", minWidth: 140, padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-                />
-                <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ ...pillLink, textDecoration: "none" }}>
-                  Open TikTok
-                </a>
-              </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
+              <select value={c.status || "Active"} onChange={(e) => updateCreator(c.id, { status: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+                <option value="Active">Active</option>
+                <option value="One-time">One-time</option>
+                <option value="Off-boarded">Off-boarded</option>
+              </select>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <input
-                  value={c.instagramUrl || ""}
-                  onChange={(e) => updateCreator(c.id, { instagramUrl: e.target.value })}
-                  placeholder="Profile URL"
-                  style={{ flex: "1 1 160px", minWidth: 140, padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-                />
-                {c.instagramUrl?.trim() ? (
-                  <a href={c.instagramUrl.trim()} target="_blank" rel="noopener noreferrer" style={{ ...pillLink, textDecoration: "none" }}>
-                    Open Instagram
-                  </a>
-                ) : null}
-              </div>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
+              <select value={c.quality || "Standard"} onChange={(e) => updateCreator(c.id, { quality: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+                <option value="High">High</option>
+                <option value="Standard">Standard</option>
+              </select>
             </div>
           </div>
-
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 14, color: t.text }}>Stats Snapshot</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: t.green, lineHeight: 1 }}>{videoCount}</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>Total videos</div>
-            <div style={{ fontSize: 14, color: t.text, marginBottom: 8 }}>
-              <span style={{ color: t.textMuted }}>Active campaigns: </span>
-              <strong>{activeCampaignCount}</strong>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Cost / video</div>
+            <input value={String(c.costPerVideo || "").replace(/^\$/, "")} onChange={(e) => updateCreator(c.id, { costPerVideo: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+          </div>
+          {(c.address || "").trim() ? (
+            <div style={{ marginBottom: 10 }}>
+              <button type="button" onClick={() => setShowShipping((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, cursor: "pointer", padding: 0 }}>{showShipping ? "Hide" : "Show"} address</button>
+              {showShipping ? <textarea value={c.address || ""} onChange={(e) => updateCreator(c.id, { address: e.target.value })} rows={3} style={{ width: "100%", marginTop: 8, padding: 8, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} /> : null}
             </div>
-            <div style={{ fontSize: 14, color: t.text, marginBottom: 8 }}>
-              <span style={{ color: t.textMuted }}>Member since: </span>
-              <strong>{c.dateAdded || "—"}</strong>
-            </div>
+          ) : null}
+        </div>
+        <div style={{ flex: "1 1 280px", minWidth: 240 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Contact & links</div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
+            <input value={c.email || ""} onChange={(e) => updateCreator(c.id, { email: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram handle</div>
+            <input value={c.instagramHandle || cleanHandle} onChange={(e) => updateCreator(c.id, { instagramHandle: e.target.value.replace(/^@/, "").trim() })} onBlur={onInstagramHandleBlur} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+            {ttUrl ? <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.green }}>TikTok</a> : null}
+            {(c.instagramUrl || "").trim() ? <a href={c.instagramUrl.trim()} target="_blank" rel="noopener noreferrer" style={{ color: "#E1306C" }}>Instagram</a> : null}
+            {ytD.channelUrl ? <a href={ytD.channelUrl.startsWith("http") ? ytD.channelUrl : `https://${ytD.channelUrl}`} target="_blank" rel="noopener noreferrer" style={{ color: t.text }}>YouTube</a> : null}
+            {twD.followers != null ? <span style={{ color: t.textMuted }}>X/Twitter (enriched)</span> : null}
+            {liD.profileUrl ? <a href={liD.profileUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>LinkedIn</a> : null}
+            {fbD.profileUrl ? <a href={fbD.profileUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.text }}>Facebook</a> : null}
+            {snD.displayName ? <span style={{ color: t.textMuted }}>Snapchat: {snD.displayName}</span> : null}
           </div>
         </div>
+      </div>
+
+      <div id="creator-notes-section" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8, color: t.text }}>Notes</div>
+        <textarea value={c.notes || ""} onChange={(e) => updateCreator(c.id, { notes: e.target.value })} rows={8} style={{ width: "100%", padding: 12, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.5, resize: "vertical" }} placeholder="Campaign notes, hooks, performance…" />
+      </div>
+
+      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Video Log</div>
+          <button type="button" onClick={() => setShowVideoForm((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>+ Add Video</button>
+        </div>
+        {showVideoForm ? (
+          <div style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 10 }}>
+              <input value={videoDraft.url} onChange={(e) => setVideoDraft((d) => ({ ...d, url: e.target.value }))} placeholder="URL" style={{ padding: 8, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+              <input value={videoDraft.campaign} onChange={(e) => setVideoDraft((d) => ({ ...d, campaign: e.target.value }))} placeholder="Campaign" style={{ padding: 8, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+              <input type="date" value={videoDraft.date} onChange={(e) => setVideoDraft((d) => ({ ...d, date: e.target.value }))} style={{ padding: 8, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+            </div>
+            <button type="button" onClick={saveVideoLogEntry} style={{ ...S.btnP, padding: "8px 16px", fontSize: 13 }}>Save</button>
+          </div>
+        ) : null}
+        {(Array.isArray(c.videoLog) ? c.videoLog : []).length === 0 ? (
+          <div style={{ fontSize: 13, color: t.textFaint }}>No videos logged.</div>
+        ) : (
+          [...(c.videoLog || [])].reverse().map((v) => {
+            const sp = statusPill(v.status);
+            return (
+              <div key={v.id || v.url} style={{ border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8, background: t.cardAlt }}>
+                <div style={{ fontSize: 12, color: t.text }}>{v.campaign || "—"} · {v.date}</div>
+                {v.url?.trim() ? <a href={v.url.trim()} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.green }}>Open</a> : null}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -4465,8 +4762,8 @@ export default function App() {
   const [scrapeKey, setScrapeKey] = useState("");
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [sortCol, setSortCol] = useState("handle");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortCol, setSortCol] = useState("ibScore");
+  const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All" });
   const [openFilter, setOpenFilter] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
@@ -4663,10 +4960,10 @@ export default function App() {
     const active = creators.filter((c) => c.status === "Active");
     const stale = active.filter((c) => shouldBulkEnrichCreator(c, bulkStaleWindow));
     const skipped = active.length - stale.length;
-    const estCredits = stale.length * 3;
+    const estCredits = stale.length * 11;
     if (
       !window.confirm(
-        `This will enrich ${stale.length} creators (${skipped} skipped as recent). Estimated cost: ${estCredits} ScrapeCreators credits (≈3 per creator). IB-Ai may use additional calls for creators missing analysis. Continue?`
+        `This will enrich ${stale.length} creators (${skipped} skipped as recent). Estimated cost: ${estCredits} ScrapeCreators credits (≈11 per creator). IB-Ai uses additional API calls for IB Score. Continue?`
       )
     ) {
       return;
@@ -4689,7 +4986,7 @@ export default function App() {
       });
       try {
         const payload = await runScrapeAndAiPipeline(ch, key.trim(), ak, null, {
-          skipAi: !!cr.aiAnalysis,
+          skipAi: !!cr.aiAnalysis?.ibScore,
           instagramHandle: cr.instagramHandle,
           existingInstagramData: cr.instagramData,
           onCreditUsed: bumpScrapeCredit,
@@ -4701,10 +4998,23 @@ export default function App() {
           tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(cr.tiktokData || {}), ...tt },
           instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(cr.instagramData || {}), ...payload.igData },
           engagementRate,
+          tiktokEngRate: payload.tiktokEngRate,
+          instagramEngRate: payload.instagramEngRate,
+          instagramAvgLikes: payload.instagramAvgLikes,
+          instagramAvgComments: payload.instagramAvgComments,
+          instagramRecentPosts: payload.instagramRecentPosts,
+          instagramRecentReels: payload.instagramRecentReels,
+          tiktokShopData: payload.tiktokShopData,
+          youtubeData: payload.youtubeData || cr.youtubeData,
+          twitterData: payload.twitterData || cr.twitterData,
+          linkedinData: payload.linkedinData || cr.linkedinData,
+          snapchatData: payload.snapchatData || cr.snapchatData,
+          facebookData: payload.facebookData || cr.facebookData,
+          lastEnriched: new Date().toISOString(),
           ...mergePatch,
           ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         });
-        const fs = payload.aiAnalysis?.fitScore ?? cr.aiAnalysis?.fitScore;
+        const ib = payload.aiAnalysis?.ibScore ?? cr.ibScore;
         const fol = tt.followers;
         setBulkEnrichProgress({
           cur: i + 1,
@@ -4713,9 +5023,9 @@ export default function App() {
           fail,
           skipped,
           handle: cr.handle,
-          line: `${fol != null ? formatMetricShort(fol) + " followers" : ""}${fs != null ? `, Fit Score: ${fs}` : ""}`,
+          line: `${fol != null ? formatMetricShort(fol) + " followers" : ""}${ib != null ? `, IB ${ib}` : ""}`,
         });
-        const score = Number(payload.aiAnalysis?.fitScore ?? cr.aiAnalysis?.fitScore);
+        const score = Number(payload.aiAnalysis?.ibScore ?? cr.ibScore);
         if (Number.isFinite(score) && (!topDiscovery || score > topDiscovery.score)) {
           topDiscovery = { handle: cr.handle, score, followers: fol };
         }
@@ -4727,7 +5037,7 @@ export default function App() {
     }
     setBulkEnrichProgress(null);
     const td = topDiscovery
-      ? `\nTop discovery: ${topDiscovery.handle} — ${topDiscovery.score}/10 fit score${topDiscovery.followers != null ? `, ${formatMetricShort(topDiscovery.followers)} followers` : ""}`
+      ? `\nTop discovery: ${topDiscovery.handle} — IB ${topDiscovery.score}${topDiscovery.followers != null ? `, ${formatMetricShort(topDiscovery.followers)} followers` : ""}`
       : "";
     setCreatorImportToast(
       `Bulk enrichment complete:\n• ${done} creators updated\n• ${skipped} skipped (fresh per your setting)\n• ${fail} failed (handle not found or API error)${td}`
@@ -4789,16 +5099,16 @@ export default function App() {
     }
 
     setAddEnrichBusy(true);
-    const order = ENRICH_STEPS.map((x) => x.id);
-    const onStep = (id) => {
-      const idx = order.indexOf(id);
-      const completed = idx > 0 ? order.slice(0, idx) : [];
-      setAddEnrichStepState({ completed, current: id });
+    setAddEnrichStepState(Object.fromEntries(ENRICH_STEPS.map((s) => [s.id, "pending"])));
+    const onStep = (id, status) => {
+      setAddEnrichStepState((prev) => ({ ...prev, [id]: status === "ok" ? "ok" : status === "fail" ? "fail" : status === "skip" ? "skip" : status === "run" ? "run" : "pending" }));
     };
-    setAddEnrichStepState({ completed: [], current: "tt_profile" });
 
     try {
-      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, onStep, { onCreditUsed: bumpScrapeCredit });
+      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, onStep, {
+        onCreditUsed: bumpScrapeCredit,
+        requireTikTokProfile: true,
+      });
       const ai = payload.aiAnalysis;
       const id = `c-${Date.now()}`;
       const newCreator = {
@@ -4819,9 +5129,25 @@ export default function App() {
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
         bestVideos: [],
-        tiktokData: payload.ttData,
-        instagramData: payload.igData,
+        tiktokData: { ...DEFAULT_TIKTOK_DATA, ...payload.ttData },
+        instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...payload.igData },
         engagementRate: payload.engagementRate,
+        tiktokEngRate: payload.tiktokEngRate,
+        instagramEngRate: payload.instagramEngRate,
+        instagramAvgLikes: payload.instagramAvgLikes,
+        instagramAvgComments: payload.instagramAvgComments,
+        instagramRecentPosts: payload.instagramRecentPosts || [],
+        instagramRecentReels: payload.instagramRecentReels || [],
+        tiktokShopData: payload.tiktokShopData,
+        youtubeData: payload.youtubeData,
+        twitterData: payload.twitterData,
+        linkedinData: payload.linkedinData,
+        snapchatData: payload.snapchatData,
+        facebookData: payload.facebookData,
+        ibScore: ai?.ibScore ?? null,
+        ibScoreLabel: ai?.scoreLabel ?? null,
+        ibScoreBreakdown: ai?.scoreBreakdown ?? null,
+        lastEnriched: new Date().toISOString(),
         aiAnalysis: ai || null,
         outreachStatus: null,
         lastContactDate: null,
@@ -4875,6 +5201,19 @@ export default function App() {
         tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(existing.tiktokData || {}), ...payload.ttData },
         instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(existing.instagramData || {}), ...payload.igData },
         engagementRate: payload.engagementRate,
+        tiktokEngRate: payload.tiktokEngRate,
+        instagramEngRate: payload.instagramEngRate,
+        instagramAvgLikes: payload.instagramAvgLikes,
+        instagramAvgComments: payload.instagramAvgComments,
+        instagramRecentPosts: payload.instagramRecentPosts,
+        instagramRecentReels: payload.instagramRecentReels,
+        tiktokShopData: payload.tiktokShopData,
+        youtubeData: payload.youtubeData || existing.youtubeData,
+        twitterData: payload.twitterData || existing.twitterData,
+        linkedinData: payload.linkedinData || existing.linkedinData,
+        snapchatData: payload.snapchatData || existing.snapchatData,
+        facebookData: payload.facebookData || existing.facebookData,
+        lastEnriched: new Date().toISOString(),
         ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         ...merged,
       });
@@ -5312,8 +5651,14 @@ export default function App() {
           valB = b.tiktokData?.avgViews ?? -1;
           break;
         case "engRate":
-          valA = parseFloat(a.engagementRate);
-          valB = parseFloat(b.engagementRate);
+          valA = parseFloat(a.instagramEngRate ?? a.engagementRate ?? a.tiktokEngRate);
+          valB = parseFloat(b.instagramEngRate ?? b.engagementRate ?? b.tiktokEngRate);
+          if (!Number.isFinite(valA)) valA = -1;
+          if (!Number.isFinite(valB)) valB = -1;
+          break;
+        case "ibScore":
+          valA = a.ibScore != null ? Number(a.ibScore) : -1;
+          valB = b.ibScore != null ? Number(b.ibScore) : -1;
           if (!Number.isFinite(valA)) valA = -1;
           if (!Number.isFinite(valB)) valB = -1;
           break;
@@ -6324,11 +6669,28 @@ export default function App() {
                 </div>
               );
             }
+            if (col.key === "ibScore") {
+              const ib = c.ibScore != null ? Number(c.ibScore) : null;
+              const colIb = Number.isFinite(ib) ? ibScoreTierColor(ib) : t.textFaint;
+              return (
+                <div key={col.key} style={{ ...base, fontWeight: 800, color: colIb }}>
+                  {Number.isFinite(ib) ? Math.round(ib) : "—"}
+                </div>
+              );
+            }
+            if (col.key === "platforms") {
+              const letters = platformLettersForCreator(c);
+              return (
+                <div key={col.key} style={{ ...base, fontSize: 9, color: t.textFaint, letterSpacing: "-0.02em" }} title={letters || "—"}>
+                  {letters || "—"}
+                </div>
+              );
+            }
             if (col.key === "engRate") {
-              const er = parseFloat(c.engagementRate);
+              const er = parseFloat(c.instagramEngRate ?? c.engagementRate ?? c.tiktokEngRate);
               let erc = t.textSecondary;
               if (Number.isFinite(er)) {
-                if (er > 10) erc = t.green;
+                if (er > 6) erc = t.green;
                 else if (er < 3) erc = t.orange;
               }
               return (
@@ -6548,11 +6910,13 @@ export default function App() {
               {addEnrichStepState ? (
                 <div style={{ marginTop: 14, padding: 16, background: t.cardAlt, borderRadius: 12, border: `1px solid ${t.border}` }}>
                   {ENRICH_STEPS.map((step) => {
-                    const done = addEnrichStepState.completed.includes(step.id);
-                    const active = addEnrichStepState.current === step.id;
+                    const st = addEnrichStepState[step.id];
+                    const done = st === "ok";
+                    const fail = st === "fail";
+                    const run = st === "run" || st === "pending";
                     return (
-                      <div key={step.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, fontSize: 13, color: done ? t.green : active ? t.text : t.textFaint }}>
-                        <span style={{ width: 18, textAlign: "center" }}>{done ? "✓" : active ? "…" : "○"}</span>
+                      <div key={step.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, fontSize: 13, color: done ? t.green : fail ? t.red : run ? t.text : t.textFaint }}>
+                        <span style={{ width: 18, textAlign: "center" }}>{done ? "✓" : fail ? "✗" : run ? "…" : "○"}</span>
                         {step.label}
                       </div>
                     );
