@@ -22,7 +22,6 @@ const CREATOR_COLUMNS = [
   { key: "tt", label: "TT", width: 36, isLink: "external" },
   { key: "ig", label: "IG", width: 36, isLink: "external" },
   { key: "ibScore", label: "IB", width: 44, sortable: true, align: "right" },
-  { key: "platforms", label: "Plat", width: 50, sortable: false },
   { key: "videos", label: "Videos", width: 60, sortable: true, align: "right" },
   { key: "avgViews", label: "Avg Views", width: 72, sortable: true, align: "right" },
   { key: "engRate", label: "Eng %", width: 52, sortable: true, align: "right" },
@@ -37,8 +36,12 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.3.0";
+const APP_VERSION = "5.4.0";
 const CHANGELOG = [
+  { version: "5.4.0", date: "2026-04-01", changes: [
+    "Removed Email and Plat columns from creator table — less clutter, data still in detail view",
+    "Shipping address visible and editable on manager detail and creator portal",
+  ]},
   { version: "5.3.0", date: "2026-04-01", changes: [
     "Fixed video preview — shows thumbnail image instead of broken video player",
     "Fixed reformat timeout — server caches video immediately on fetch, reformat uses cached copy",
@@ -1607,20 +1610,6 @@ function ibScoreTierColor(score) {
   if (n >= 60) return "#3b82f6";
   if (n >= 40) return "#f59e0b";
   return "#ef4444";
-}
-
-function platformLettersForCreator(c) {
-  const parts = [];
-  const tt = c.tiktokData;
-  const ig = c.instagramData;
-  if (tt?.lastEnriched || tt?.followers != null) parts.push("TT");
-  if (ig?.lastEnriched && !ig?.enrichError) parts.push("IG");
-  if (c.youtubeData?.subscribers != null || c.youtubeData?.lastEnriched) parts.push("YT");
-  if (c.twitterData?.followers != null || c.twitterData?.lastEnriched) parts.push("X");
-  if (c.linkedinData?.lastEnriched) parts.push("LI");
-  if (c.snapchatData?.lastEnriched) parts.push("SN");
-  if (c.facebookData?.followers != null || c.facebookData?.lastEnriched) parts.push("FB");
-  return parts.join("·");
 }
 
 /** Build all enrichment structs from 11 parallel API raw responses. */
@@ -4110,7 +4099,7 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
           </div>
           {inp("Content Niches", "niche", "e.g. Fitness, Lifestyle, Health")}
           {inp("Rate per Video ($)", "costPerVideo", "e.g. 100")}
-          {inp("Shipping Address", "address", "Street, City, State, ZIP", { multi: true })}
+          {inp("Shipping Address", "address", "Street, City, State, ZIP — we'll send you product here", { multi: true })}
           <button type="button" onClick={save} disabled={saving} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: saving ? "wait" : "pointer", marginTop: 8, opacity: saving ? 0.6 : 1 }}>
             {saving ? "Saving..." : "Save & Continue"}
           </button>
@@ -5102,7 +5091,6 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
 }
 
 function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {} }) {
-  const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
     url: "",
@@ -5836,12 +5824,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
             />
           </div>
-          {(c.address || "").trim() ? (
-            <div style={{ marginBottom: 10 }}>
-              <button type="button" onClick={() => setShowShipping((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, cursor: "pointer", padding: 0 }}>{showShipping ? "Hide" : "Show"} address</button>
-              {showShipping ? <textarea value={c.address || ""} onChange={(e) => updateCreator(c.id, { address: e.target.value })} rows={3} style={{ width: "100%", marginTop: 8, padding: 8, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} /> : null}
-            </div>
-          ) : null}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Shipping Address</div>
+            <textarea
+              value={c.address || ""}
+              onChange={(e) => updateCreator(c.id, { address: e.target.value })}
+              onBlur={(e) => updateCreator(c.id, { address: e.target.value })}
+              placeholder="No address yet — creator can add from their portal"
+              rows={2}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, resize: "vertical", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
         </div>
         <div style={{ flex: "1 1 280px", minWidth: 240 }}>
           <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Contact & Links</div>
@@ -8321,14 +8314,6 @@ export default function App() {
                   ) : (
                     "—"
                   )}
-                </div>
-              );
-            }
-            if (col.key === "platforms") {
-              const letters = platformLettersForCreator(c);
-              return (
-                <div key={col.key} style={{ ...base, fontSize: 9, color: t.textFaint, letterSpacing: "-0.02em" }} title={letters || "—"}>
-                  {letters || "—"}
                 </div>
               );
             }
