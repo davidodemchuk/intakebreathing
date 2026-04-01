@@ -4,8 +4,11 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.4";
+const APP_VERSION = "1.3.5";
 const CHANGELOG = [
+  { version: "1.3.5", date: "2025-04-01", changes: [
+    "Softened rejection criteria language — now framed as revision requirements, not instant rejections",
+  ]},
   { version: "1.3.4", date: "2025-04-01", changes: [
     "Complete PDF redesign — clean, professional, highly legible layout",
     "Proper page breaks between major sections",
@@ -26,7 +29,7 @@ const CHANGELOG = [
     "Rebranded AI Generate to IB-Ai across the entire app",
   ]},
   { version: "1.3.0", date: "2025-04-01", changes: [
-    "PDF download button on generated briefs — prints all sections including rejection criteria",
+    "PDF download button on generated briefs — prints all sections including revision criteria",
     "Foundation for role-based access: Manager vs Creator roles",
     "Managers can edit briefs, Creators get read-only view (creator login coming later)",
     "Share link concept: briefs get a unique ID for future creator-facing URLs",
@@ -40,10 +43,10 @@ const CHANGELOG = [
     "Full APPROVED_CLAIMS and BANNED_CLAIMS arrays kept as the master source — IB-Ai selects from them",
   ]},
   { version: "1.2.3", date: "2025-03-31", changes: [
-    "Added Instant Rejection Criteria section to generated briefs — red warning section",
-    "Pre-built rejection reasons: upside down band, tabs not adhered, applicator in video",
-    "Custom rejection criteria input with Other field on the form",
-    "All rejection items are editable by managers on the generated brief via contentEditable",
+    "Added Revision Criteria section to generated briefs — warning section",
+    "Pre-built revision reasons: upside down band, tabs not adhered, applicator in video",
+    "Custom revision criteria input with Other field on the form",
+    "All revision items are editable by managers on the generated brief via contentEditable",
     "Removed disclosure warning box from the form",
   ]},
   { version: "1.2.2", date: "2025-03-31", changes: [
@@ -267,9 +270,9 @@ const BANNED_CLAIMS = [
 const DISCLOSURE = "Source: SleepScore Labs independent study · Participants with sleep tracking · Over 840 nights analyzed. Must appear as text overlay or in caption any time a SleepScore stat is referenced. Read more: intakebreathing.com/blogs/breathing-smarter/what-sleepscore-labs-discovered-about-nasal-strips-for-sleep";
 
 const DEFAULT_REJECTIONS = [
-  "Band is upside down — instant rejection",
-  "Adhesive tabs are not fully adhered to the nose — must be flat and sealed on both sides",
-  "Applicator tool visible in the video — the applicator is for personal use only, never on camera",
+  "Band is worn upside down — revisions will be required",
+  "Adhesive tabs are not fully adhered to the nose — both sides must be flat and sealed before filming",
+  "Applicator tool visible in the video — the applicator is for personal use only, not on camera",
 ];
 
 function parseCustomRejections(text) {
@@ -890,14 +893,14 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>🚫 Instant Rejection Criteria</div>
-        <div style={{ ...S.hint, marginBottom: 12, fontStyle: "normal" }}>Content will be rejected if any of these are present. Add custom rules below.</div>
+        <div style={S.secLabel}>⚠️ Revision Criteria</div>
+        <div style={{ ...S.hint, marginBottom: 12, fontStyle: "normal" }}>Revisions will be needed if any of the following are present. Add custom rules below.</div>
         <div style={S.roBox}>{DEFAULT_REJECTIONS.map((c, i) => (
-          <div key={i} style={S.roItem()}><span style={S.roMarker(t.red)}>✗</span>{c}</div>
+          <div key={i} style={S.roItem()}><span style={S.roMarker(t.orange)}>✗</span>{c}</div>
         ))}</div>
         <div style={{ ...S.fg, marginTop: 14 }}>
-          <label style={S.label}>Additional Rejection Rules</label>
-          <textarea style={S.textarea} defaultValue={vals.current.customRejections} onChange={e => { vals.current.customRejections = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.red; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Add any campaign-specific rejection criteria — one per line" rows={4} />
+          <label style={S.label}>Additional Revision Rules</label>
+          <textarea style={S.textarea} defaultValue={vals.current.customRejections} onChange={e => { vals.current.customRejections = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.orange; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Add any campaign-specific revision criteria — one per line" rows={4} />
         </div>
       </div>
       <div style={S.section}>
@@ -962,20 +965,20 @@ function EditableRejectionLine({ value, t, editable = true }) {
   if (!editable) {
     return (
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-        <span style={{ color: t.red, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
+        <span style={{ color: t.orange, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
         <div style={{ fontSize: 14, color: t.text, lineHeight: 1.7, flex: 1, minWidth: 0 }}>{value}</div>
       </div>
     );
   }
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-      <span style={{ color: t.red, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
+      <span style={{ color: t.orange, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
         style={{ fontSize: 14, color: t.text, lineHeight: 1.7, flex: 1, cursor: "text", outline: "none", borderBottom: "1px dashed transparent", minWidth: 0 }}
-        onFocus={(e) => { e.target.style.borderBottomColor = t.red + "50"; }}
+        onFocus={(e) => { e.target.style.borderBottomColor = t.orange + "50"; }}
         onBlur={(e) => { e.target.style.borderBottomColor = "transparent"; }}
       />
     </div>
@@ -989,17 +992,17 @@ function RejectionAddRow({ t, onCommit, editable = true }) {
   const showHint = !focused && !draft.trim();
   if (!editable) return null;
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${t.red}30` }}>
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${t.orange}30` }}>
       <div style={{ position: "relative" }}>
         {showHint && (
-          <div style={{ position: "absolute", left: 0, top: 0, fontSize: 13, color: t.textFaint, fontStyle: "italic", pointerEvents: "none" }}>Click to add another rejection rule...</div>
+          <div style={{ position: "absolute", left: 0, top: 0, fontSize: 13, color: t.textFaint, fontStyle: "italic", pointerEvents: "none" }}>Click to add another revision rule...</div>
         )}
         <div
           ref={ref}
           contentEditable
           suppressContentEditableWarning
           style={{ fontSize: 14, color: t.text, lineHeight: 1.7, minHeight: 22, outline: "none", borderBottom: "1px dashed transparent", cursor: "text" }}
-          onFocus={(e) => { setFocused(true); e.target.style.borderBottomColor = t.red + "50"; }}
+          onFocus={(e) => { setFocused(true); e.target.style.borderBottomColor = t.orange + "50"; }}
           onInput={(e) => { setDraft(e.currentTarget.textContent || ""); }}
           onBlur={(e) => {
             e.target.style.borderBottomColor = "transparent";
@@ -1145,12 +1148,12 @@ function buildBriefPrintHtml(b, fd, esc) {
   .compliance-col.approve .mark { color: #1a7a4e; }
   .compliance-col.ban .mark { color: #c62828; }
 
-  /* Rejection box */
-  .rejection-box { border: 1.5px solid #c62828; border-radius: 8px; padding: 20px; margin-top: 8px; }
-  .rejection-header { font-size: 11px; font-weight: 800; color: #c62828; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
-  .rejection-warning { font-size: 12px; color: #c62828; font-weight: 500; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f5c6c6; }
+  /* Revision-required box */
+  .rejection-box { border: 1.5px solid #e67e00; border-radius: 8px; padding: 20px; margin-top: 8px; }
+  .rejection-header { font-size: 11px; font-weight: 800; color: #b86e00; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .rejection-warning { font-size: 12px; color: #b86e00; font-weight: 500; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #ffe0b2; }
   .rejection-item { font-size: 13px; color: #333; line-height: 1.8; margin-bottom: 4px; }
-  .rejection-item .rx { color: #c62828; font-weight: 700; margin-right: 8px; }
+  .rejection-item .rx { color: #e67e00; font-weight: 700; margin-right: 8px; }
 
   /* Proof grid */
   .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1231,10 +1234,10 @@ ${hooksHtml}
   </div>
 </div>
 
-<!-- REJECTION -->
-<div class="section-title">Instant Rejection — Content Will Be Declined</div>
+<!-- REVISION CRITERIA -->
+<div class="section-title">Revision Required — Revisions Will Be Needed</div>
 <div class="rejection-box">
-  <div class="rejection-warning">The following will result in your content being immediately rejected. No exceptions.</div>
+  <div class="rejection-warning">If any of the following are present in your submission, revisions will be required before approval.</div>
   ${rejHtml}
 </div>
 
@@ -1273,9 +1276,9 @@ function RejectionSection({ brief, formData, t, S, editable = true }) {
   }, [syncKey]);
   return (
     <div style={S.bSec}>
-      <div style={S.bSecTitle}>🚫 INSTANT REJECTION — Content Will Be Declined If:</div>
-      <div className="brief-rejection-block" style={{ background: t.red + "08", border: `2px solid ${t.red}40`, borderRadius: 12, padding: 20 }}>
-        <div style={{ fontSize: 13, color: t.red, fontWeight: 600, marginBottom: 14 }}>The following will result in your content being immediately rejected. No exceptions.</div>
+      <div style={S.bSecTitle}>⚠️ REVISION REQUIRED — Revisions Will Be Needed If:</div>
+      <div className="brief-rejection-block" style={{ background: t.orange + "08", border: `2px solid ${t.orange}40`, borderRadius: 12, padding: 20 }}>
+        <div style={{ fontSize: 13, color: t.orange, fontWeight: 600, marginBottom: 14 }}>If any of the following are present in your submission, revisions will be required before approval.</div>
         {items.map((line, i) => (
           <EditableRejectionLine key={`rej-${i}-${line.slice(0, 24)}`} value={line} t={t} editable={editable} />
         ))}
@@ -1460,9 +1463,9 @@ PROOF POINTS / STATS: ${d._stats || ""}
 APPROVED CLAIMS (creators CAN say): ${d._approved || ""}
 BANNED CLAIMS (NEVER say): ${d._banned || ""}
 REQUIRED DISCLOSURE: ${d._disclosure || ""}
-INSTANT REJECTION CRITERIA (content will be rejected if any of these appear): ${rejectionsLine}
+REVISION REQUIRED CRITERIA (revisions will be needed if any of these appear): ${rejectionsLine}
 
-Include these rejection criteria in the brief and make sure the creative direction avoids all of them.
+Include these revision criteria in the brief and make sure the creative direction avoids all of them.
 
 PLATFORMS: ${platLine}
 VIDEO LENGTH: ${d.videoLength || ""}
@@ -1476,7 +1479,7 @@ The deliverables JSON field must clearly state that ${qtyVideos} video(s) are re
 Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
 
 Return ONLY this JSON (no other text):
-{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"rejections":["array of strings — every instant rejection rule listed above; include all criteria verbatim"],"disclosure":"exact required citation text","proof":["4 formatted stat cards"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
+{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"rejections":["array of strings — every revision-required rule listed above; include all criteria verbatim"],"disclosure":"exact required citation text","proof":["4 formatted stat cards"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1782,8 +1785,8 @@ export default function App() {
             .brief-rejection-block {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
-              background: #ffebee !important;
-              border: 2px solid #c62828 !important;
+              background: #fff8e7 !important;
+              border: 2px solid #e67e00 !important;
               page-break-inside: avoid;
             }
           }
