@@ -5,8 +5,16 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.4.0";
+const APP_VERSION = "2.5.0";
 const CHANGELOG = [
+  { version: "2.5.0", date: "2026-03-31", changes: [
+    "Creator enrichment via ScrapeCreators — pull live TikTok and Instagram metrics",
+    "Enrich button on creator detail pulls: followers, hearts, video count, bio, avatar, verified status",
+    "Bulk enrich option to update all creators at once",
+    "All CSV fields now properly stored: addresses, names, notes, quality, video counts",
+    "Creator detail view shows shipping address (collapsible)",
+    "Profile avatar pulled from TikTok displayed on creator cards and detail",
+  ]},
   { version: "2.4.0", date: "2026-03-31", changes: [
     "Removed Name column from creator table — available in detail view only",
     "Niche is now a live filterable dropdown in the table header",
@@ -659,13 +667,80 @@ function creatorDisplayVideoCount(c) {
   return Math.max(logLen, legacy);
 }
 
+const DEFAULT_TIKTOK_DATA = {
+  followers: null,
+  following: null,
+  hearts: null,
+  videoCount: null,
+  bio: "",
+  avatarUrl: "",
+  verified: false,
+  lastEnriched: null,
+};
+const DEFAULT_INSTAGRAM_DATA = {
+  followers: null,
+  following: null,
+  posts: null,
+  bio: "",
+  avatarUrl: "",
+  verified: false,
+  lastEnriched: null,
+};
+
+/** Canonical CSV/spreadsheet field fixes keyed by normalized handle (no @). */
+const CREATOR_FIELD_PATCHES = {
+  "jack.manning": { name: "Jack Manning", address: "306 Grove Ave NW Cleveland TN 37311" },
+  "peter_gorbatenko": { name: "Petr Goratenko", address: "21 Robeson st., Apt 428, Somerville, NJ, 08876" },
+  "coachirmalissette": { name: "Irma Avila", address: "214 Blackwell lane Kyle Texas" },
+  "rooted_strength_and_wellness": { name: "Ryan Parry", address: "175 W Fifth S Rexburg, ID 83440" },
+  "lindsaypeachfinds": { name: "Lindsay Amarel", address: "2402 W 525 S Layton, UTAH 84041" },
+  "thesarahyeary": { name: "Sarah Yeary", address: "4611 Depew Ave, Austin, TX 78751" },
+  "ugcwithsusanna": { name: "Susanna Smith", address: "18442 Indian, Redford MI 48240" },
+  "fabianugc": { name: "Fabian Maqueira", address: "104 Locust Dr, Bristol, TN 37620" },
+  "kelli_klaus": { name: "Kelli Klaus", address: "916 Druid Dr, Plano, TX 75075" },
+  tarakatchur: { name: "Tara Katchur" },
+  bymattson: { name: "Matt Son" },
+  "michael_fong.spt": { name: "Michael Fong" },
+  natedank: {
+    notes:
+      "600K impression video, mouth breathing content, huge performance in male 25-34 range",
+  },
+  xkarinaslife: {
+    notes:
+      "300K impression video, $15K spend in March, discussing how mouth breathing gives you a double chin, great hook, grabbing female attention across 35-44 well",
+  },
+  bbellasclothez: {
+    quality: "High",
+    notes:
+      "300K impressions on 1 UGC video (she had a great idea to show the cut from level 1 to 4 at the very end to emphasize the difference), another video, 24K views on Viktor Thorup reaction, lot of potential there, loved the style, \"I'll give you 3 seconds to see what I see in this picture\" as a great hook",
+  },
+  the_airway_champion: { notes: "127K Insta Followers, big advocate" },
+  alytheslp: { notes: "$100/1 video pending" },
+  tonybakertb: { quality: "High" },
+};
+
 function normalizeCreatorRow(c) {
   if (!c || typeof c !== "object") return c;
+  const tt = typeof c.tiktokData === "object" && c.tiktokData ? c.tiktokData : {};
+  const ig = typeof c.instagramData === "object" && c.instagramData ? c.instagramData : {};
   return {
     ...c,
     videoLog: Array.isArray(c.videoLog) ? c.videoLog : [],
     dateAdded: c.dateAdded || "2025-03-31",
+    tiktokData: { ...DEFAULT_TIKTOK_DATA, ...tt },
+    instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...ig },
+    engagementRate: c.engagementRate != null && c.engagementRate !== "" ? c.engagementRate : null,
   };
+}
+
+function mergeCreatorFieldPatches(c) {
+  const key = normalizeHandleKey(c.handle);
+  const patch = CREATOR_FIELD_PATCHES[key];
+  return patch ? { ...c, ...patch } : c;
+}
+
+function hydrateCreator(c) {
+  return normalizeCreatorRow(mergeCreatorFieldPatches(backfillCreatorSocialUrls(c)));
 }
 
 /** Backfill TikTok/Instagram profile URLs from handle when missing (spreadsheet links were lost in CSV). */
@@ -676,6 +751,82 @@ function backfillCreatorSocialUrls(c) {
   if (!String(c.tiktokUrl || "").trim()) updates.tiktokUrl = `https://www.tiktok.com/@${clean}`;
   if (!String(c.instagramUrl || "").trim()) updates.instagramUrl = `https://www.instagram.com/${clean}/`;
   return Object.keys(updates).length ? { ...c, ...updates } : c;
+}
+
+/** Compact e.g. 4.1M, 127K */
+function formatMetricShort(n) {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  const x = Number(n);
+  if (x < 1000) return String(Math.round(x));
+  if (x < 1_000_000) return `${(x / 1000).toFixed(x >= 10_000 ? 0 : 1)}K`;
+  return `${(x / 1_000_000).toFixed(x >= 10_000_000 ? 1 : 2)}M`.replace(/\.0M$/, "M");
+}
+
+async function enrichTikTokFromApi(handle, apiKey) {
+  const cleanHandle = String(handle || "").replace(/^@/, "").trim();
+  if (!cleanHandle) throw new Error("Missing handle");
+  const res = await Promise.race([
+    fetch(`https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(cleanHandle)}`, {
+      headers: { "x-api-key": apiKey },
+    }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+  ]);
+  if (!res.ok) throw new Error(`TikTok API returned ${res.status}`);
+  const raw = await res.json();
+  const data = raw?.data ?? raw;
+  const user = data?.user ?? data;
+  const stats = data?.stats ?? data;
+  return {
+    followers: stats?.followerCount ?? stats?.follower_count ?? null,
+    following: stats?.followingCount ?? stats?.following_count ?? null,
+    hearts: stats?.heartCount ?? stats?.heart ?? stats?.diggCount ?? null,
+    videoCount: stats?.videoCount ?? null,
+    bio: user?.signature ?? user?.bio ?? "",
+    avatarUrl: user?.avatarMedium ?? user?.avatarLarger ?? user?.avatarThumb ?? "",
+    verified: !!user?.verified,
+    lastEnriched: new Date().toISOString(),
+  };
+}
+
+async function enrichInstagramFromApi(handle, apiKey) {
+  const cleanHandle = String(handle || "").replace(/^@/, "").trim();
+  if (!cleanHandle || !apiKey) return null;
+  try {
+    const res = await Promise.race([
+      fetch(`https://api.scrapecreators.com/v1/instagram/profile?handle=${encodeURIComponent(cleanHandle)}`, {
+        headers: { "x-api-key": apiKey },
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+    ]);
+    if (!res.ok) return null;
+    const raw = await res.json();
+    const data = raw?.data ?? raw;
+    return {
+      followers: data?.follower_count ?? data?.edge_followed_by?.count ?? null,
+      following: data?.following_count ?? data?.edge_follow?.count ?? null,
+      posts: data?.media_count ?? data?.edge_owner_to_timeline_media?.count ?? null,
+      bio: data?.biography ?? "",
+      avatarUrl: data?.profile_pic_url_hd ?? data?.profile_pic_url ?? "",
+      verified: !!data?.is_verified,
+      lastEnriched: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Sort numeric metrics; null/invalid always sort to the bottom. */
+function cmpMetric(a, b, getVal, dir) {
+  const naRaw = getVal(a);
+  const nbRaw = getVal(b);
+  const na = naRaw != null && !Number.isNaN(Number(naRaw)) ? Number(naRaw) : null;
+  const nb = nbRaw != null && !Number.isNaN(Number(nbRaw)) ? Number(nbRaw) : null;
+  if (na == null && nb == null) return 0;
+  if (na == null) return 1;
+  if (nb == null) return -1;
+  if (na < nb) return dir === "asc" ? -1 : 1;
+  if (na > nb) return dir === "asc" ? 1 : -1;
+  return 0;
 }
 
 function sortCreatorsForDisplay(arr) {
@@ -2870,32 +3021,8 @@ const VIDEO_LOG_STATUSES = [
   { value: "draft", label: "Draft" },
 ];
 
-function pickFollowers(obj) {
-  if (obj == null) return null;
-  if (typeof obj === "number") return obj;
-  const tryPaths = [
-    obj.follower_count,
-    obj.followers,
-    obj.followerCount,
-    obj.stats?.followerCount,
-    obj.stats?.follower_count,
-    obj.user?.follower_count,
-    obj.user?.followerCount,
-    obj.data?.follower_count,
-    obj.edge_followed_by?.count,
-  ];
-  for (const p of tryPaths) {
-    if (typeof p === "number" && !Number.isNaN(p)) return p;
-    if (typeof p === "string") {
-      const n = parseInt(p.replace(/,/g, ""), 10);
-      if (!Number.isNaN(n)) return n;
-    }
-  }
-  return null;
-}
-
 function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, S }) {
-  const [showAddress, setShowAddress] = useState(false);
+  const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
     url: "",
@@ -2906,8 +3033,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
     date: new Date().toISOString().slice(0, 10),
     views: "",
   });
-  const [fetchingProfile, setFetchingProfile] = useState(false);
-  const [fetchMsg, setFetchMsg] = useState(null);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichMsg, setEnrichMsg] = useState(null);
 
   const campaignNames = useMemo(() => {
     const s = new Set();
@@ -2929,54 +3056,41 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
 
   const ttUrl = c.tiktokUrl?.trim() || tiktokUrlFromHandle(c.handle);
   const videoCount = creatorDisplayVideoCount(c);
+  const ttD = c.tiktokData || {};
+  const igD = c.instagramData || {};
+  const lastEnriched = ttD.lastEnriched || igD.lastEnriched;
+  const handleLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
 
-  const fetchLiveProfiles = async () => {
+  const enrichProfile = async () => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
     if (!key.trim()) {
-      setFetchMsg("Add your ScrapeCreators API key in Settings.");
+      alert("Add your ScrapeCreators API key in Settings");
       return;
     }
-    setFetchingProfile(true);
-    setFetchMsg(null);
+    setEnriching(true);
+    setEnrichMsg("Pulling live data from TikTok...");
     try {
-      const h = String(c.handle || "").replace(/^@/, "").trim();
-      if (!h) throw new Error("Missing handle");
-      const ttRes = await fetch(`https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(h)}`, {
-        headers: { "x-api-key": key.trim() },
-      });
-      const ttJson = await ttRes.json().catch(() => ({}));
-      if (!ttRes.ok) throw new Error(ttJson?.message || ttJson?.error || `TikTok profile HTTP ${ttRes.status}`);
-      const ttRoot = ttJson?.data ?? ttJson;
-      const tiktokFollowers = pickFollowers(ttRoot) ?? pickFollowers(ttRoot?.user) ?? pickFollowers(ttRoot?.stats);
-
-      let instagramFollowers = null;
-      const igUrl = (c.instagramUrl || "").trim();
-      if (igUrl) {
-        const igUser = instagramUsernameFromUrl(igUrl);
-        if (igUser) {
-          const igRes = await fetch(`https://api.scrapecreators.com/v1/instagram/profile?username=${encodeURIComponent(igUser)}`, {
-            headers: { "x-api-key": key.trim() },
-          });
-          const igJson = await igRes.json().catch(() => ({}));
-          if (igRes.ok) {
-            const igRoot = igJson?.data ?? igJson;
-            instagramFollowers = pickFollowers(igRoot) ?? pickFollowers(igRoot?.user);
-          }
-        }
-      }
-
+      const tt = await enrichTikTokFromApi(c.handle, key.trim());
+      setEnrichMsg("Pulling live data from Instagram...");
+      const ig = await enrichInstagramFromApi(c.handle, key.trim());
+      const engagementRate =
+        tt && Number(tt.followers) > 0 && tt.hearts != null
+          ? ((Number(tt.hearts) / Number(tt.followers)) * 100).toFixed(1)
+          : null;
       updateCreator(c.id, {
-        socialStats: {
-          tiktokFollowers: tiktokFollowers ?? undefined,
-          instagramFollowers: instagramFollowers ?? undefined,
-          fetchedAt: new Date().toISOString(),
-        },
+        tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...tt },
+        instagramData: ig
+          ? { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...ig }
+          : { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}) },
+        engagementRate,
       });
-      setFetchMsg("Live profile data saved.");
+      const f = formatMetricShort(tt.followers);
+      const h = formatMetricShort(tt.hearts);
+      setEnrichMsg(`Profile enriched — ${f} followers, ${h} hearts`);
     } catch (err) {
-      setFetchMsg(err.message || "Could not fetch profiles.");
+      setEnrichMsg(err.message || "Enrichment failed.");
     } finally {
-      setFetchingProfile(false);
+      setEnriching(false);
     }
   };
 
@@ -3032,31 +3146,48 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 28 }}>
-        <div style={{ flex: "1 1 280px" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 28, fontWeight: 800, color: t.text, textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
-              {c.handle}
-            </a>
-            {c.name?.trim() ? <span style={{ fontSize: 16, color: t.textMuted, fontWeight: 500 }}>{c.name.trim()}</span> : null}
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                padding: "4px 12px",
-                borderRadius: 20,
-                background: c.status === "Active" ? t.green + "18" : c.status === "One-time" ? t.orange + "18" : t.red + "18",
-                color: c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red,
-                border: `1px solid ${c.status === "Active" ? t.green + "35" : c.status === "One-time" ? t.orange + "35" : t.red + "35"}`,
-              }}
-            >
-              {c.status}
-            </span>
-            {c.quality === "High" ? (
-              <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 12px", borderRadius: 20, background: "#f59e0b15", color: "#f59e0b", border: "1px solid #f59e0b30" }}>★ High</span>
-            ) : (
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: t.cardAlt, color: t.textMuted, border: `1px solid ${t.border}` }}>Standard</span>
-            )}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flex: "1 1 320px", minWidth: 0 }}>
+          {ttD.avatarUrl ? (
+            <img src={ttD.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 32, objectFit: "cover", flexShrink: 0, border: `1px solid ${t.border}` }} />
+          ) : (
+            <div style={{ width: 64, height: 64, borderRadius: 32, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: t.textMuted, flexShrink: 0 }}>
+              {handleLetter}
+            </div>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 28, fontWeight: 800, color: t.text, textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
+                {c.handle}
+              </a>
+              {ttD.verified ? (
+                <span title="Verified on TikTok" style={{ color: "#1d9bf0", fontSize: 20, lineHeight: 1 }} aria-hidden>
+                  ✓
+                </span>
+              ) : null}
+              {c.name?.trim() ? <span style={{ fontSize: 16, color: t.textMuted, fontWeight: 500 }}>{c.name.trim()}</span> : null}
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "4px 12px",
+                  borderRadius: 20,
+                  background: c.status === "Active" ? t.green + "18" : c.status === "One-time" ? t.orange + "18" : t.red + "18",
+                  color: c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red,
+                  border: `1px solid ${c.status === "Active" ? t.green + "35" : c.status === "One-time" ? t.orange + "35" : t.red + "35"}`,
+                }}
+              >
+                {c.status}
+              </span>
+              {c.quality === "High" ? (
+                <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 12px", borderRadius: 20, background: "#f59e0b15", color: "#f59e0b", border: "1px solid #f59e0b30" }}>★ High</span>
+              ) : (
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: t.cardAlt, color: t.textMuted, border: `1px solid ${t.border}` }}>Standard</span>
+              )}
+            </div>
+            {ttD.bio ? (
+              <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", lineHeight: 1.5, padding: "10px 12px", background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>"{ttD.bio}"</div>
+            ) : null}
           </div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
@@ -3068,17 +3199,53 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
           </button>
           <button
             type="button"
-            disabled={fetchingProfile}
-            onClick={fetchLiveProfiles}
-            style={{ ...S.btnP, padding: "9px 18px", fontSize: 13, opacity: fetchingProfile ? 0.65 : 1 }}
+            disabled={enriching}
+            onClick={enrichProfile}
+            style={{ ...S.btnP, padding: "9px 18px", fontSize: 13, opacity: enriching ? 0.65 : 1 }}
           >
-            {fetchingProfile ? "Fetching…" : "Fetch live profiles"}
+            {enriching ? "Pulling live data…" : "Enrich Profile"}
           </button>
         </div>
       </div>
-      {fetchMsg ? (
-        <div style={{ fontSize: 12, color: fetchMsg.includes("saved") || fetchMsg.includes("updated") ? t.green : t.orange, marginBottom: 16 }}>{fetchMsg}</div>
+      {enrichMsg ? (
+        <div style={{ fontSize: 12, color: enrichMsg.includes("Profile enriched") || enrichMsg.includes("enriched") ? t.green : t.orange, marginBottom: 16 }}>{enrichMsg}</div>
       ) : null}
+
+      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
+        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16, color: t.text }}>Live Metrics</div>
+        {!lastEnriched ? (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 12 }}>No live data yet</div>
+            <button type="button" disabled={enriching} onClick={enrichProfile} style={{ ...S.btnP, padding: "10px 20px", fontSize: 14 }}>
+              Enrich Profile
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginBottom: 14 }}>
+              {[
+                { label: "Followers", val: ttD.followers != null ? formatMetricShort(ttD.followers) : "—" },
+                { label: "Hearts", val: ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—" },
+                { label: "TT Videos", val: ttD.videoCount != null ? String(ttD.videoCount) : "—" },
+                { label: "Eng. Rate", val: c.engagementRate != null ? `${c.engagementRate}%` : "—" },
+                { label: "IG Followers", val: igD.followers != null ? formatMetricShort(igD.followers) : "—" },
+                { label: "IG Posts", val: igD.posts != null ? String(igD.posts) : "—" },
+              ].map((s) => (
+                <div key={s.label} style={{ flex: "1 1 100px", textAlign: "center", minWidth: 90 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>{s.val}</div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
+              <div style={{ fontSize: 11, color: t.textFaint }}>Last updated: {new Date(lastEnriched).toLocaleString()}</div>
+              <button type="button" disabled={enriching} onClick={enrichProfile} style={{ ...S.btnP, padding: "8px 16px", fontSize: 12 }}>
+                Enrich Profile
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ flex: "2 1 420px", minWidth: 300, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -3135,20 +3302,37 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
                 />
               </div>
             </div>
-            <div>
-              <button type="button" onClick={() => setShowAddress((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: showAddress ? 8 : 0 }}>
-                {showAddress ? "Hide address" : "Show address"}
-              </button>
-              {showAddress ? (
-                <textarea
-                  value={c.address || ""}
-                  onChange={(e) => updateCreator(c.id, { address: e.target.value })}
-                  rows={3}
-                  placeholder="Mailing address"
-                  style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, resize: "vertical" }}
-                />
-              ) : null}
-            </div>
+            {(c.address || "").trim() ? (
+              <div style={{ marginBottom: 14 }}>
+                <button type="button" onClick={() => setShowShipping((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: showShipping ? 10 : 0 }}>
+                  Shipping Address {showShipping ? "▲" : "▼"}
+                </button>
+                {showShipping ? (
+                  <div>
+                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+                      <div style={{ flex: "1 1 200px", fontSize: 14, color: t.text, lineHeight: 1.5 }}>{(c.address || "").trim()}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText((c.address || "").trim());
+                        }}
+                        style={{ ...S.btnS, padding: "6px 12px", fontSize: 12 }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Edit</div>
+                    <textarea
+                      value={c.address || ""}
+                      onChange={(e) => updateCreator(c.id, { address: e.target.value })}
+                      rows={3}
+                      placeholder="Shipping / mailing address"
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, resize: "vertical" }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div id="creator-notes-section" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
@@ -3324,15 +3508,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
               <span style={{ color: t.textMuted }}>Member since: </span>
               <strong>{c.dateAdded || "—"}</strong>
             </div>
-            {c.socialStats?.fetchedAt ? (
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 10 }}>Live data fetched {new Date(c.socialStats.fetchedAt).toLocaleString()}</div>
-            ) : null}
-            {c.socialStats?.tiktokFollowers != null ? (
-              <div style={{ fontSize: 13, color: t.textSecondary, marginBottom: 4 }}>TikTok followers: {Number(c.socialStats.tiktokFollowers).toLocaleString()}</div>
-            ) : null}
-            {c.socialStats?.instagramFollowers != null ? (
-              <div style={{ fontSize: 13, color: t.textSecondary }}>Instagram followers: {Number(c.socialStats.instagramFollowers).toLocaleString()}</div>
-            ) : null}
           </div>
         </div>
       </div>
@@ -3379,8 +3554,8 @@ export default function App() {
   const [scrapeKey, setScrapeKey] = useState("");
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [sortCol, setSortCol] = useState("handle");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortCol, setSortCol] = useState("followers");
+  const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All Statuses", niche: "All Niches", quality: "All Quality", platform: "All" });
   const [openFilter, setOpenFilter] = useState(null);
   const [showAddCreator, setShowAddCreator] = useState(false);
@@ -3426,10 +3601,10 @@ export default function App() {
     if (creatorsVal) {
       try {
         const parsed = JSON.parse(creatorsVal);
-        if (Array.isArray(parsed)) setCreators(parsed.map(normalizeCreatorRow));
+        if (Array.isArray(parsed)) setCreators(parsed.map(hydrateCreator));
       } catch {}
     } else {
-      setCreators(JSON.parse(JSON.stringify(SEED_CREATORS)).map(normalizeCreatorRow));
+      setCreators(JSON.parse(JSON.stringify(SEED_CREATORS)).map(hydrateCreator));
     }
 
     setStorageReady(true);
@@ -3437,7 +3612,7 @@ export default function App() {
 
   useEffect(() => {
     if (!storageReady) return;
-    setCreators((prev) => prev.map(backfillCreatorSocialUrls));
+    setCreators((prev) => prev.map(hydrateCreator));
   }, [storageReady]);
 
   // ── Save library whenever it changes ──
@@ -3525,7 +3700,25 @@ export default function App() {
   }, []);
 
   const updateCreator = useCallback((id, updates) => {
-    setCreators((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+    setCreators((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        let next = { ...c, ...updates };
+        if (updates.tiktokData && typeof updates.tiktokData === "object") {
+          next = {
+            ...next,
+            tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...updates.tiktokData },
+          };
+        }
+        if (updates.instagramData && typeof updates.instagramData === "object") {
+          next = {
+            ...next,
+            instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...updates.instagramData },
+          };
+        }
+        return next;
+      })
+    );
   }, []);
 
   const addCreator = useCallback(() => {
@@ -3556,7 +3749,7 @@ export default function App() {
       videoLog: [],
       dateAdded: new Date().toISOString().slice(0, 10),
     };
-    setCreators((prev) => [row, ...prev]);
+    setCreators((prev) => [hydrateCreator(row), ...prev]);
     setShowAddCreator(false);
     setNewCreatorForm({
       handle: "", name: "", email: "", niche: "", tiktokUrl: "", instagramUrl: "", status: "Active", quality: "Standard", costPerVideo: "", notes: "",
@@ -3637,11 +3830,16 @@ export default function App() {
             });
             if (idxByHandle.has(key)) {
               const ix = idxByHandle.get(key);
-              next[ix] = { ...next[ix], ...rowObj, id: next[ix].id, videoLog: Array.isArray(next[ix].videoLog) ? next[ix].videoLog : [] };
+              next[ix] = hydrateCreator({
+                ...next[ix],
+                ...rowObj,
+                id: next[ix].id,
+                videoLog: Array.isArray(next[ix].videoLog) ? next[ix].videoLog : [],
+              });
               updateCount++;
             } else {
               const id = `c-import-${Date.now()}-${newCount}-${Math.random().toString(36).slice(2, 7)}`;
-              next.push({ id, ...rowObj });
+              next.push(hydrateCreator({ id, ...rowObj }));
               idxByHandle.set(key, next.length - 1);
               newCount++;
             }
@@ -3991,6 +4189,19 @@ export default function App() {
 
     const statusOrder = { Active: 0, "One-time": 1, "Off-boarded": 2 };
     list.sort((a, b) => {
+      if (sortCol === "followers") return cmpMetric(a, b, (x) => x.tiktokData?.followers, sortDir);
+      if (sortCol === "hearts") return cmpMetric(a, b, (x) => x.tiktokData?.hearts, sortDir);
+      if (sortCol === "engagement") {
+        return cmpMetric(
+          a,
+          b,
+          (x) => {
+            const r = parseFloat(x.engagementRate);
+            return Number.isFinite(r) ? r : null;
+          },
+          sortDir
+        );
+      }
       let valA;
       let valB;
       switch (sortCol) {
@@ -4059,7 +4270,8 @@ export default function App() {
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         return prev;
       }
-      setSortDir("asc");
+      const descFirst = ["followers", "hearts", "engagement", "videos"];
+      setSortDir(descFirst.includes(col) ? "desc" : "asc");
       return col;
     });
   }, []);
@@ -4068,6 +4280,53 @@ export default function App() {
     setFilters({ status: "All Statuses", niche: "All Niches", quality: "All Quality", platform: "All" });
     setCreatorSearch("");
   }, []);
+
+  const [bulkEnrichProgress, setBulkEnrichProgress] = useState(null);
+
+  const runBulkEnrichAll = useCallback(async () => {
+    const key = (scrapeKey || "").trim() || storageGet("intake-scrape-key") || "";
+    if (!key.trim()) {
+      alert("Add your ScrapeCreators API key in Settings");
+      return;
+    }
+    const active = creators.filter((c) => c.status === "Active");
+    const need = active.filter((c) => {
+      const last = c.tiktokData?.lastEnriched;
+      if (!last) return true;
+      return Date.now() - new Date(last).getTime() > 24 * 60 * 60 * 1000;
+    });
+    if (
+      !window.confirm(
+        `This will pull live TikTok data for ${need.length} active creators (skipping those enriched in the last 24h). Uses about ${need.length} API credits. Continue?`
+      )
+    ) {
+      return;
+    }
+    let done = 0;
+    let fail = 0;
+    for (let i = 0; i < need.length; i++) {
+      const cr = need[i];
+      setBulkEnrichProgress({ cur: i + 1, total: need.length, done, fail });
+      try {
+        const tt = await enrichTikTokFromApi(cr.handle, key.trim());
+        const engagementRate =
+          tt && Number(tt.followers) > 0 && tt.hearts != null
+            ? ((Number(tt.hearts) / Number(tt.followers)) * 100).toFixed(1)
+            : null;
+        updateCreator(cr.id, {
+          tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(cr.tiktokData || {}), ...tt },
+          engagementRate,
+        });
+        done++;
+      } catch {
+        fail++;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setBulkEnrichProgress(null);
+    setCreatorImportToast(`Enriched ${done} creators. ${fail} failed.`);
+    setTimeout(() => setCreatorImportToast(null), 8000);
+  }, [creators, scrapeKey, updateCreator]);
 
   const creatorDetailId =
     view === "creatorDetail" && typeof window !== "undefined"
@@ -4802,7 +5061,7 @@ export default function App() {
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "creators" && (() => {
-          const gridCols = "70px 150px 160px 200px 40px 40px 60px 70px 80px 1fr";
+          const gridCols = "60px 130px 36px 140px 80px 80px 55px 55px 160px 34px 34px 60px 70px 1fr";
           const filterSelect = (active) => ({
             ...S.select,
             padding: "6px 10px",
@@ -4821,7 +5080,7 @@ export default function App() {
             position: "sticky",
             top: 0,
             zIndex: 10,
-            minWidth: 900,
+            minWidth: 1100,
           };
           const rowCell = {
             display: "grid",
@@ -4833,7 +5092,7 @@ export default function App() {
             color: t.textSecondary,
             lineHeight: 1.4,
             transition: "background 0.1s",
-            minWidth: 900,
+            minWidth: 1100,
           };
           const ttLinkStyle = {
             fontWeight: 800,
@@ -5064,6 +5323,9 @@ export default function App() {
                 <option value="Standard">Standard</option>
               </select>
               <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>+ Add Creator</button>
+              <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12, opacity: bulkEnrichProgress ? 0.6 : 1 }}>
+                Enrich All
+              </button>
               <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>Import CSV</button>
               <input
                 ref={csvInputRef}
@@ -5080,13 +5342,23 @@ export default function App() {
                 {sortedCreators.length} of {creators.length} creators
               </span>
             </div>
+            {bulkEnrichProgress ? (
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>
+                Enriching {bulkEnrichProgress.cur} of {bulkEnrichProgress.total} creators… (done {bulkEnrichProgress.done}, failed {bulkEnrichProgress.fail})
+              </div>
+            ) : null}
 
             <div style={{ overflowX: "auto", border: `1px solid ${t.border}`, borderRadius: 12, background: t.card }}>
               <div style={{ position: "relative" }}>
                 <div style={headCell}>
                   {hdr("status", "Status", "status")}
                   {hdr("handle", "Handle", null)}
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, display: "flex", alignItems: "center", justifyContent: "center" }}>Av</div>
                   {hdr("niche", "Niche", "niche")}
+                  {hdr("followers", "Followers", null)}
+                  {hdr("hearts", "Hearts", null)}
+                  {hdr("engagement", "Eng%", null)}
+                  {hdr("videos", "Videos", null)}
                   {hdr("email", "Email", null)}
                   <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, justifyContent: "center" }} data-creator-filter-dd="platform">
                     <span
@@ -5185,7 +5457,6 @@ export default function App() {
                       <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow("instagram")}</span>
                     </span>
                   </div>
-                  {hdr("videos", "Videos", null)}
                   {hdr("quality", "Quality", "quality")}
                   {hdr("cost", "Cost", null)}
                   {hdr("notes", "Notes", null)}
@@ -5223,11 +5494,17 @@ export default function App() {
                         placeholder="@handle"
                         style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}
                       />
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, border: `1px solid ${t.border}` }} />
+                      </span>
                       <input value={newCreatorForm.niche} onChange={(e) => setNewCreatorForm((p) => ({ ...p, niche: e.target.value }))} placeholder="Niche" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                      <span style={{ textAlign: "right", fontSize: 11, color: t.textFaint }}>0</span>
                       <input value={newCreatorForm.email} onChange={(e) => setNewCreatorForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
                       <input value={newCreatorForm.tiktokUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, tiktokUrl: e.target.value }))} placeholder="TikTok URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
                       <input value={newCreatorForm.instagramUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, instagramUrl: e.target.value }))} placeholder="Instagram URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
-                      <span style={{ textAlign: "right", fontSize: 11, color: t.textFaint }}>0</span>
                       <select value={newCreatorForm.quality} onChange={(e) => setNewCreatorForm((p) => ({ ...p, quality: e.target.value }))} style={{ width: "100%", padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}>
                         <option value="Standard">Standard</option>
                         <option value="High">High</option>
@@ -5256,6 +5533,16 @@ export default function App() {
                       const rawCost = String(c.costPerVideo || "").trim();
                       const costShow = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
                       const hDisp = fmtHandle(c.handle);
+                      const ttD = c.tiktokData || {};
+                      const engV = parseFloat(c.engagementRate);
+                      const engColor = !Number.isFinite(engV)
+                        ? t.textFaint
+                        : engV > 50
+                          ? t.green
+                          : engV >= 10
+                            ? t.blue
+                            : t.textMuted;
+                      const avLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
                       return (
                         <div
                           key={c.id}
@@ -5272,7 +5559,20 @@ export default function App() {
                             <span style={{ fontSize: 11, color: dotBg, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
                           </div>
                           <div style={{ ...ellip, fontWeight: 600, color: t.text }} title={hDisp}>{hDisp}</div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
+                            {ttD.avatarUrl ? (
+                              <img src={ttD.avatarUrl} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }} />
+                            ) : (
+                              <div style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.textFaint }}>
+                                {avLetter}
+                              </div>
+                            )}
+                          </div>
                           <div style={{ ...ellip, fontSize: 11, color: t.textMuted }} title={c.niche || ""}>{c.niche || "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: ttD.followers != null ? t.text : t.textFaint, fontSize: 12 }}>{ttD.followers != null ? formatMetricShort(ttD.followers) : "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: ttD.hearts != null ? t.text : t.textFaint, fontSize: 12 }}>{ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, fontSize: 11, color: engColor }}>{c.engagementRate != null ? `${c.engagementRate}%` : "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: vc ? t.text : t.textFaint, fontSize: 12 }}>{vc}</div>
                           <div style={ellip}>
                             {c.email?.trim() ? (
                               <a href={`mailto:${c.email.trim()}`} onClick={(e) => e.stopPropagation()} style={{ color: t.blue, textDecoration: "none", fontSize: 11 }} onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }} onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }} title={c.email}>
@@ -5328,7 +5628,6 @@ export default function App() {
                               <span style={{ color: t.textFaint }}>—</span>
                             )}
                           </div>
-                          <div style={{ textAlign: "right", fontWeight: 600, color: vc ? t.text : t.textFaint, fontSize: 12 }}>{vc}</div>
                           <div style={{ fontSize: 11 }}>
                             {c.quality === "High" ? <span style={{ color: "#f59e0b", fontWeight: 600 }}>★ High</span> : <span style={{ color: t.textFaint }}>Standard</span>}
                           </div>
