@@ -120,7 +120,7 @@ function getS(t) {
 // INTAKE KNOWLEDGE BASE
 // ═══════════════════════════════════════════════════════════
 
-const PRODUCTS = ["Starter Kit Black", "Starter Kit Clear", "Mouth Tape", "Case", "Other"];
+const PRODUCTS = ["Starter Kit Black", "Starter Kit Clear", "Mouth Tape", "Sports Tabs", "Refills", "Case", "Other"];
 
 const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge", "Unboxing / First Impressions", "Lifestyle / Routine", "Before & After", "Storytelling / Testimonial", "ASMR / Satisfying"];
 
@@ -148,7 +148,7 @@ const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying"];
 
 const PREFILL = {
-  productName: "Starter Kit Black", campaignName: "The Level Up", vibe: "Fun & Entertaining",
+  productName: "Starter Kit Black", customProductName: "", campaignName: "The Level Up", vibe: "Fun & Entertaining",
   mission: "Four sizes. One that's perfect for you. How far can you level up?",
   ageRange: "25-34", gender: "Men & Women",
   problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
@@ -158,7 +158,7 @@ const PREFILL = {
 };
 
 const DEFAULTS = {
-  productName: "Starter Kit Black", campaignName: "", vibe: "Fun & Entertaining", mission: "",
+  productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sizes", "customers", "fda"],
   platform: "TikTok", videoLength: "15-30s", tone: "Real & relatable", notes: "",
@@ -199,7 +199,8 @@ const LENGTH_GUIDE = {
 const PERSONAS = ["The Curious Scroller", "The Skeptical Shopper", "The Scroll-Past Skeptic", "The Late-Night Browser", "The Try-Anything Explorer", "The Sleep Seeker", "The Mouth-Breather in Denial"];
 
 function generateBrief(d) {
-  const fullProduct = d.productName === "Other" ? "Intake Breathing" : `Intake Breathing — ${d.productName}`;
+  const productLabel = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
+  const fullProduct = productLabel ? `Intake Breathing — ${productLabel}` : "Intake Breathing";
   const mission = d.mission || `Discover what ${fullProduct} can do for you.`;
   const ageRange = d.ageRange || "25-34";
   const genderLabel = d.gender || "Men & Women";
@@ -210,8 +211,8 @@ function generateBrief(d) {
   const psycho = problemText.length > 20
     ? `Target: ${genderLabel}, ages ${ageRange}. ${problemText}`
     : `Target: ${genderLabel}, ages ${ageRange}. They've seen the product in their feed but haven't pulled the trigger. Open-minded but need proof. They trust real people over polished ads.`;
-  const isStarterKit = d.productName.startsWith("Starter Kit");
-  const isMouthTape = d.productName === "Mouth Tape";
+  const isStarterKit = productLabel.startsWith("Starter Kit");
+  const isMouthTape = productLabel === "Mouth Tape";
   const solBase = isStarterKit ? "The Starter Kit includes 4 sizes that fit 90% of noses. Each level opens your nose wider. It's magnetic, reusable, and stays on all night." : isMouthTape ? "Intake Mouth Tape keeps your mouth closed so you breathe through your nose all night. Pair with the nasal dilator for max airflow." : `${fullProduct} is part of the Intake Breathing system for better nasal breathing.`;
   const solutionSentences = splitSentences(solBase);
   const theyAre = ["Curious but cautious — needs a push, not a pitch", "Scrolls fast — 2 seconds to hook or gone", "Trusts real reactions over polished ads", "Open to trying if the risk feels low"];
@@ -242,8 +243,10 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [ageRange, setAgeRange] = useState(prefill?.ageRange ?? DEFAULTS.ageRange);
   const [gender, setGender] = useState(prefill?.gender ?? DEFAULTS.gender);
   const [selectedStats, setSelectedStats] = useState(prefill ? [...prefill.selectedStats] : [...DEFAULTS.selectedStats]);
+  const [showCustomProduct, setShowCustomProduct] = useState((prefill?.productName || DEFAULTS.productName) === "Other");
   const vals = useRef({
     productName: prefill?.productName || DEFAULTS.productName,
+    customProductName: prefill?.customProductName ?? DEFAULTS.customProductName,
     campaignName: prefill?.campaignName || DEFAULTS.campaignName,
     vibe: prefill?.vibe || DEFAULTS.vibe,
     mission: prefill?.mission || "",
@@ -257,10 +260,11 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const go = useCallback((mode) => {
     const v = vals.current;
     if (!v.problem.trim()) { alert("Please describe the core problem."); return; }
+    if (v.productName === "Other" && !v.customProductName.trim()) { alert("Please enter a product name."); return; }
     const problemTrim = v.problem.trim();
     onGenerate({
       mode,
-      productName: v.productName, campaignName: v.campaignName, vibe: v.vibe, mission: v.mission,
+      productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, mission: v.mission,
       ageRange, gender, problem: problemTrim,
       selectedStats, platform: v.platform, videoLength: v.videoLength, tone: v.tone, notes: v.notes,
       _audience: `Ages ${ageRange} — ${gender}`,
@@ -287,7 +291,17 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>🎯 Product & Campaign</div>
-        <div style={S.r2}>{mkSel("productName", "Product *", PRODUCTS)}{mkSel("vibe", "Campaign Vibe", VIBES)}</div>
+        <div style={S.r2}>
+          <div style={S.fg}><label style={S.label}>Product *</label>
+            <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); }}>
+              {PRODUCTS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            {showCustomProduct && <div style={S.fg}><label style={S.label}>Product Name</label>
+              <input style={S.input} defaultValue={vals.current.customProductName} onChange={e => { vals.current.customProductName = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Enter your product name" />
+            </div>}
+          </div>
+          {mkSel("vibe", "Campaign Vibe", VIBES)}
+        </div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Campaign Name</label>
             <input style={S.input} defaultValue={vals.current.campaignName} onChange={e=>{vals.current.campaignName=e.target.value}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder='e.g. "The Level Up"' /></div>
@@ -385,10 +399,10 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11 }}>{wasAI ? "✦ AI Generated" : "⚡ Template Draft"}</span>
       </div>
       <div style={S.bHeader}>
-        <div style={S.bCampaign}>{fd.campaignName || fd.productName}</div>
+        <div style={S.bCampaign}>{fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName)}</div>
         <EditableField value={`"${b.mission}"`} style={S.bMission} t={t} />
         <div style={S.badges}>
-          <span style={S.badge(t.text)}>{fd.productName}</span>
+          <span style={S.badge(t.text)}>{fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName}</span>
           <span style={S.badge(t.purple)}>{fd.vibe}</span>
           <span style={S.badge(t.blue)}>{fd.platform}</span>
           <span style={S.badge(t.orange)}>{fd.videoLength}</span>
@@ -471,7 +485,7 @@ function buildAIPrompt(d) {
   const prob = (d.problem || d._problem || d.customProblem || "").trim();
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
-PRODUCT: ${d.productName} by Intake Breathing
+PRODUCT: ${d.productName === "Other" ? (d.customProductName || "").trim() : d.productName} by Intake Breathing
 CAMPAIGN NAME: ${d.campaignName || "Untitled"}
 CAMPAIGN VIBE: ${d.vibe}
 MISSION: ${d.mission || "N/A"}
@@ -557,7 +571,7 @@ export default function App() {
   const saveBrief = (brief, formData) => {
     setCurrentBrief(brief);
     setCurrentFormData(formData);
-    setLibrary(prev => [{ id: Date.now(), name: formData.campaignName || formData.productName, brief, formData, date: new Date().toLocaleDateString() }, ...prev]);
+    setLibrary(prev => [{ id: Date.now(), name: formData.campaignName || (formData.productName === "Other" && formData.customProductName?.trim() ? formData.customProductName.trim() : formData.productName), brief, formData, date: new Date().toLocaleDateString() }, ...prev]);
     setFormKey(k => k + 1);
     setView("display");
   };
