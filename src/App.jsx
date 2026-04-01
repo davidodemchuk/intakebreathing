@@ -5,8 +5,13 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.5";
+const APP_VERSION = "2.0.6";
 const CHANGELOG = [
+  { version: "2.0.6", date: "2025-04-01", changes: [
+    "Added budget per video field to Brief Details — defaults to $100",
+    "Added supervision level dropdown — Full Review, Light Touch, or Hands Off",
+    "Budget and supervision level included in generated brief deliverables and PDF",
+  ]},
   { version: "2.0.5", date: "2025-04-01", changes: [
     "Homepage redesigned — premium dashboard with animated cards, stats bar, gradient accents",
     "Time-based greeting with manager name",
@@ -703,8 +708,22 @@ function aspectRatioLabel(w, h) {
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
+const SUPERVISION_LEVELS = [
+  { value: "full", label: "Full Review", desc: "Manager will request edits before approval" },
+  { value: "light", label: "Light Touch", desc: "Minor feedback may be given, but mostly trust the creator" },
+  { value: "handsoff", label: "Hands Off", desc: "Submit and done — no revision rounds expected" },
+];
+
+const SUPERVISION_FORM_HINTS = {
+  full: "You'll request edits before approving",
+  light: "Minor feedback possible, mostly trust the creator",
+  handsoff: "Submit and done — no back and forth",
+};
+
 const DEFAULTS = {
   manager: "Summer", customManager: "", contentQuantity: "1",
+  budgetPerVideo: "100",
+  supervisionLevel: "full",
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
@@ -827,7 +846,15 @@ function generateBrief(d) {
   };
   const mgr = managerDisplayName(d);
   const qty = String(d.contentQuantity ?? "1").trim() || "1";
-  const deliverables = `Submitted by: ${mgr}. Content requested: ${qty} videos. Submit for: ${platformsArr.map(platLabel).join(", ")}. (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
+  const rawBudget = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const budgetStr = rawBudget ? `$${rawBudget}/video` : "TBD";
+  const supVal = d.supervisionLevel || "full";
+  const supervisionLabel = SUPERVISION_LEVELS.find((s) => s.value === supVal)?.label || "Full Review";
+  let supervisionExtra = "";
+  if (supVal === "handsoff") supervisionExtra = " No revision rounds — submit your best take.";
+  else if (supVal === "full") supervisionExtra = " Expect 1-2 rounds of revisions before final approval.";
+  else if (supVal === "light") supervisionExtra = " Minor feedback may be provided but revisions are unlikely.";
+  const deliverables = `Submitted by: ${mgr}. Content requested: ${qty} videos. Submit for: ${platformsArr.map(platLabel).join(", ")}. Budget: ${budgetStr}. Supervision: ${supervisionLabel}.${supervisionExtra} (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
   const rejections = buildRejectionsArray(d);
   const approvedForBrief = Array.isArray(d.approvedClaims) && d.approvedClaims.length ? [...d.approvedClaims] : [...APPROVED_CLAIMS.slice(0, 5)];
   const bannedForBrief = Array.isArray(d.bannedClaims) && d.bannedClaims.length ? [...d.bannedClaims] : [...BANNED_CLAIMS.slice(0, 5)];
@@ -850,6 +877,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [showCustomManager, setShowCustomManager] = useState((pf.manager || DEFAULTS.manager) === "Other");
   const [managerSel, setManagerSel] = useState(pf.manager ?? DEFAULTS.manager);
   const [contentQty, setContentQty] = useState(pf.contentQuantity ?? DEFAULTS.contentQuantity);
+  const [supervisionLevel, setSupervisionLevel] = useState(pf.supervisionLevel ?? DEFAULTS.supervisionLevel);
   const [otherPlatformDraft, setOtherPlatformDraft] = useState("");
   const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false);
   const platformDropRef = useRef(null);
@@ -886,6 +914,8 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     customTone: pf.customTone ?? DEFAULTS.customTone,
     notes: pf.notes || "",
     customRejections: pf.customRejections ?? DEFAULTS.customRejections,
+    budgetPerVideo: pf.budgetPerVideo ?? DEFAULTS.budgetPerVideo,
+    supervisionLevel: pf.supervisionLevel ?? DEFAULTS.supervisionLevel,
   });
   const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
 
@@ -1054,11 +1084,16 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
     if (selectedPlatforms.length === 0) { alert("Please select at least one platform."); return; }
     const problemTrim = v.problem.trim();
     const qtyStr = String(Math.max(1, parseInt(String(contentQty || "1"), 10) || 1));
+    const budgetRaw = (v.budgetPerVideo ?? "").trim().replace(/^\$/, "") || DEFAULTS.budgetPerVideo;
+    v.budgetPerVideo = budgetRaw;
+    v.supervisionLevel = supervisionLevel;
     onGenerate({
       mode,
       manager: managerSel,
       customManager: (v.customManager || "").trim(),
       contentQuantity: qtyStr,
+      budgetPerVideo: budgetRaw,
+      supervisionLevel,
       productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
       selectedStats, platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, customTone: (v.customTone || "").trim(), notes: v.notes,
@@ -1073,7 +1108,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       _disclosure: DISCLOSURE,
       _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }),
     });
-  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty]);
+  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty, supervisionLevel]);
   const mkSel = (key, label, opts) => (
     <div style={S.fg}><label style={S.label}>{label}</label>
       <select style={S.select} defaultValue={vals.current[key]} onChange={e=>{vals.current[key]=e.target.value}}>
@@ -1271,6 +1306,65 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                   ))}
               </div>
             )}
+          </div>
+        </div>
+        <div style={S.r2}>
+          <div style={S.fg}>
+            <label style={S.label}>Budget per Video</label>
+            <div style={{ display: "flex", alignItems: "stretch" }}>
+              <span
+                style={{
+                  background: t.cardAlt,
+                  border: `1px solid ${t.border}`,
+                  borderRight: "none",
+                  borderRadius: "8px 0 0 8px",
+                  padding: "11px 12px",
+                  color: t.textMuted,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                $
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                style={{
+                  ...S.input,
+                  borderRadius: "0 8px 8px 0",
+                  borderLeft: "none",
+                  flex: 1,
+                  minWidth: 0,
+                }}
+                defaultValue={vals.current.budgetPerVideo}
+                placeholder="100"
+                onChange={(e) => { vals.current.budgetPerVideo = e.target.value; }}
+                onFocus={(e) => { e.target.style.borderColor = t.green; }}
+                onBlur={(e) => { e.target.style.borderColor = t.border; }}
+              />
+            </div>
+          </div>
+          <div style={S.fg}>
+            <label style={S.label}>Supervision Level</label>
+            <select
+              style={S.select}
+              value={supervisionLevel}
+              onChange={(e) => {
+                const v = e.target.value;
+                vals.current.supervisionLevel = v;
+                setSupervisionLevel(v);
+              }}
+            >
+              {SUPERVISION_LEVELS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+            <div style={{ fontSize: 11, color: t.textFaint, fontStyle: "italic", marginTop: 4 }}>
+              {SUPERVISION_FORM_HINTS[supervisionLevel] || SUPERVISION_FORM_HINTS.full}
+            </div>
           </div>
         </div>
         {showCustomManager && (
@@ -1580,6 +1674,9 @@ function buildBriefPrintHtml(b, fd, esc) {
   const disclosureHtml = escSafe(b.disclosure || "").replace(/\n/g, "<br>");
   const mgrLine = escSafe(managerDisplayName(fd));
   const qtyLine = escSafe(String(fd.contentQuantity ?? "—"));
+  const rawBudgetPdf = String(fd.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const budgetStrPdf = rawBudgetPdf ? escSafe(`$${rawBudgetPdf}/video`) : "TBD";
+  const supervisionLabelPdf = escSafe(SUPERVISION_LEVELS.find((s) => s.value === (fd.supervisionLevel || "full"))?.label || "Full Review");
   const genDate = escSafe(new Date().toLocaleDateString());
 
   return `<!DOCTYPE html>
@@ -1757,7 +1854,9 @@ body {
   </div>
   <div class="doc-manager">
     Submitted by: ${mgrLine} ·
-    Videos requested: ${qtyLine} ·
+    Videos: ${qtyLine} ·
+    Budget: ${budgetStrPdf} ·
+    Supervision: ${supervisionLabelPdf} ·
     Generated: ${genDate}
   </div>
 </div>
@@ -1919,8 +2018,22 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
           <span style={S.badge(t.green)}>{fd.tone === "Other" && fd.customTone?.trim() ? fd.customTone.trim() : fd.tone}</span>
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, marginTop: 14, lineHeight: 1.65 }}>
-          <div>Submitted by: {managerDisplayName(fd)}</div>
-          <div>Videos requested: {fd.contentQuantity ?? "1"}</div>
+          {(() => {
+            const rawB = String(fd.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+            const budgetLine = rawB ? `$${rawB}/video` : "TBD";
+            const supL = SUPERVISION_LEVELS.find((s) => s.value === (fd.supervisionLevel || "full"))?.label || "Full Review";
+            return (
+              <div>
+                Submitted by: {managerDisplayName(fd)}
+                {" "}
+                · Videos: {fd.contentQuantity ?? "1"}
+                {" "}
+                · Budget: {budgetLine}
+                {" "}
+                · Supervision: {supL}
+              </div>
+            );
+          })()}
         </div>
         {isManager && <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>}
       </div>
@@ -2013,6 +2126,18 @@ function buildAIPrompt(d) {
     : buildRejectionsArray(d).join(". ");
   const mgrName = managerDisplayName(d);
   const qtyVideos = String(d.contentQuantity ?? "1").trim() || "1";
+  const rawBudgetAi = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const budgetStrAi = rawBudgetAi ? `$${rawBudgetAi}` : "TBD";
+  const supValAi = d.supervisionLevel || "full";
+  const supEntry = SUPERVISION_LEVELS.find((s) => s.value === supValAi) || SUPERVISION_LEVELS[0];
+  const supervisionLabelAi = supEntry.label;
+  const supervisionDescAi = supEntry.desc;
+  const supervisionToneNote =
+    supValAi === "handsoff"
+      ? "Supervision is Hands Off: the brief must be extra clear and detailed — creators will not have revision rounds, so every requirement, format spec, and CTA must be self-contained and unambiguous."
+      : supValAi === "full"
+        ? "Supervision is Full Review: you may keep the creative direction slightly looser knowing 1-2 revision rounds will refine the work — but still be specific on compliance and deliverables."
+        : "Supervision is Light Touch: balance clarity with brevity — minor feedback may occur but avoid relying on heavy revision cycles.";
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
 PRODUCT: ${productResolved} by Intake Breathing
@@ -2021,6 +2146,9 @@ CAMPAIGN VIBE: ${vibeResolved}
 MISSION: ${d.mission || "N/A"}
 SUBMITTED BY: ${mgrName}
 CONTENT QUANTITY: ${qtyVideos} videos needed
+BUDGET: ${budgetStrAi} per video
+SUPERVISION LEVEL: ${supervisionLabelAi} — ${supervisionDescAi}
+${supervisionToneNote}
 TARGET AUDIENCE: ${audienceCompact}
 AUDIENCE (form selection, ageRange + gender): ${audienceForm}
 CORE PROBLEM: ${prob}
