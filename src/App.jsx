@@ -4,8 +4,12 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.3.3";
 const CHANGELOG = [
+  { version: "1.3.3", date: "2025-04-01", changes: [
+    "IB-Ai loading screen now shows live step-by-step progress as the brief is being written",
+    "Animated progress steps with checkmarks as each phase completes",
+  ]},
   { version: "1.3.2", date: "2025-04-01", changes: [
     "Added Manager Info section above Product & Campaign — who is submitting + content quantity",
     "Manager names: Summer, Mike Max, David, Chris, Alex, Other with custom input",
@@ -293,6 +297,17 @@ function escapeHtml(str) {
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
 
 const MANAGERS = ["Summer", "Mike Max", "David", "Chris", "Alex", "Other"];
+
+const AI_STEPS = [
+  { id: "analyze", label: "Analyzing campaign inputs", duration: 2000 },
+  { id: "audience", label: "Profiling target audience", duration: 3000 },
+  { id: "hooks", label: "Writing scroll-stopping hooks", duration: 4000 },
+  { id: "story", label: "Building Problem → Agitate → Solution arc", duration: 6000 },
+  { id: "compliance", label: "Checking compliance guardrails", duration: 3000 },
+  { id: "overlays", label: "Generating overlay & visual ideas", duration: 3000 },
+  { id: "proof", label: "Selecting proof points", duration: 2000 },
+  { id: "polish", label: "Polishing final brief", duration: 3000 },
+];
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
@@ -1368,10 +1383,12 @@ export default function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
+  const [aiSteps, setAiSteps] = useState([]);
   const [storageReady, setStorageReady] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const timerRef = useRef(null);
   const cancelledRef = useRef(false);
+  const stepTimers = useRef([]);
 
   // Storage helpers — localStorage for standalone deployment
   const storageGet = (key) => {
@@ -1505,6 +1522,36 @@ export default function App() {
     }
   };
 
+  const startStepAnimation = useCallback(() => {
+    stepTimers.current.forEach((tm) => clearTimeout(tm));
+    stepTimers.current = [];
+    setAiSteps([]);
+
+    let accumulated = 0;
+    AI_STEPS.forEach((step, index) => {
+      const showTimer = setTimeout(() => {
+        setAiSteps((prev) => [...prev, { ...step, status: "active" }]);
+      }, accumulated);
+      stepTimers.current.push(showTimer);
+
+      accumulated += step.duration;
+      const doneTimer = setTimeout(() => {
+        setAiSteps((prev) => prev.map((s, i) => (i === index ? { ...s, status: "done" } : s)));
+      }, accumulated);
+      stepTimers.current.push(doneTimer);
+    });
+  }, []);
+
+  const stopStepAnimation = useCallback((markAllDone = false) => {
+    stepTimers.current.forEach((tm) => clearTimeout(tm));
+    stepTimers.current = [];
+    if (markAllDone) {
+      setAiSteps(AI_STEPS.map((s) => ({ ...s, status: "done" })));
+    } else {
+      setAiSteps((prev) => prev.map((st) => ({ ...st, status: "done" })));
+    }
+  }, []);
+
   const handleGenerate = useCallback(async (formData) => {
     if (formData.mode === "template") {
       saveBrief(generateBrief(formData), formData);
@@ -1519,12 +1566,14 @@ export default function App() {
     }
     cancelledRef.current = false;
     setAiLoading(true);
+    startStepAnimation();
     setAiError(null);
     setElapsed(0);
     const start = Date.now();
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000);
 
+    let deferredSuccess = false;
     try {
       const response = await Promise.race([
         fetch("https://api.anthropic.com/v1/messages", {
@@ -1561,7 +1610,12 @@ export default function App() {
       const mergedRej = buildRejectionsArray(formData);
       if (!Array.isArray(brief.rejections) || brief.rejections.length === 0) brief.rejections = mergedRej;
 
-      saveBrief(brief, formData);
+      deferredSuccess = true;
+      stopStepAnimation(true);
+      setTimeout(() => {
+        saveBrief(brief, formData);
+        setAiLoading(false);
+      }, 600);
     } catch (err) {
       if (cancelledRef.current) return;
       setAiError(err.message === "TIMEOUT"
@@ -1569,11 +1623,20 @@ export default function App() {
         : err.message);
     } finally {
       clearInterval(timerRef.current);
-      if (!cancelledRef.current) setAiLoading(false);
+      if (!deferredSuccess && !cancelledRef.current) {
+        stopStepAnimation();
+        setAiLoading(false);
+      }
     }
-  }, []);
+  }, [startStepAnimation, stopStepAnimation]);
 
-  const handleCancel = () => { cancelledRef.current = true; clearInterval(timerRef.current); setAiLoading(false); setAiError(null); };
+  const handleCancel = () => {
+    cancelledRef.current = true;
+    clearInterval(timerRef.current);
+    stopStepAnimation();
+    setAiLoading(false);
+    setAiError(null);
+  };
 
   const handleRegenTemplate = useCallback(() => {
     if (currentFormData) saveBrief(generateBrief(currentFormData), { ...currentFormData, mode: "template" });
@@ -1589,6 +1652,7 @@ export default function App() {
         <style>{`
           @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
           @keyframes spin { to { transform: rotate(360deg) } }
+          @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
           * { box-sizing:border-box }
           input::placeholder,textarea::placeholder { color:${t.textFaint} }
           ::-webkit-scrollbar { width:6px }
@@ -1645,16 +1709,68 @@ export default function App() {
 
         {/* IB-Ai loading */}
         {aiLoading && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "120px 24px", textAlign: "center", animation: "fadeIn 0.3s ease" }}>
-            <div style={{ width: 40, height: 40, border: `3px solid ${t.border}`, borderTop: `3px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", marginBottom: 20 }} />
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: t.text }}>IB-Ai is writing your brief…</div>
-            <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 6 }}>
-              {elapsed < 15 ? "Claude is crafting original hooks, story beats, and creative direction." :
-               elapsed < 30 ? "Still working — writing tailored content takes 15-25 seconds." :
-               "Taking longer than usual. Consider cancelling."}
+          <div style={{ maxWidth: 480, margin: "0 auto", padding: "80px 24px", animation: "fadeIn 0.3s ease" }}>
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 6 }}>IB-Ai is writing your brief</div>
+              <div style={{ fontSize: 13, color: t.textMuted }}>{elapsed}s elapsed</div>
             </div>
-            <div style={{ fontSize: 24, color: t.green, fontWeight: 700, marginBottom: 24, fontVariantNumeric: "tabular-nums" }}>{elapsed}s</div>
-            <button onClick={handleCancel} style={{ ...S.btnS, fontSize: 13, padding: "9px 20px" }}>Cancel</button>
+
+            <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 24, boxShadow: t.shadow }}>
+              {AI_STEPS.map((step, i) => {
+                const liveStep = aiSteps.find((s) => s.id === step.id);
+                const status = liveStep ? liveStep.status : "waiting";
+
+                return (
+                  <div
+                    key={step.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "10px 0",
+                      borderBottom: i < AI_STEPS.length - 1 ? "1px solid " + t.border : "none",
+                      opacity: status === "waiting" ? 0.3 : 1,
+                      transition: "opacity 0.4s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        background: status === "done" ? t.green : status === "active" ? "transparent" : t.border + "50",
+                        border: status === "active" ? "2px solid " + t.green : "none",
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      {status === "done" && <span style={{ color: "#000", fontSize: 13, fontWeight: 800 }}>✓</span>}
+                      {status === "active" && (
+                        <div style={{ width: 8, height: 8, borderRadius: 4, background: t.green, animation: "pulse 1s ease-in-out infinite" }} />
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: status === "active" ? 600 : 400,
+                        color: status === "done" ? t.green : status === "active" ? t.text : t.textFaint,
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      {step.label}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ textAlign: "center", marginTop: 20 }}>
+              <button onClick={handleCancel} style={{ ...S.btnS, fontSize: 13, padding: "9px 20px" }}>Cancel</button>
+            </div>
           </div>
         )}
 
