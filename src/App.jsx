@@ -260,19 +260,6 @@ const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "O
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
-const PREFILL = {
-  productName: "Starter Kit Black", customProductName: "", campaignName: "The Level Up", vibe: "Fun & Entertaining", customVibe: "",
-  mission: "Four sizes. One that's perfect for you. How far can you level up?",
-  ageRange: "25-34", gender: "Men & Women",
-  problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
-  selectedStats: ["snoring", "sleep", "sinus", "starterkit", "customers", "fda"],
-  platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Funny & casual", customTone: "",
-  customRejections: "",
-  approvedClaims: [...APPROVED_CLAIMS.slice(0, 6)],
-  bannedClaims: [...BANNED_CLAIMS.slice(0, 6)],
-  notes: "Creator tries each level 1→4 on camera. Quick cuts. Reaction-driven. Each level opens the nose wider. Payoff is Level 4 where their nose opens WIDE and the genuine reaction IS the content.\n\nHook ideas: 'I don't even know if I can make it to Level 4' / 'This comes with FOUR sizes??' / 'Level 1 was easy... Level 4 broke me.'\n\nThe Level Up isn't about needing Level 4 — it's about finding YOUR level. But the entertainment value is the journey to 4. Keep it fun, not medical. Show the magnetic snap-on moment — it's satisfying and shareable.",
-};
-
 const DEFAULTS = {
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
@@ -593,7 +580,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
   return (
     <div style={S.formWrap}>
       <div style={{ marginBottom: 36 }}>
-        <div style={S.formTitle}>{prefill ? "⚡ The Level Up — Prefilled" : "Create New Brief"}</div>
+        <div style={S.formTitle}>Create New Brief</div>
         <div style={S.formSub}>Select options below. Brief generates instantly.</div>
       </div>
       <div style={S.section}>
@@ -1308,7 +1295,6 @@ export default function App() {
               <div style={S.heroDesc}>Pick a product, vibe, and audience. Instant creator-ready brief — hooks, story arcs, compliance all baked in.</div>
               <div style={S.heroActions}>
                 <button style={S.btnP} onClick={()=>{setView("create");setFormKey(k=>k+1)}}>+ New Brief</button>
-                <button style={S.btnS} onClick={()=>{setView("prefilled");setFormKey(k=>k+1)}}>⚡ Test: Level Up</button>
               </div>
 
               {/* API key nudge */}
@@ -1434,7 +1420,6 @@ export default function App() {
         )}
 
         {!aiLoading && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
-        {!aiLoading && view === "prefilled" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`p-${formKey}`} prefill={PREFILL} onGenerate={handleGenerate} /></div>}
         {!aiLoading && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} onBack={()=>setView("home")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {!aiLoading && view === "library" && (
