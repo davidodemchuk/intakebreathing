@@ -6727,6 +6727,7 @@ function ChannelPipeline({ navigate, creators, t, S }) {
   const [spendFilter, setSpendFilter] = useState("all");
   const [editing, setEditing] = useState(null);
   const [editDraft, setEditDraft] = useState({});
+  const [debugInfo, setDebugInfo] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -6755,6 +6756,10 @@ function ChannelPipeline({ navigate, creators, t, S }) {
       const sortedMonths = [...allMonths].sort().reverse();
 
       console.log("[Pipeline] Available months:", sortedMonths);
+
+      setDebugInfo(
+        `monthly: ${monthly?.length || 0} rows ${e1 ? "(ERROR: " + e1.message + ")" : ""} | spend: ${spend?.length || 0} rows ${e2 ? "(ERROR: " + e2.message + ")" : ""} | months: ${sortedMonths.join(", ") || "NONE"} | selected: ${sortedMonths[0] || "NULL"}`
+      );
 
       if (sortedMonths.length > 0) {
         setSelectedMonth(sortedMonths[0]);
@@ -6893,6 +6898,10 @@ function ChannelPipeline({ navigate, creators, t, S }) {
             {tb.label}
           </button>
         ))}
+      </div>
+
+      <div style={{ padding: "8px 12px", marginBottom: 16, background: "#ff880015", border: "1px solid #ff880030", borderRadius: 8, fontSize: 11, color: "#ff8800", fontFamily: "monospace" }}>
+        DEBUG: {debugInfo || "loading..."}
       </div>
 
       {tab === "overview" && (
