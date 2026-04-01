@@ -27,8 +27,16 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.5.1";
+const APP_VERSION = "3.6.0";
 const CHANGELOG = [
+  { version: "3.6.0", date: "2026-04-01", changes: [
+    "IB Score section completely redesigned — cleaner layout, expandable AI reasoning",
+    "Why Intake text is now prominent, not grey",
+    "Estimated rate is clickable to show AI reasoning",
+    "Best Platform now shows runner-up with explanations",
+    "Campaign suggestions restyled as a labeled list, not random bubbles",
+    "All AI-generated insights have expandable 'How IB-Ai determined this' sections",
+  ]},
   { version: "3.5.1", date: "2026-04-01", changes: [
     "Fixed enrichment data extraction — handles all ScrapeCreators response structures",
     "Added raw API response logging to console for debugging",
@@ -1763,21 +1771,36 @@ Return ONLY a JSON object:
   "ibScore": <number 1-100>,
   "scoreBreakdown": {
     "instagramScore": <0-45>,
+    "instagramReason": "<1 sentence explaining the Instagram score>",
     "tiktokScore": <0-30>,
+    "tiktokReason": "<1 sentence explaining the TikTok score>",
     "crossPlatform": <0-10>,
-    "contentAlignment": <0-15>
+    "crossPlatformReason": "<1 sentence explaining cross-platform score>",
+    "contentAlignment": <0-15>,
+    "contentAlignmentReason": "<1 sentence explaining content alignment score>"
   },
   "scoreLabel": <"Elite" | "Excellent" | "Strong" | "Promising" | "Low Fit">,
   "oneSentence": "<one sentence summary>",
   "contentStyle": "<2 sentences>",
-  "whyIntake": "<1 sentence>",
+  "whyIntake": "<2-3 sentences. Be specific about WHY this creator's content aligns with Intake Breathing. Reference specific content themes, audience overlap, or unique strengths.>",
   "risk": "<red flags or 'None identified'>",
-  "suggestedCampaigns": "<comma-separated>",
-  "estimatedRate": "<dollar range>",
+  "riskDetail": "<if risk exists, explain in 2 sentences what the risk means and how to mitigate it. If no risk, say 'No significant risks.'>",
+  "suggestedCampaigns": [
+    {"name": "campaign type", "reason": "why this creator fits this campaign"}
+  ],
+  "estimatedRate": "<conservative dollar range - err LOW. For creators under 10K followers: $50-100. 10K-50K: $75-200. 50K-200K: $150-400. 200K-1M: $300-800. 1M+: $500-1500. These are UGC rates not influencer rates.>",
+  "estimatedRateReason": "<2 sentences explaining how you arrived at this rate range. Reference follower count, engagement, content quality, and market rates for UGC creators at this tier.>",
+  "bestPlatform": "<'Instagram' or 'TikTok'>",
+  "bestPlatformReason": "<1-2 sentences explaining why this is their stronger platform>",
+  "runnerUpPlatform": "<the other platform or 'YouTube' etc>",
+  "runnerUpReason": "<1 sentence on why the runner-up is also worth considering>",
   "suggestedNiche": "<comma-separated>",
-  "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>",
-  "bestPlatform": "<'Instagram' or 'TikTok'>"
-}`;
+  "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>"
+}
+
+For estimatedRate, be VERY CONSERVATIVE. These are UGC creator rates, not influencer sponsorship rates.
+Most micro-creators (under 50K followers) charge $50-200 per video.
+Don't inflate based on follower count alone — UGC rates are based on content quality and production value, not reach.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -1789,7 +1812,7 @@ Return ONLY a JSON object:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 600,
+      max_tokens: 900,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -4279,6 +4302,29 @@ function pickBestContentHighlight(c) {
   };
 }
 
+function ExpandableInsight({ t, label, value, valueColor, valueFontSize = 14, explanation, isAi = false }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</div>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+      >
+        {isAi ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
+        <span style={{ fontSize: valueFontSize, fontWeight: 700, color: valueColor || t.text }}>{value}</span>
+        <span style={{ fontSize: 10, color: t.textFaint, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0)" }}>▼</span>
+      </div>
+      {open ? (
+        <div style={{ marginTop: 8, padding: 10, background: t.cardAlt, borderRadius: 6, fontSize: 12, color: t.textMuted, lineHeight: 1.5, border: `1px solid ${t.border}` }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>How IB-Ai determined this</div>
+          {explanation}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {} }) {
   const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
@@ -4294,6 +4340,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState(null);
   const [enrichStepMap, setEnrichStepMap] = useState(null);
+  const [expandedBar, setExpandedBar] = useState(null);
   const [igPullBusy, setIgPullBusy] = useState(false);
 
   const campaignNames = useMemo(() => {
@@ -4704,47 +4751,148 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
 
       {Number.isFinite(ib) ? (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: t.text }}>IB Score</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 6px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: t.text }}>IB Score</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 8px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
-            <div style={{ width: 72, height: 72, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#fff", flexShrink: 0 }}>{Math.round(ib)}</div>
-            <div style={{ flex: "1 1 280px", minWidth: 0 }}>
-              {["instagramScore", "tiktokScore", "crossPlatform", "contentAlignment"].map((key) => {
-                const max = key === "instagramScore" ? 45 : key === "tiktokScore" ? 30 : key === "crossPlatform" ? 10 : 15;
+
+          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 24 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ width: 80, height: 80, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, color: "#fff" }}>
+                {Math.round(ib)}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: ibCol, marginTop: 6 }}>{ibLabel}</div>
+            </div>
+
+            <div style={{ flex: "1 1 300px", minWidth: 0 }}>
+              {[
+                { key: "instagramScore", label: "Instagram", max: 45, reasonKey: "instagramReason" },
+                { key: "tiktokScore", label: "TikTok", max: 30, reasonKey: "tiktokReason" },
+                { key: "crossPlatform", label: "Cross-Platform", max: 10, reasonKey: "crossPlatformReason" },
+                { key: "contentAlignment", label: "Content Fit", max: 15, reasonKey: "contentAlignmentReason" },
+              ].map(({ key, label, max, reasonKey }) => {
                 const val = Number(br[key]) || 0;
                 const pct = Math.min(100, (val / max) * 100);
-                const lab = key === "instagramScore" ? "Instagram" : key === "tiktokScore" ? "TikTok" : key === "crossPlatform" ? "Cross-Platform" : "Content Alignment";
+                const reason = br[reasonKey] || "";
                 return (
-                  <div key={key} style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>{lab} ({max})</div>
-                    <div style={{ height: 8, borderRadius: 4, background: t.border, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: ibCol, borderRadius: 4 }} />
+                  <div key={key} style={{ marginBottom: 12, cursor: reason ? "pointer" : "default" }} onClick={() => reason && setExpandedBar(expandedBar === key ? null : key)}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{label}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: ibCol }}>{val}/{max}</span>
+                        {reason ? <span style={{ fontSize: 9, color: t.textFaint, transition: "transform 0.2s", transform: expandedBar === key ? "rotate(180deg)" : "rotate(0)" }}>▼</span> : null}
+                      </div>
                     </div>
+                    <div style={{ height: 6, borderRadius: 3, background: t.border, overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: ibCol, borderRadius: 3, transition: "width 0.3s" }} />
+                    </div>
+                    {expandedBar === key && reason ? (
+                      <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6, padding: 8, background: t.cardAlt, borderRadius: 6, lineHeight: 1.4, border: `1px solid ${t.border}` }}>
+                        {reason}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
-              {ai.whyIntake ? <div style={{ fontSize: 13, color: t.textSecondary, marginTop: 8 }}><strong style={{ color: t.textFaint }}>Why Intake:</strong> {ai.whyIntake}</div> : null}
-              {ai.risk ? <div style={{ fontSize: 13, color: t.orange, marginTop: 8 }}><strong>Risk:</strong> {ai.risk}</div> : null}
-              {ai.suggestedCampaigns ? (
-                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {String(ai.suggestedCampaigns).split(",").map((x, i) => (
-                    <span key={i} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: t.cardAlt, border: `1px solid ${t.border}` }}>{x.trim()}</span>
-                  ))}
-                </div>
-              ) : null}
-              {ai.estimatedRate ? (
-                <div style={{ fontSize: 14, fontWeight: 700, color: t.green, marginTop: 10, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
-                  <span>Estimated rate: {ai.estimatedRate}</span>
-                </div>
-              ) : null}
-              {ai.bestPlatform ? <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>Best platform: <strong style={{ color: t.text }}>{ai.bestPlatform}</strong></div> : null}
-              <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, marginTop: 12, fontSize: 12, padding: "6px 12px" }}>Recalculate IB Score</button>
             </div>
           </div>
+
+          <div style={{ borderTop: `1px solid ${t.border}`, marginBottom: 20 }} />
+
+          {ai.whyIntake ? (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Why Intake</div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: t.text, lineHeight: 1.6 }}>{ai.whyIntake}</div>
+            </div>
+          ) : null}
+
+          {ai.contentStyle ? (
+            <ExpandableInsight
+              t={t}
+              label="Content Style"
+              value={`${String(ai.contentStyle).split(".")[0]}.`}
+              explanation={ai.contentStyle}
+            />
+          ) : null}
+
+          {ai.risk && ai.risk !== "None identified" ? (
+            <div style={{ marginBottom: 16, padding: 12, background: t.orange + "08", border: `1px solid ${t.orange}25`, borderRadius: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.orange, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Risk</div>
+              <div style={{ fontSize: 13, color: t.orange, lineHeight: 1.5 }}>{ai.risk}</div>
+              {ai.riskDetail && ai.riskDetail !== ai.risk ? (
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.5 }}>{ai.riskDetail}</div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: t.green }}>✓ No risks identified</div>
+            </div>
+          )}
+
+          {ai.suggestedCampaigns ? (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Suggested Campaigns</div>
+              {Array.isArray(ai.suggestedCampaigns) ? (
+                ai.suggestedCampaigns.map((camp, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 12, color: t.green, fontWeight: 700, marginTop: 1, flexShrink: 0 }}>→</span>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{typeof camp === "string" ? camp : camp?.name}</span>
+                      {typeof camp === "object" && camp?.reason ? (
+                        <span style={{ fontSize: 12, color: t.textMuted, marginLeft: 6 }}>— {camp.reason}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                String(ai.suggestedCampaigns).split(",").map((x, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: t.green, fontWeight: 700 }}>→</span>
+                    <span style={{ fontSize: 13, color: t.text }}>{x.trim()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+
+          {ai.estimatedRate ? (
+            <ExpandableInsight
+              t={t}
+              label="Estimated Rate"
+              value={ai.estimatedRate}
+              valueColor={t.green}
+              valueFontSize={16}
+              explanation={ai.estimatedRateReason || "Rate estimated based on follower count, engagement quality, and standard UGC market rates."}
+              isAi={af.costPerVideo}
+            />
+          ) : null}
+
+          {ai.bestPlatform ? (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Platform Strength</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 200px", padding: 12, background: t.green + "08", border: `1px solid ${t.green}25`, borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: t.green, marginBottom: 4 }}>★ PRIMARY</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{ai.bestPlatform}</div>
+                  {ai.bestPlatformReason ? (
+                    <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.4 }}>{ai.bestPlatformReason}</div>
+                  ) : null}
+                </div>
+                {ai.runnerUpPlatform ? (
+                  <div style={{ flex: "1 1 200px", padding: 12, background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 4 }}>RUNNER-UP</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{ai.runnerUpPlatform}</div>
+                    {ai.runnerUpReason ? (
+                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.4 }}>{ai.runnerUpReason}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, fontSize: 12, padding: "8px 14px", marginTop: 8 }}>Recalculate IB Score</button>
         </div>
       ) : null}
 
