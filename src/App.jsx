@@ -5,8 +5,16 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.6.0";
+const APP_VERSION = "2.7.0";
 const CHANGELOG = [
+  { version: "2.7.0", date: "2026-03-31", changes: [
+    "Creator enrichment via ScrapeCreators — pull live TikTok and Instagram metrics",
+    "Enrich button on creator detail pulls: followers, hearts, video count, bio, avatar, verified status",
+    "Bulk enrich option to update all creators at once",
+    "All CSV fields now properly stored: addresses, names, notes, quality, video counts",
+    "Creator detail view shows shipping address (collapsible)",
+    "Profile avatar pulled from TikTok displayed on creator cards and detail",
+  ]},
   { version: "2.6.0", date: "2026-03-31", changes: [
     "Removed Name column from creator table — available in detail view only",
     "Niche is now a live filterable dropdown in the table header",
@@ -14,12 +22,7 @@ const CHANGELOG = [
     "TikTok and Instagram links both clickable from the table",
   ]},
   { version: "2.5.0", date: "2026-03-31", changes: [
-    "Creator enrichment via ScrapeCreators — pull live TikTok and Instagram metrics",
-    "Enrich button on creator detail pulls: followers, hearts, video count, bio, avatar, verified status",
-    "Bulk enrich option to update all creators at once",
-    "All CSV fields now properly stored: addresses, names, notes, quality, video counts",
-    "Creator detail view shows shipping address (collapsible)",
-    "Profile avatar pulled from TikTok displayed on creator cards and detail",
+    "Intermediate creator table iteration before 2.6 layout",
   ]},
   { version: "2.3.0", date: "2026-03-31", changes: [
     "Creator list redesigned as dense spreadsheet-style table — no wasted space",
@@ -733,10 +736,22 @@ function normalizeCreatorRow(c) {
   };
 }
 
+function fieldIsEmptyForPatch(v) {
+  if (v == null) return true;
+  if (typeof v === "string") return !String(v).trim();
+  return false;
+}
+
+/** Apply canonical CSV fixes only where the stored value is still empty (does not overwrite user edits). */
 function mergeCreatorFieldPatches(c) {
   const key = normalizeHandleKey(c.handle);
   const patch = CREATOR_FIELD_PATCHES[key];
-  return patch ? { ...c, ...patch } : c;
+  if (!patch) return c;
+  const out = { ...c };
+  for (const [k, v] of Object.entries(patch)) {
+    if (fieldIsEmptyForPatch(out[k])) out[k] = v;
+  }
+  return out;
 }
 
 function hydrateCreator(c) {
@@ -813,6 +828,20 @@ async function enrichInstagramFromApi(handle, apiKey) {
   } catch {
     return null;
   }
+}
+
+/** Sort numeric metrics; null/invalid always sort to the bottom. */
+function cmpMetric(a, b, getVal, dir) {
+  const naRaw = getVal(a);
+  const nbRaw = getVal(b);
+  const na = naRaw != null && !Number.isNaN(Number(naRaw)) ? Number(naRaw) : null;
+  const nb = nbRaw != null && !Number.isNaN(Number(nbRaw)) ? Number(nbRaw) : null;
+  if (na == null && nb == null) return 0;
+  if (na == null) return 1;
+  if (nb == null) return -1;
+  if (na < nb) return dir === "asc" ? -1 : 1;
+  if (na > nb) return dir === "asc" ? 1 : -1;
+  return 0;
 }
 
 function sortCreatorsForDisplay(arr) {
@@ -3218,7 +3247,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
                 { label: "IG Posts", val: igD.posts != null ? String(igD.posts) : "—" },
               ].map((s) => (
                 <div key={s.label} style={{ flex: "1 1 100px", textAlign: "center", minWidth: 90 }}>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>{s.val}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: s.val === "—" ? t.textFaint : t.text }}>{s.val}</div>
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>{s.label}</div>
                 </div>
               ))}
@@ -3290,8 +3319,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
             </div>
             {(c.address || "").trim() ? (
               <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Shipping Address</div>
                 <button type="button" onClick={() => setShowShipping((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: showShipping ? 10 : 0 }}>
-                  Shipping Address {showShipping ? "▲" : "▼"}
+                  {showShipping ? "Hide" : "Show"} address {showShipping ? "▲" : "▼"}
                 </button>
                 {showShipping ? (
                   <div>
@@ -3540,8 +3570,8 @@ export default function App() {
   const [scrapeKey, setScrapeKey] = useState("");
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [sortCol, setSortCol] = useState("handle");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortCol, setSortCol] = useState("followers");
+  const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All Statuses", niche: "All Niches", quality: "All Quality" });
   const [openFilter, setOpenFilter] = useState(null);
   const [showAddCreator, setShowAddCreator] = useState(false);
@@ -3706,6 +3736,53 @@ export default function App() {
       })
     );
   }, []);
+
+  const [bulkEnrichProgress, setBulkEnrichProgress] = useState(null);
+
+  const runBulkEnrichAll = useCallback(async () => {
+    const key = (scrapeKey || "").trim() || storageGet("intake-scrape-key") || "";
+    if (!key.trim()) {
+      alert("Add your ScrapeCreators API key in Settings");
+      return;
+    }
+    const active = creators.filter((c) => c.status === "Active");
+    const need = active.filter((c) => {
+      const last = c.tiktokData?.lastEnriched;
+      if (!last) return true;
+      return Date.now() - new Date(last).getTime() > 24 * 60 * 60 * 1000;
+    });
+    if (
+      !window.confirm(
+        `This will pull live TikTok data for ${need.length} active creators. Costs ${need.length} API credits. Continue?`
+      )
+    ) {
+      return;
+    }
+    let done = 0;
+    let fail = 0;
+    for (let i = 0; i < need.length; i++) {
+      const cr = need[i];
+      setBulkEnrichProgress({ cur: i + 1, total: need.length, done, fail });
+      try {
+        const tt = await enrichTikTokFromApi(cr.handle, key.trim());
+        const engagementRate =
+          tt && Number(tt.followers) > 0 && tt.hearts != null
+            ? ((Number(tt.hearts) / Number(tt.followers)) * 100).toFixed(1)
+            : null;
+        updateCreator(cr.id, {
+          tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(cr.tiktokData || {}), ...tt },
+          engagementRate,
+        });
+        done++;
+      } catch {
+        fail++;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setBulkEnrichProgress(null);
+    setCreatorImportToast(`Enriched ${done} creators. ${fail} failed.`);
+    setTimeout(() => setCreatorImportToast(null), 8000);
+  }, [creators, scrapeKey, updateCreator]);
 
   const addCreator = useCallback(() => {
     const h = newCreatorForm.handle.trim();
@@ -4165,6 +4242,19 @@ export default function App() {
 
     const statusOrder = { Active: 0, "One-time": 1, "Off-boarded": 2 };
     list.sort((a, b) => {
+      if (sortCol === "followers") return cmpMetric(a, b, (x) => x.tiktokData?.followers, sortDir);
+      if (sortCol === "hearts") return cmpMetric(a, b, (x) => x.tiktokData?.hearts, sortDir);
+      if (sortCol === "engagement") {
+        return cmpMetric(
+          a,
+          b,
+          (x) => {
+            const r = parseFloat(x.engagementRate);
+            return Number.isFinite(r) ? r : null;
+          },
+          sortDir
+        );
+      }
       let valA;
       let valB;
       switch (sortCol) {
@@ -4233,7 +4323,7 @@ export default function App() {
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         return prev;
       }
-      const descFirst = ["videos"];
+      const descFirst = ["followers", "hearts", "engagement", "videos"];
       setSortDir(descFirst.includes(col) ? "desc" : "asc");
       return col;
     });
@@ -4977,7 +5067,7 @@ export default function App() {
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "creators" && (() => {
-          const gridCols = "70px 150px 160px 200px 40px 40px 60px 70px 80px 1fr";
+          const gridCols = "60px 130px 36px 140px 80px 80px 55px 55px 160px 34px 34px 60px 70px 1fr";
           const filterSelect = (active) => ({
             ...S.select,
             padding: "6px 10px",
@@ -4996,7 +5086,7 @@ export default function App() {
             position: "sticky",
             top: 0,
             zIndex: 10,
-            minWidth: 920,
+            minWidth: 1100,
           };
           const rowCell = {
             display: "grid",
@@ -5008,7 +5098,7 @@ export default function App() {
             color: t.textSecondary,
             lineHeight: 1.4,
             transition: "background 0.1s",
-            minWidth: 920,
+            minWidth: 1100,
           };
           const ttLinkStyle = {
             fontWeight: 800,
@@ -5239,6 +5329,9 @@ export default function App() {
                 <option value="Standard">Standard</option>
               </select>
               <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>+ Add Creator</button>
+              <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12, opacity: bulkEnrichProgress ? 0.6 : 1 }}>
+                Enrich All
+              </button>
               <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>Import CSV</button>
               <input
                 ref={csvInputRef}
@@ -5255,13 +5348,23 @@ export default function App() {
                 {sortedCreators.length} of {creators.length} creators
               </span>
             </div>
+            {bulkEnrichProgress ? (
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>
+                Enriching {bulkEnrichProgress.cur} of {bulkEnrichProgress.total} creators… (done {bulkEnrichProgress.done}, failed {bulkEnrichProgress.fail})
+              </div>
+            ) : null}
 
             <div style={{ overflowX: "auto", border: `1px solid ${t.border}`, borderRadius: 12, background: t.card }}>
               <div style={{ position: "relative" }}>
                 <div style={headCell}>
                   {hdr("status", "Status", "status")}
                   {hdr("handle", "Handle", null)}
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, display: "flex", alignItems: "center", justifyContent: "center" }}>Av</div>
                   {hdr("niche", "Niche", "niche")}
+                  {hdr("followers", "Followers", null)}
+                  {hdr("hearts", "Hearts", null)}
+                  {hdr("engagement", "Eng%", null)}
+                  {hdr("videos", "Videos", null)}
                   {hdr("email", "Email", null)}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0 }}>
                     <span
@@ -5309,7 +5412,6 @@ export default function App() {
                       <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow("instagram")}</span>
                     </span>
                   </div>
-                  {hdr("videos", "Videos", null)}
                   {hdr("quality", "Quality", "quality")}
                   {hdr("cost", "Cost", null)}
                   {hdr("notes", "Notes", null)}
@@ -5347,11 +5449,17 @@ export default function App() {
                         placeholder="@handle"
                         style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}
                       />
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, border: `1px solid ${t.border}` }} />
+                      </span>
                       <input value={newCreatorForm.niche} onChange={(e) => setNewCreatorForm((p) => ({ ...p, niche: e.target.value }))} placeholder="Niche" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                      <span style={{ textAlign: "right", fontSize: 11, color: t.textFaint }}>0</span>
                       <input value={newCreatorForm.email} onChange={(e) => setNewCreatorForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
                       <input value={newCreatorForm.tiktokUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, tiktokUrl: e.target.value }))} placeholder="TikTok URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
                       <input value={newCreatorForm.instagramUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, instagramUrl: e.target.value }))} placeholder="Instagram URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
-                      <span style={{ textAlign: "right", fontSize: 11, color: t.textFaint }}>0</span>
                       <select value={newCreatorForm.quality} onChange={(e) => setNewCreatorForm((p) => ({ ...p, quality: e.target.value }))} style={{ width: "100%", padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}>
                         <option value="Standard">Standard</option>
                         <option value="High">High</option>
@@ -5380,6 +5488,16 @@ export default function App() {
                       const rawCost = String(c.costPerVideo || "").trim();
                       const costShow = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
                       const hDisp = fmtHandle(c.handle);
+                      const ttD = c.tiktokData || {};
+                      const engV = parseFloat(c.engagementRate);
+                      const engColor = !Number.isFinite(engV)
+                        ? t.textFaint
+                        : engV > 50
+                          ? t.green
+                          : engV >= 10
+                            ? t.blue
+                            : t.textMuted;
+                      const avLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
                       return (
                         <div
                           key={c.id}
@@ -5396,7 +5514,20 @@ export default function App() {
                             <span style={{ fontSize: 11, color: dotBg, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
                           </div>
                           <div style={{ ...ellip, fontWeight: 600, color: t.text }} title={hDisp}>{hDisp}</div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
+                            {ttD.avatarUrl ? (
+                              <img src={ttD.avatarUrl} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }} />
+                            ) : (
+                              <div style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.textFaint }}>
+                                {avLetter}
+                              </div>
+                            )}
+                          </div>
                           <div style={{ ...ellip, fontSize: 11, color: t.textMuted }} title={c.niche || ""}>{c.niche || "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: ttD.followers != null ? t.text : t.textFaint, fontSize: 12 }}>{ttD.followers != null ? formatMetricShort(ttD.followers) : "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: ttD.hearts != null ? t.text : t.textFaint, fontSize: 12 }}>{ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, fontSize: 11, color: engColor }}>{c.engagementRate != null ? `${c.engagementRate}%` : "—"}</div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: vc ? t.text : t.textFaint, fontSize: 12 }}>{vc}</div>
                           <div style={ellip}>
                             {c.email?.trim() ? (
                               <a href={`mailto:${c.email.trim()}`} onClick={(e) => e.stopPropagation()} style={{ color: t.blue, textDecoration: "none", fontSize: 11 }} onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }} onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }} title={c.email}>
@@ -5452,7 +5583,6 @@ export default function App() {
                               <span style={{ color: t.textFaint }}>—</span>
                             )}
                           </div>
-                          <div style={{ textAlign: "right", fontWeight: 600, color: vc ? t.text : t.textFaint, fontSize: 12 }}>{vc}</div>
                           <div style={{ fontSize: 11 }}>
                             {c.quality === "High" ? <span style={{ color: "#f59e0b", fontWeight: 600 }}>★ High</span> : <span style={{ color: t.textFaint }}>Standard</span>}
                           </div>
