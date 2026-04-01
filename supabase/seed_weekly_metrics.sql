@@ -1,8 +1,15 @@
 -- ═══ WEEKLY METRICS DATA ═══
 -- Run after `weekly_metrics` exists (see schema.sql).
 -- Unique (channel, week_start): re-runs fail unless DELETE/TRUNCATE first.
--- Duplicate rows in source were merged (keeps non-empty `data` over '{}').
--- Date typos corrected: 2024-12-15 week had wrong year on week_start; 2015→2025 on two TTS weeks.
+--
+-- Source exports sometimes repeat the same week with `'{}'::jsonb` after a populated row, or repeat
+-- blocks of empty weeks that collide with earlier rows. Those duplicate INSERTs are omitted here so
+-- the seed applies cleanly (one row per channel + week_start; non-empty `data` wins over `{}`).
+--
+-- Date typos corrected vs raw export:
+--   • TTS week Dec 15–21, 2024: week_start was `2025-12-15` (invalid range) → `2024-12-15`
+--   • TTS week Feb 9–15, 2025: `2015-02-09` → `2025-02-09`
+--   • TTS week Oct 27–Nov 2, 2025: `2015-10-27` → `2025-10-27`
 
 INSERT INTO weekly_metrics (channel, week_start, week_end, data) VALUES ('tts', '2024-12-01', '2024-12-07', '{"sf_invites": 970, "samples_approved": 148, "videos_posted": 182, "sample_cost": 2146, "sv_ratio": 1.22972973, "cp_video": 11.79120879, "impressions": 16581001, "tts_gmv": 192315.99, "net_per_video": 1056.681264}'::jsonb);
 INSERT INTO weekly_metrics (channel, week_start, week_end, data) VALUES ('tts', '2024-12-08', '2024-12-14', '{"sf_invites": 1956, "samples_approved": 110, "videos_posted": 223, "sample_cost": 1595, "sv_ratio": 2.027272727, "cp_video": 7.152466368, "impressions": 8495179, "tts_gmv": 105191.77, "net_per_video": 471.7119731}'::jsonb);
