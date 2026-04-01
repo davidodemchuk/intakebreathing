@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext,
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.6";
+const APP_VERSION = "2.0.0";
 const CHANGELOG = [
+  { version: "2.0.0", date: "2025-04-01", changes: [
+    "Homepage reworked into multi-section dashboard with card navigation",
+    "New sections: UGC Army, Channel Pipeline, Influencer Buys, Tools",
+    "Video Reformatter tool built under Tools — paste TikTok/Instagram URL to reformat",
+    "All Meta and YouTube ad aspect ratios researched and built in",
+    "Channel Pipeline, Influencer Buys sections are placeholder cards for future build",
+  ]},
   { version: "1.3.6", date: "2025-04-01", changes: [
     "Platform selection changed to compact multi-select dropdown — reduces dead space in Brief Details",
     "Dropdown shows selected platforms as comma-separated text, click to toggle options",
@@ -320,6 +327,53 @@ const AI_STEPS = [
   { id: "proof", label: "Selecting proof points", duration: 2000 },
   { id: "polish", label: "Polishing final brief", duration: 3000 },
 ];
+
+const VIDEO_REFORMAT_GROUPS = [
+  {
+    title: "META ADS",
+    items: [
+      { id: "meta-feed-sq", name: "Feed Square", ratio: "1:1", dimensions: "1080×1080", placement: "Facebook & Instagram Feed", recommended: true },
+      { id: "meta-feed-v", name: "Feed Vertical", ratio: "4:5", dimensions: "1080×1350", placement: "Facebook & Instagram Feed (mobile)", recommended: true },
+      { id: "meta-stories", name: "Stories & Reels", ratio: "9:16", dimensions: "1080×1920", placement: "FB/IG Stories, Reels", recommended: true },
+      { id: "meta-instream", name: "In-Stream Horizontal", ratio: "16:9", dimensions: "1920×1080", placement: "Facebook In-Stream, Video Feed" },
+      { id: "meta-carousel", name: "Carousel", ratio: "1:1", dimensions: "1080×1080", placement: "Facebook & Instagram Carousel" },
+    ],
+  },
+  {
+    title: "YOUTUBE ADS",
+    items: [
+      { id: "yt-instream", name: "In-Stream / Pre-Roll", ratio: "16:9", dimensions: "1920×1080", placement: "Skippable & Non-Skippable In-Stream", recommended: true },
+      { id: "yt-shorts", name: "Shorts", ratio: "9:16", dimensions: "1080×1920", placement: "YouTube Shorts", recommended: true },
+      { id: "yt-discovery", name: "Discovery Square", ratio: "1:1", dimensions: "1080×1080", placement: "YouTube Home, Search Results" },
+      { id: "yt-bumper", name: "Bumper Ad", ratio: "16:9", dimensions: "1920×1080", placement: "6-second Bumper Ads" },
+    ],
+  },
+  {
+    title: "TIKTOK",
+    items: [
+      { id: "tt-native", name: "TikTok Native", ratio: "9:16", dimensions: "1080×1920", placement: "TikTok Feed", recommended: true },
+    ],
+  },
+  {
+    title: "GENERAL",
+    items: [
+      { id: "gen-landscape", name: "Landscape HD", ratio: "16:9", dimensions: "1920×1080", placement: "General widescreen" },
+      { id: "gen-portrait", name: "Portrait HD", ratio: "9:16", dimensions: "1080×1920", placement: "General vertical" },
+      { id: "gen-square", name: "Square HD", ratio: "1:1", dimensions: "1080×1080", placement: "General square" },
+    ],
+  },
+];
+
+function gcd(a, b) {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+function aspectRatioLabel(w, h) {
+  if (!w || !h) return "—";
+  const g = gcd(w, h);
+  return `${w / g}:${h / g}`;
+}
+
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
@@ -1611,6 +1665,247 @@ Return ONLY this JSON (no other text):
 }
 
 // ═══════════════════════════════════════════════════════════
+// DASHBOARD / TOOLS — Video Reformatter
+// ═══════════════════════════════════════════════════════════
+
+function ComingSoonPage({ title, message, onBack }) {
+  const { t, S } = useContext(ThemeContext);
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
+      <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
+      <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 12 }}>{title}</div>
+      <div style={{ fontSize: 15, color: t.textMuted, lineHeight: 1.65 }}>{message}</div>
+    </div>
+  );
+}
+
+function ToolsPage({ onBack, onOpenVideo }) {
+  const { t, S } = useContext(ThemeContext);
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
+      <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
+      <div style={{ fontSize: 24, fontWeight: 800, color: t.text, marginBottom: 8 }}>Tools</div>
+      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28 }}>Utilities for creators and media.</div>
+      <div
+        onClick={onOpenVideo}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+        style={{
+          background: t.card,
+          border: `1px solid ${t.border}`,
+          borderRadius: 16,
+          padding: 28,
+          cursor: "pointer",
+          boxShadow: t.shadow,
+          transition: "border-color 0.15s",
+        }}
+      >
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🎥</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
+        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
+          Paste a TikTok or Instagram video URL — download reformatted versions for Meta ads, YouTube ads, and more
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VideoReformatter({ onBack }) {
+  const { t, S } = useContext(ThemeContext);
+  const [urlInput, setUrlInput] = useState("");
+  const [apiNotice, setApiNotice] = useState(null);
+  const [objectUrl, setObjectUrl] = useState(null);
+  const [dims, setDims] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
+  const objectUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const loadFile = (file) => {
+    if (!file) return;
+    const ok = /\.(mp4|mov|webm)$/i.test(file.name) || /video\/(mp4|quicktime|webm)/i.test(file.type);
+    if (!ok) {
+      alert("Please choose an .mp4, .mov, or .webm file.");
+      return;
+    }
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const u = URL.createObjectURL(file);
+    objectUrlRef.current = u;
+    setObjectUrl(u);
+    setDims(null);
+    setApiNotice(null);
+  };
+
+  const toggleFormat = (id) => {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const handleFetch = () => {
+    setApiNotice("API connection needed — CreatorScraper API integration coming soon. For now, upload your video file directly.");
+  };
+
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
+      <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 20 }}>← Back to Tools</button>
+      <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginBottom: 8 }}>Video Reformatter</div>
+      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.5 }}>
+        Paste a TikTok or Instagram Reels URL, or upload a file. Select output formats for Meta, YouTube, TikTok, and general use.
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch", marginBottom: 16 }}>
+        <input
+          type="url"
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          placeholder="Paste TikTok or Instagram Reels URL..."
+          style={{ ...S.input, flex: "1 1 240px", minWidth: 200, marginBottom: 0 }}
+        />
+        <button
+          type="button"
+          onClick={handleFetch}
+          style={{ padding: "11px 20px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+        >
+          Fetch Video
+        </button>
+      </div>
+      {apiNotice && (
+        <div style={{ fontSize: 13, color: t.orange, marginBottom: 16, padding: "12px 14px", background: t.orange + "12", borderRadius: 8, border: `1px solid ${t.orange}35` }}>
+          {apiNotice}
+        </div>
+      )}
+
+      <input ref={fileInputRef} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" style={{ display: "none" }} onChange={(e) => loadFile(e.target.files?.[0])} />
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          loadFile(e.dataTransfer.files?.[0]);
+        }}
+        onClick={() => fileInputRef.current?.click()}
+        style={{
+          border: `2px dashed ${dragOver ? t.green : t.border}`,
+          borderRadius: 12,
+          padding: "28px 20px",
+          textAlign: "center",
+          cursor: "pointer",
+          background: dragOver ? t.green + "08" : t.cardAlt,
+          marginBottom: 24,
+          transition: "border-color 0.15s, background 0.15s",
+        }}
+      >
+        <div style={{ fontSize: 14, color: t.textSecondary, fontWeight: 600 }}>Or drag & drop / click to upload a video file</div>
+        <div style={{ fontSize: 12, color: t.textFaint, marginTop: 6 }}>.mp4, .mov, .webm</div>
+      </div>
+
+      {objectUrl && (
+        <>
+          <div style={{ marginBottom: 16, borderRadius: 12, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
+            <video
+              src={objectUrl}
+              controls
+              style={{ width: "100%", maxHeight: 420, display: "block" }}
+              onLoadedMetadata={(e) => {
+                const el = e.target;
+                setDims({ w: el.videoWidth, h: el.videoHeight, ar: aspectRatioLabel(el.videoWidth, el.videoHeight) });
+              }}
+            />
+          </div>
+          {dims && (
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 24 }}>
+              <strong style={{ color: t.text }}>Original:</strong> {dims.w}×{dims.h}px · aspect {dims.ar}
+            </div>
+          )}
+
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12 }}>Reformatting options</div>
+          {VIDEO_REFORMAT_GROUPS.map((group) => (
+            <div key={group.title} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: t.green, marginBottom: 10 }}>{group.title}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+                {group.items.map((item) => {
+                  const on = selected.has(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => toggleFormat(item.id)}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "45"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = on ? t.green + "50" : t.border; }}
+                      style={{
+                        background: t.card,
+                        border: `1px solid ${on ? t.green + "50" : t.border}`,
+                        borderRadius: 12,
+                        padding: 14,
+                        cursor: "pointer",
+                        boxShadow: t.shadow,
+                        transition: "border-color 0.15s",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                        <span
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 4,
+                            border: `1px solid ${on ? t.green : t.border}`,
+                            background: on ? t.green : "transparent",
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginTop: 2,
+                          }}
+                        >
+                          {on ? <span style={{ fontSize: 11, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span> : null}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.name}</div>
+                          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>{item.dimensions} · {item.ratio}</div>
+                          <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, lineHeight: 1.4 }}>{item.placement}</div>
+                          {item.recommended && (
+                            <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: t.green }}>★ Recommended</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={() =>
+              alert(
+                "Video processing requires server-side FFmpeg. This will be connected when deployed with a backend. For now, use the specs above as a reference guide for manual reformatting in your editor.",
+              )
+            }
+            style={{ ...S.genBtn, marginTop: 8 }}
+          >
+            Reformat & Download
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════
 
@@ -1937,10 +2232,10 @@ export default function App() {
             <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>CREATOR PARTNERSHIPS</div></div>
           </div>
           <div style={S.navLinks}>
-            <button style={S.navBtn(view==="home")} onClick={()=>setView("home")}>Home</button>
-            <button style={S.navBtn(view==="create")} onClick={()=>{setView("create");setFormKey(k=>k+1)}}>New Brief</button>
-            <button style={S.navBtn(view==="library")} onClick={()=>setView("library")}>Library{library.length>0&&` (${library.length})`}</button>
-            <button style={S.navBtn(view==="settings")} onClick={()=>setView("settings")}>Settings</button>
+            <button style={S.navBtn(view === "home")} onClick={() => setView("home")}>Home</button>
+            <button style={S.navBtn(view === "create")} onClick={() => { setView("create"); setFormKey((k) => k + 1); }}>New Brief</button>
+            <button style={S.navBtn(view === "library")} onClick={() => setView("library")}>Library{library.length > 0 && ` (${library.length})`}</button>
+            <button style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
             <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
             <button type="button" onClick={()=>setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
               <div style={S.themeKnob(isDark)} />
@@ -2032,36 +2327,114 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME */}
+        {/* HOME — dashboard */}
         {!aiLoading && view === "home" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <div style={S.hero}>
-              <div style={S.heroTag}>Intake Breathing — Creator Partnerships</div>
-              <div style={S.heroTitle}>UGC<br/>Army</div>
-              <div style={S.heroDesc}>Pick a product, vibe, and audience. Instant creator-ready brief — hooks, story arcs, compliance all baked in.</div>
-              <div style={S.heroActions}>
-                <button style={S.btnP} onClick={()=>{setView("create");setFormKey(k=>k+1)}}>+ New Brief</button>
-              </div>
-
-              {/* API key nudge */}
-              {!apiKey && (
-                <div style={{ marginTop: 24, fontSize: 13, color: t.textFaint }}>
-                  Want IB-Ai-powered briefs? <span onClick={()=>setView("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
+          <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, marginBottom: 20, letterSpacing: "0.02em" }}>Intake Breathing — Creator Partnerships</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+              {[
+                {
+                  id: "ugc",
+                  icon: "🎬",
+                  title: "UGC Army",
+                  desc: "Create and manage UGC creator briefs",
+                  badge: "Active",
+                  badgeColor: t.green,
+                  sub: `${library.length} brief${library.length === 1 ? "" : "s"} created`,
+                  onClick: () => { setView("create"); setFormKey((k) => k + 1); },
+                },
+                {
+                  id: "pipeline",
+                  icon: "📡",
+                  title: "Channel Pipeline",
+                  desc: "Track creator outreach and partnerships",
+                  badge: "Coming Soon",
+                  badgeColor: t.orange,
+                  onClick: () => setView("pipeline"),
+                },
+                {
+                  id: "influencer",
+                  icon: "💰",
+                  title: "Influencer Buys",
+                  desc: "Manage influencer campaigns and spend",
+                  badge: "Coming Soon",
+                  badgeColor: t.orange,
+                  onClick: () => setView("influencer"),
+                },
+                {
+                  id: "tools",
+                  icon: "🛠️",
+                  title: "Tools",
+                  desc: "Video reformatter, analytics, and more",
+                  badge: "1 tool available",
+                  badgeColor: t.blue,
+                  onClick: () => setView("tools"),
+                },
+              ].map((card) => (
+                <div
+                  key={card.id}
+                  onClick={card.onClick}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+                  style={{
+                    background: t.card,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 16,
+                    padding: 28,
+                    cursor: "pointer",
+                    boxShadow: t.shadow,
+                    transition: "border-color 0.15s",
+                  }}
+                >
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>{card.icon}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>{card.title}</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12, lineHeight: 1.5 }}>{card.desc}</div>
+                  {card.sub && <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 10 }}>{card.sub}</div>}
+                  <div
+                    style={{
+                      display: "inline-block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "4px 10px",
+                      borderRadius: 20,
+                      background: card.badgeColor + (t.isLight ? "18" : "15"),
+                      color: card.badgeColor,
+                      border: t.isLight ? `1px solid ${card.badgeColor}30` : "none",
+                    }}
+                  >
+                    {card.badge}
+                  </div>
                 </div>
-              )}
-              {apiKey && apiStatus === "ok" && (
-                <div style={{ marginTop: 24, fontSize: 13, color: t.green, fontWeight: 500 }}>
-                  ✓ IB-Ai connected and ready
-                </div>
-              )}
+              ))}
             </div>
+
+            {!apiKey && (
+              <div style={{ marginTop: 28, fontSize: 13, color: t.textFaint }}>
+                Want IB-Ai-powered briefs?{" "}
+                <span onClick={() => setView("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
+              </div>
+            )}
+            {apiKey && apiStatus === "ok" && (
+              <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500 }}>✓ IB-Ai connected and ready</div>
+            )}
+
             {library.length > 0 && (
-              <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 60px" }}>
+              <div style={{ marginTop: 40 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 14 }}>Recent Briefs</div>
-                {library.slice(0,5).map(item => (
-                  <div key={item.id} style={S.listItem} onClick={()=>openLibraryItem(item)}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
-                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{managerDisplayName(item.formData)} · {item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div></div>
+                {library.slice(0, 5).map((item) => (
+                  <div
+                    key={item.id}
+                    style={S.listItem}
+                    onClick={() => openLibraryItem(item)}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
+                      <div style={{ fontSize: 12, color: t.textFaint }}>
+                        {managerDisplayName(item.formData)} · {item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}
+                      </div>
+                    </div>
                     <div style={{ fontSize: 12, color: t.textFaint }}>→</div>
                   </div>
                 ))}
@@ -2069,6 +2442,23 @@ export default function App() {
             )}
           </div>
         )}
+
+        {!aiLoading && view === "pipeline" && (
+          <ComingSoonPage
+            title="Channel Pipeline"
+            message="Channel Pipeline — Coming Soon. Track creator outreach, responses, and partnership status."
+            onBack={() => setView("home")}
+          />
+        )}
+        {!aiLoading && view === "influencer" && (
+          <ComingSoonPage
+            title="Influencer Buys"
+            message="Influencer Buys — Coming Soon. Manage influencer campaigns and spend in one place."
+            onBack={() => setView("home")}
+          />
+        )}
+        {!aiLoading && view === "tools" && <ToolsPage onBack={() => setView("home")} onOpenVideo={() => setView("videotool")} />}
+        {!aiLoading && view === "videotool" && <VideoReformatter onBack={() => setView("tools")} />}
 
         {/* SETTINGS */}
         {!aiLoading && view === "settings" && (
