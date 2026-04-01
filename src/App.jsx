@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.2.3";
+const APP_VERSION = "1.2.4";
 const CHANGELOG = [
+  { version: "1.2.4", date: "2025-03-31", changes: [
+    "Compliance section now AI-powered — auto-selects approved and banned claims based on form inputs",
+    "Managers can remove individual approved/banned claims by clicking ✕",
+    "Managers can add custom approved/banned claims via text input",
+    "AI compliance suggestions debounced at 2 seconds like proof points",
+    "Full APPROVED_CLAIMS and BANNED_CLAIMS arrays kept as the master source — AI selects from them",
+  ]},
   { version: "1.2.3", date: "2025-03-31", changes: [
     "Added Instant Rejection Criteria section to generated briefs — red warning section",
     "Pre-built rejection reasons: upside down band, tabs not adhered, applicator in video",
@@ -261,6 +268,8 @@ const PREFILL = {
   selectedStats: ["snoring", "sleep", "sinus", "starterkit", "customers", "fda"],
   platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Funny & casual", customTone: "",
   customRejections: "",
+  approvedClaims: [...APPROVED_CLAIMS.slice(0, 6)],
+  bannedClaims: [...BANNED_CLAIMS.slice(0, 6)],
   notes: "Creator tries each level 1→4 on camera. Quick cuts. Reaction-driven. Each level opens the nose wider. Payoff is Level 4 where their nose opens WIDE and the genuine reaction IS the content.\n\nHook ideas: 'I don't even know if I can make it to Level 4' / 'This comes with FOUR sizes??' / 'Level 1 was easy... Level 4 broke me.'\n\nThe Level Up isn't about needing Level 4 — it's about finding YOUR level. But the entertainment value is the journey to 4. Keep it fun, not medical. Show the magnetic snap-on moment — it's satisfying and shareable.",
 };
 
@@ -270,6 +279,8 @@ const DEFAULTS = {
   selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
   platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Real & relatable", customTone: "", notes: "",
   customRejections: "",
+  approvedClaims: [...APPROVED_CLAIMS.slice(0, 5)],
+  bannedClaims: [...BANNED_CLAIMS.slice(0, 5)],
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -372,7 +383,9 @@ function generateBrief(d) {
   const platLabel = (p) => p === "Other" && (d.customPlatform || "").trim() ? (d.customPlatform || "").trim() : p;
   const deliverables = `Submit for: ${platformsArr.map(platLabel).join(", ")}. (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
   const rejections = buildRejectionsArray(d);
-  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables, rejections };
+  const approvedForBrief = Array.isArray(d.approvedClaims) && d.approvedClaims.length ? [...d.approvedClaims] : [...APPROVED_CLAIMS.slice(0, 5)];
+  const bannedForBrief = Array.isArray(d.bannedClaims) && d.bannedClaims.length ? [...d.bannedClaims] : [...BANNED_CLAIMS.slice(0, 5)];
+  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: approvedForBrief, notThis: bannedForBrief, disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables, rejections };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -393,6 +406,12 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     if (prefill?.platform) return [prefill.platform];
     return ["TikTok"];
   });
+  const [selectedApproved, setSelectedApproved] = useState(() => [...(prefill?.approvedClaims ?? DEFAULTS.approvedClaims)]);
+  const [selectedBanned, setSelectedBanned] = useState(() => [...(prefill?.bannedClaims ?? DEFAULTS.bannedClaims)]);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const complianceTimer = useRef(null);
+  const [addApprovedDraft, setAddApprovedDraft] = useState("");
+  const [addBannedDraft, setAddBannedDraft] = useState("");
   const [statsLoading, setStatsLoading] = useState(false);
   const debounceTimer = useRef(null);
   const vals = useRef({
@@ -458,13 +477,80 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     finally { setStatsLoading(false); }
   }, [selectedPlatforms]);
 
+  const suggestCompliance = useCallback(async () => {
+    const key = localStorage.getItem("intake-apikey");
+    if (!key) return;
+
+    const v = vals.current;
+    const context = [v.productName, v.campaignName, v.mission, v.vibe, v.problem, v.ageRange, v.gender].filter(Boolean).join(", ");
+    if (context.length < 10) return;
+
+    setComplianceLoading(true);
+    try {
+      const res = await Promise.race([
+        fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "x-api-key": key,
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 300,
+            messages: [{ role: "user", content: `You are a compliance officer for Intake Breathing, a magnetic nasal dilator company. Given this campaign context: "${context}".
+
+Here are ALL available approved claims: ${JSON.stringify(APPROVED_CLAIMS)}
+
+Here are ALL available banned claims: ${JSON.stringify(BANNED_CLAIMS)}
+
+Select the most relevant approved claims (5-7) and banned claims (5-7) for this specific campaign. Return ONLY a JSON object like: {"approved": ["claim1", "claim2"], "banned": ["claim1", "claim2"]}. Pick claims that are most relevant to the product, audience, and campaign described. Return ONLY the JSON, nothing else.` }],
+          }),
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000)),
+      ]);
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      const text = data.content.map(i => i.text || "").join("");
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          const result = JSON.parse(match[0]);
+          if (Array.isArray(result.approved) && result.approved.length > 0) {
+            const ok = result.approved.filter((c) => APPROVED_CLAIMS.includes(c));
+            if (ok.length > 0) setSelectedApproved(ok);
+          }
+          if (Array.isArray(result.banned) && result.banned.length > 0) {
+            const ok = result.banned.filter((c) => BANNED_CLAIMS.includes(c));
+            if (ok.length > 0) setSelectedBanned(ok);
+          }
+        } catch { /* ignore malformed JSON */ }
+      }
+    } catch { /* ignore */ }
+    finally { setComplianceLoading(false); }
+  }, []);
+
   const triggerStatsSuggest = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => suggestStats(), 2000);
   }, [suggestStats]);
 
+  const triggerComplianceSuggest = useCallback(() => {
+    if (complianceTimer.current) clearTimeout(complianceTimer.current);
+    complianceTimer.current = setTimeout(() => suggestCompliance(), 2500);
+  }, [suggestCompliance]);
+
+  const fireFormSuggest = useCallback(() => {
+    triggerStatsSuggest();
+    triggerComplianceSuggest();
+  }, [triggerStatsSuggest, triggerComplianceSuggest]);
+
   useEffect(() => {
-    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (complianceTimer.current) clearTimeout(complianceTimer.current);
+    };
   }, []);
 
   const togglePlatform = (name) => {
@@ -488,12 +574,14 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
       _audience: `Ages ${ageRange} — ${gender}`,
       _problem: problemTrim,
       _stats: selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean).join(". "),
-      _approved: APPROVED_CLAIMS.join(". "),
-      _banned: BANNED_CLAIMS.join(". "),
+      approvedClaims: [...selectedApproved],
+      bannedClaims: [...selectedBanned],
+      _approved: selectedApproved.join(". "),
+      _banned: selectedBanned.join(". "),
       _disclosure: DISCLOSURE,
       _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }),
     });
-  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms]);
+  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms, selectedApproved, selectedBanned]);
   const mkSel = (key, label, opts) => (
     <div style={S.fg}><label style={S.label}>{label}</label>
       <select style={S.select} defaultValue={vals.current[key]} onChange={e=>{vals.current[key]=e.target.value}}>
@@ -512,7 +600,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
         <div style={S.secLabel}>🎯 Product & Campaign</div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Product *</label>
-            <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); triggerStatsSuggest(); }}>
+            <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); fireFormSuggest(); }}>
               {PRODUCTS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
             {showCustomProduct && <div style={S.fg}><label style={S.label}>Product Name</label>
@@ -520,7 +608,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
             </div>}
           </div>
           <div style={S.fg}><label style={S.label}>Campaign Vibe</label>
-            <select style={S.select} defaultValue={vals.current.vibe} onChange={e => { const v = e.target.value; vals.current.vibe = v; setShowCustomVibe(v === "Other"); triggerStatsSuggest(); }}>
+            <select style={S.select} defaultValue={vals.current.vibe} onChange={e => { const v = e.target.value; vals.current.vibe = v; setShowCustomVibe(v === "Other"); fireFormSuggest(); }}>
               {VIBES.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
             {showCustomVibe && <div style={S.fg}><label style={S.label}>Campaign Vibe</label>
@@ -530,27 +618,27 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
         </div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Campaign Name</label>
-            <input style={S.input} defaultValue={vals.current.campaignName} onChange={e=>{vals.current.campaignName=e.target.value; triggerStatsSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder='e.g. "The Level Up"' /></div>
+            <input style={S.input} defaultValue={vals.current.campaignName} onChange={e=>{vals.current.campaignName=e.target.value; fireFormSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder='e.g. "The Level Up"' /></div>
           <div style={S.fg}><label style={S.label}>One-Line Mission</label>
-            <input style={S.input} defaultValue={vals.current.mission} onChange={e=>{vals.current.mission=e.target.value; triggerStatsSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="The soul of this campaign" /></div>
+            <input style={S.input} defaultValue={vals.current.mission} onChange={e=>{vals.current.mission=e.target.value; fireFormSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="The soul of this campaign" /></div>
         </div>
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>👤 Audience & Problem</div>
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Age Range</label>
-            <select style={S.select} value={ageRange} onChange={e=>{ const v = e.target.value; vals.current.ageRange = v; setAgeRange(v); triggerStatsSuggest(); }}>
+            <select style={S.select} value={ageRange} onChange={e=>{ const v = e.target.value; vals.current.ageRange = v; setAgeRange(v); fireFormSuggest(); }}>
               {AGE_RANGES.map((a)=><option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div style={S.fg}><label style={S.label}>Gender</label>
-            <select style={S.select} value={gender} onChange={e=>{ const v = e.target.value; vals.current.gender = v; setGender(v); triggerStatsSuggest(); }}>
+            <select style={S.select} value={gender} onChange={e=>{ const v = e.target.value; vals.current.gender = v; setGender(v); fireFormSuggest(); }}>
               {GENDERS.map((g)=><option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>
         <div style={S.fg}><label style={S.label}>Core Problem *</label>
-          <textarea style={S.textarea} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value; triggerStatsSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="What misconception, frustration, or emotional block are we solving? Write it like you'd explain it to a creator." rows={4} />
+          <textarea style={S.textarea} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value; fireFormSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="What misconception, frustration, or emotional block are we solving? Write it like you'd explain it to a creator." rows={4} />
         </div>
       </div>
       <div style={S.section}>
@@ -571,12 +659,57 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
         <div style={{ ...S.hint, marginTop: 10 }}>Selected stats become proof point cards. Use disclosure when citing SleepScore stats.</div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>⚖️ Compliance — auto-included</div>
+        <div style={S.secLabel}>
+          ⚖️ Compliance
+          {complianceLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— AI updating...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by AI, edit as needed</span>}
+        </div>
         <div style={S.cols2}>
-          <div><div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 8 }}>✅ Approved</div>
-            <div style={S.roBox}>{APPROVED_CLAIMS.map((c,i)=><div key={i} style={S.roItem()}><span style={S.roMarker(t.green)}>✓</span>{c}</div>)}</div></div>
-          <div><div style={{ fontSize: 12, fontWeight: 700, color: t.red, marginBottom: 8 }}>❌ Banned</div>
-            <div style={S.roBox}>{BANNED_CLAIMS.map((c,i)=><div key={i} style={S.roItem()}><span style={S.roMarker(t.red)}>✗</span>{c}</div>)}</div></div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 8 }}>✅ Approved Claims</div>
+            {selectedApproved.map((c, i) => (
+              <div key={`a-${i}-${c.slice(0, 24)}`} style={{ background: t.card, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${t.green}20` }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><span style={{ color: t.green, fontWeight: 700, flexShrink: 0 }}>✓</span><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
+                <button type="button" onClick={() => setSelectedApproved((prev) => prev.filter((_, idx) => idx !== i))} style={{ flexShrink: 0, marginLeft: 8, border: "none", background: "transparent", color: t.textFaint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px" }} title="Remove">✕</button>
+              </div>
+            ))}
+            <input
+              style={{ ...S.input, marginTop: 4 }}
+              value={addApprovedDraft}
+              onChange={(e) => setAddApprovedDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const v = addApprovedDraft.trim();
+                if (v) { setSelectedApproved((prev) => [...prev, v]); setAddApprovedDraft(""); }
+              }}
+              onFocus={(e) => { e.target.style.borderColor = t.green; }}
+              onBlur={(e) => { e.target.style.borderColor = t.border; }}
+              placeholder="Add approved claim..."
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.red, marginBottom: 8 }}>❌ Banned Claims</div>
+            {selectedBanned.map((c, i) => (
+              <div key={`b-${i}-${c.slice(0, 24)}`} style={{ background: t.card, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${t.red}20` }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><span style={{ color: t.red, fontWeight: 700, flexShrink: 0 }}>✗</span><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
+                <button type="button" onClick={() => setSelectedBanned((prev) => prev.filter((_, idx) => idx !== i))} style={{ flexShrink: 0, marginLeft: 8, border: "none", background: "transparent", color: t.textFaint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px" }} title="Remove">✕</button>
+              </div>
+            ))}
+            <input
+              style={{ ...S.input, marginTop: 4 }}
+              value={addBannedDraft}
+              onChange={(e) => setAddBannedDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const v = addBannedDraft.trim();
+                if (v) { setSelectedBanned((prev) => [...prev, v]); setAddBannedDraft(""); }
+              }}
+              onFocus={(e) => { e.target.style.borderColor = t.red; }}
+              onBlur={(e) => { e.target.style.borderColor = t.border; }}
+              placeholder="Add banned claim..."
+            />
+          </div>
         </div>
       </div>
       <div style={S.section}>
