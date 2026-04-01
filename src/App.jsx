@@ -3326,7 +3326,7 @@ export default function App() {
         {!aiLoading && isCreatorViewAllowed && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
         {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
-        {!aiLoading && view === "library" && (
+        {!aiLoading && isCreatorViewAllowed && view === "library" && (
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ ...S.formTitle, marginBottom: 24 }}>Brief Library</div>
             {library.length === 0 ? (
