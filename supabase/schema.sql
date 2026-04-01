@@ -48,6 +48,7 @@ create table if not exists creators (
   last_enriched text,
   invite_token text,
   onboarded boolean default false,
+  onboarded_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -69,3 +70,29 @@ alter table briefs enable row level security;
 
 create policy "creators_all_anon" on creators for all using (true) with check (true);
 create policy "briefs_all_anon" on briefs for all using (true) with check (true);
+
+-- Creator portal: brief assignments and messaging (dev: open policies — tighten for production)
+create table if not exists brief_assignments (
+  id uuid primary key default gen_random_uuid(),
+  brief_id uuid not null references briefs(id) on delete cascade,
+  creator_id uuid not null references creators(id) on delete cascade,
+  status text not null default 'assigned',
+  assigned_at timestamptz default now(),
+  viewed_at timestamptz,
+  unique (brief_id, creator_id)
+);
+
+create table if not exists messages (
+  id uuid primary key default gen_random_uuid(),
+  creator_id uuid not null references creators(id) on delete cascade,
+  sender text not null check (sender in ('manager', 'creator')),
+  message text not null,
+  read boolean not null default false,
+  created_at timestamptz default now()
+);
+
+alter table brief_assignments enable row level security;
+alter table messages enable row level security;
+
+create policy "brief_assignments_all_anon" on brief_assignments for all using (true) with check (true);
+create policy "messages_all_anon" on messages for all using (true) with check (true);

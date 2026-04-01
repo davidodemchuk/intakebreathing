@@ -56,6 +56,7 @@ export function creatorToRow(c) {
     last_enriched: c.lastEnriched || null,
     invite_token: c.inviteToken || null,
     onboarded: c.onboarded ?? false,
+    onboarded_at: c.onboardedAt || null,
   };
 }
 
@@ -107,6 +108,7 @@ export function rowToCreator(row) {
     lastEnriched: row.last_enriched || null,
     inviteToken: row.invite_token || null,
     onboarded: row.onboarded || false,
+    onboardedAt: row.onboarded_at || null,
   };
 }
 
