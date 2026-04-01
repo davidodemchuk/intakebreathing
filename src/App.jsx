@@ -27,8 +27,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.8.0";
+const APP_VERSION = "3.9.0";
 const CHANGELOG = [
+  { version: "3.9.0", date: "2026-04-01", changes: [
+    "UGC Army now has its own dashboard with navigation to Creators, New Brief, Library",
+  ]},
   { version: "3.8.0", date: "2026-04-01", changes: [
     "Separate handles per platform — Instagram, TikTok, YouTube, Twitter can each have different handles",
     "Platform cards are clickable and link to the correct profile",
@@ -331,7 +334,7 @@ const ThemeContext = createContext();
 
 const NAV_SECTIONS = {
   dashboard: ["home"],
-  ugcArmy: ["create", "display", "library", "creators", "creatorDetail"],
+  ugcArmy: ["ugcDashboard", "create", "display", "library", "creators", "creatorDetail"],
   tools: ["tools", "videotool"],
   pipeline: ["pipeline"],
   influencer: ["influencer"],
@@ -356,7 +359,7 @@ const NAV_SUB_LABELS = {
 
 const ROUTES = {
   "/": "home",
-  "/ugc-army": "library",
+  "/ugc-army": "ugcDashboard",
   "/ugc-army/new": "create",
   "/ugc-army/brief": "display",
   "/ugc-army/library": "library",
@@ -371,6 +374,7 @@ const ROUTES = {
 
 const VIEW_TO_PATH = {
   home: "/",
+  ugcDashboard: "/ugc-army",
   create: "/ugc-army/new",
   display: "/ugc-army/brief",
   library: "/ugc-army/library",
@@ -5303,6 +5307,151 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 }
 
 // ═══════════════════════════════════════════════════════════
+// UGC ARMY DASHBOARD (hub)
+// ═══════════════════════════════════════════════════════════
+
+function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBrief }) {
+  const activeCreators = creators.filter(c => c.status === "Active").length;
+  const totalVideos = creators.reduce((sum, c) => sum + (Math.max((c.videoLog || []).length, c.totalVideos || 0)), 0);
+  const enrichedCreators = creators.filter(c => c.ibScore != null).length;
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>UGC Army</div>
+        <div style={{ fontSize: 13, color: t.textMuted }}>Manage creators, build briefs, and track your UGC pipeline</div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
+        {[
+          { value: activeCreators, label: "Active Creators", color: t.green },
+          { value: library.length, label: "Briefs Created", color: t.blue },
+          { value: totalVideos, label: "Videos Tracked", color: t.orange },
+          { value: enrichedCreators, label: "Creators Scored", color: t.purple },
+        ].map((stat, i) => (
+          <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: stat.color }}>{stat.value}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{stat.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main navigation cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 32 }}>
+
+        {/* Creators */}
+        <div
+          onClick={() => navigate("creators")}
+          style={{
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 14,
+            padding: 24,
+            cursor: "pointer",
+            transition: "border-color 0.2s, box-shadow 0.2s",
+            position: "relative",
+            overflow: "hidden",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${t.green}08`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; }}
+        >
+          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.green, marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creators</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>View, search, and manage your creator roster. Enrich profiles with live data.</div>
+          <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{activeCreators} active · {enrichedCreators} scored</div>
+        </div>
+
+        {/* New Brief */}
+        <div
+          onClick={() => onNewBrief()}
+          style={{
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 14,
+            padding: 24,
+            cursor: "pointer",
+            transition: "border-color 0.2s, box-shadow 0.2s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${t.blue}08`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; }}
+        >
+          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.blue, marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>New Brief</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create a new UGC creator brief with IB-Ai or Instant Draft templates.</div>
+          <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>✦ IB-Ai powered</div>
+        </div>
+
+        {/* Brief Library */}
+        <div
+          onClick={() => navigate("library")}
+          style={{
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 14,
+            padding: 24,
+            cursor: "pointer",
+            transition: "border-color 0.2s, box-shadow 0.2s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${t.orange}08`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; }}
+        >
+          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Library</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Browse, edit, and regenerate your saved briefs.</div>
+          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""} saved</div>
+        </div>
+
+        {/* Campaign Overview — coming soon */}
+        <div
+          style={{
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 14,
+            padding: 24,
+            opacity: 0.6,
+          }}
+        >
+          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.textFaint, marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Track active campaigns, assign creators, and monitor performance.</div>
+          <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
+        </div>
+      </div>
+
+      {/* Recent activity — show last 5 briefs */}
+      {library.length > 0 ? (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent Briefs</div>
+          {library.slice(0, 5).map((item) => (
+            <div
+              key={item.id}
+              onClick={() => onOpenBrief(item)}
+              style={{
+                ...S.listItem,
+                marginBottom: 6,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.name}</div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>
+                  {item.formData?.manager || ""} · {item.formData?.vibe || ""} · {item.date}
+                </div>
+              </div>
+              <span style={{ fontSize: 11, color: t.textFaint }}>→</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════
 
@@ -6416,8 +6565,9 @@ export default function App() {
                 )}
                 {section === "ugcArmy" && (
                   <>
-                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
+                    <button type="button" style={S.navBtn(view === "ugcDashboard")} onClick={() => navigate("ugcDashboard")}>UGC Army</button>
                     <button type="button" style={S.navBtn(view === "creators" || view === "creatorDetail")} onClick={() => navigate("creators")}>Creators</button>
+                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
                     <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
                     <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                   </>
@@ -6601,8 +6751,8 @@ export default function App() {
               <div className="home-dashboard-grid">
                 <div
                   {...cardShell("ugc", t.green)}
-                  onClick={() => navigate("library")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("library"); } }}
+                  onClick={() => navigate("ugcDashboard")}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("ugcDashboard"); } }}
                 >
                   {accentBar(t.green)}
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>UGC Army</div>
@@ -6658,6 +6808,18 @@ export default function App() {
             </div>
           );
         })()}
+
+        {!aiLoading && isCreatorViewAllowed && view === "ugcDashboard" && (
+          <UGCDashboard
+            navigate={navigate}
+            library={library}
+            creators={creators}
+            t={t}
+            S={S}
+            onOpenBrief={openLibraryItem}
+            onNewBrief={() => { navigate("create"); setFormKey((k) => k + 1); }}
+          />
+        )}
 
         {!aiLoading && isCreatorViewAllowed && view === "pipeline" && (
           <ComingSoonPage
@@ -7538,6 +7700,7 @@ export default function App() {
 
           return (
           <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+            <button type="button" onClick={() => navigate("ugcDashboard")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <input
                 type="text"
