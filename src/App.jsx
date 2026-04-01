@@ -2843,29 +2843,6 @@ export default function App() {
             {apiKey && apiStatus === "ok" && (
               <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500 }}>✓ IB-Ai connected and ready</div>
             )}
-
-            {library.length > 0 && (
-              <div style={{ marginTop: 40 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 14 }}>Recent Briefs</div>
-                {library.slice(0, 5).map((item) => (
-                  <div
-                    key={item.id}
-                    style={S.listItem}
-                    onClick={() => openLibraryItem(item)}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
-                      <div style={{ fontSize: 12, color: t.textFaint }}>
-                        {managerDisplayName(item.formData)} · {item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 12, color: t.textFaint }}>→</div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
