@@ -4,8 +4,12 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.2.2";
 const CHANGELOG = [
+  { version: "1.2.2", date: "2025-03-31", changes: [
+    "Tone dropdown now includes Other option with custom text input",
+    "AI prompt updated to use custom tone when Other is selected",
+  ]},
   { version: "1.2.1", date: "2025-03-31", changes: [
     "Platform selection changed from dropdown to multi-select checkboxes",
     "Removed Multi-platform option — users now check all that apply",
@@ -224,7 +228,7 @@ const DISCLOSURE = "Source: SleepScore Labs independent study · Participants wi
 
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
-const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying"];
+const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
 const PREFILL = {
   productName: "Starter Kit Black", customProductName: "", campaignName: "The Level Up", vibe: "Fun & Entertaining", customVibe: "",
@@ -232,7 +236,7 @@ const PREFILL = {
   ageRange: "25-34", gender: "Men & Women",
   problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
   selectedStats: ["snoring", "sleep", "sinus", "starterkit", "customers", "fda"],
-  platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Funny & casual",
+  platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Funny & casual", customTone: "",
   notes: "Creator tries each level 1→4 on camera. Quick cuts. Reaction-driven. Each level opens the nose wider. Payoff is Level 4 where their nose opens WIDE and the genuine reaction IS the content.\n\nHook ideas: 'I don't even know if I can make it to Level 4' / 'This comes with FOUR sizes??' / 'Level 1 was easy... Level 4 broke me.'\n\nThe Level Up isn't about needing Level 4 — it's about finding YOUR level. But the entertainment value is the journey to 4. Keep it fun, not medical. Show the magnetic snap-on moment — it's satisfying and shareable.",
 };
 
@@ -240,7 +244,7 @@ const DEFAULTS = {
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
-  platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Real & relatable", notes: "",
+  platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Real & relatable", customTone: "", notes: "",
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -288,6 +292,11 @@ function formatPlatformsDisplay(fd) {
   return plats.map(p => p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p).join(", ");
 }
 
+function formatToneDisplay(fd) {
+  if (fd.tone === "Other" && fd.customTone?.trim()) return fd.customTone.trim();
+  return fd.tone || "";
+}
+
 function generateBrief(d) {
   const productLabel = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
   const fullProduct = productLabel ? `Intake Breathing — ${productLabel}` : "Intake Breathing";
@@ -317,10 +326,13 @@ function generateBrief(d) {
   const solInst = solutionSentences.length > 0 ? `Deliver the payoff: ${solutionSentences[0]}` : "Show the product in action.";
   const solLines = solutionSentences.length >= 2 ? pick(solutionSentences, 3) : ["This changed everything", "I can't believe the difference", "I'm never going back"];
   const solOverlays = ["Before/after or progression reveal", "Product in action — the key moment", "End card: product + CTA + 90-day trial"];
-  const hooks = TONE_HOOKS[d.tone] || TONE_HOOKS["Real & relatable"];
+  const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
+  const hookKey = d.tone === "Other" ? "Real & relatable" : d.tone;
+  const hooks = TONE_HOOKS[hookKey] || TONE_HOOKS["Real & relatable"];
   const vibeLabel = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
   const proof = d.selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean);
   const vibePrefix = d.vibe === "Other" && vibeLabel ? `Campaign vibe: ${vibeLabel}\n\n` : "";
+  const tonePrefix = toneResolved ? `Tone / voice: ${toneResolved}\n\n` : "";
   const platformsArr = normalizePlatforms(d);
   const noteBlocks = platformsArr.map(p => {
     const base = (PLATFORM_NOTES[p] || "").trim();
@@ -331,7 +343,7 @@ function generateBrief(d) {
     return base;
   }).filter(Boolean);
   const lg = LENGTH_GUIDE[d.videoLength] || "";
-  const platNotes = vibePrefix + noteBlocks.join("\n\n—\n\n") + (noteBlocks.length && lg ? "\n\n" : "") + lg;
+  const platNotes = vibePrefix + tonePrefix + noteBlocks.join("\n\n—\n\n") + (noteBlocks.length && lg ? "\n\n" : "") + lg;
   const platLabel = (p) => p === "Other" && (d.customPlatform || "").trim() ? (d.customPlatform || "").trim() : p;
   const deliverables = `Submit for: ${platformsArr.map(platLabel).join(", ")}. (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
   return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables };
@@ -348,6 +360,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [selectedStats, setSelectedStats] = useState(prefill ? [...prefill.selectedStats] : [...DEFAULTS.selectedStats]);
   const [showCustomProduct, setShowCustomProduct] = useState((prefill?.productName || DEFAULTS.productName) === "Other");
   const [showCustomVibe, setShowCustomVibe] = useState((prefill?.vibe || DEFAULTS.vibe) === "Other");
+  const [showCustomTone, setShowCustomTone] = useState((prefill?.tone || DEFAULTS.tone) === "Other");
   const [selectedPlatforms, setSelectedPlatforms] = useState(() => {
     const p = prefill?.platforms ?? DEFAULTS.platforms;
     if (Array.isArray(p) && p.length) return [...p];
@@ -369,6 +382,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     customPlatform: prefill?.customPlatform ?? DEFAULTS.customPlatform,
     videoLength: prefill?.videoLength || DEFAULTS.videoLength,
     tone: prefill?.tone || DEFAULTS.tone,
+    customTone: prefill?.customTone ?? DEFAULTS.customTone,
     notes: prefill?.notes || "",
   });
   const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
@@ -435,13 +449,14 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     if (!v.problem.trim()) { alert("Please describe the core problem."); return; }
     if (v.productName === "Other" && !v.customProductName.trim()) { alert("Please enter a product name."); return; }
     if (v.vibe === "Other" && !v.customVibe.trim()) { alert("Please describe your campaign vibe."); return; }
+    if (v.tone === "Other" && !v.customTone.trim()) { alert("Please describe your tone."); return; }
     if (selectedPlatforms.length === 0) { alert("Please select at least one platform."); return; }
     const problemTrim = v.problem.trim();
     onGenerate({
       mode,
       productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
-      selectedStats, platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, notes: v.notes,
+      selectedStats, platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, customTone: (v.customTone || "").trim(), notes: v.notes,
       _audience: `Ages ${ageRange} — ${gender}`,
       _problem: problemTrim,
       _stats: selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean).join(". "),
@@ -538,7 +553,17 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>🎬 Format & Tone</div>
-        <div style={S.r2}>{mkSel("videoLength", "Video Length", LENGTHS)}{mkSel("tone", "Tone", TONES)}</div>
+        <div style={S.r2}>
+          {mkSel("videoLength", "Video Length", LENGTHS)}
+          <div style={S.fg}><label style={S.label}>Tone</label>
+            <select style={S.select} defaultValue={vals.current.tone} onChange={e => { const v = e.target.value; vals.current.tone = v; setShowCustomTone(v === "Other"); }}>
+              {TONES.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            {showCustomTone && <div style={S.fg}><label style={S.label}>Describe your tone</label>
+              <input style={S.input} defaultValue={vals.current.customTone} onChange={e => { vals.current.customTone = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder='e.g. "Sarcastic but warm", "Gen Z chaos energy", "Whisper ASMR with humor"' />
+            </div>}
+          </div>
+        </div>
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>📱 Platform</div>
@@ -609,7 +634,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
             <span key={`${p}-${i}`} style={S.badge(t.blue)}>{p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p}</span>
           ))}
           <span style={S.badge(t.orange)}>{fd.videoLength}</span>
-          <span style={S.badge(t.green)}>{fd.tone}</span>
+          <span style={S.badge(t.green)}>{fd.tone === "Other" && fd.customTone?.trim() ? fd.customTone.trim() : fd.tone}</span>
         </div>
         <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>
       </div>
@@ -692,6 +717,7 @@ function buildAIPrompt(d) {
   const audienceForm = d._audience || `Ages ${ageR} — ${gen}`;
   const plats = normalizePlatforms(d);
   const platLine = plats.map(p => p === "Other" && (d.customPlatform || "").trim() ? `Other (${(d.customPlatform || "").trim()})` : p).join(", ");
+  const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
 PRODUCT: ${productResolved} by Intake Breathing
@@ -707,8 +733,10 @@ BANNED CLAIMS (NEVER say): ${d._banned || ""}
 REQUIRED DISCLOSURE: ${d._disclosure || ""}
 PLATFORMS: ${platLine}
 VIDEO LENGTH: ${d.videoLength || ""}
-TONE: ${d.tone || ""}
+TONE: ${toneResolved}
 CREATIVE NOTES: ${d.notes || "None"}
+
+TONE DIRECTION: The creative tone for this brief is "${toneResolved}". Match this voice consistently in hooks, on-camera delivery, pacing, overlay text, and every line of copy — do not default to a generic influencer voice.
 
 Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
 
@@ -1028,7 +1056,7 @@ export default function App() {
                 {library.slice(0,5).map(item => (
                   <div key={item.id} style={S.listItem} onClick={()=>{setCurrentBrief(item.brief);setCurrentFormData(item.formData);setView("display")}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
-                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {item.formData.videoLength}</div></div>
+                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div></div>
                     <div style={{ fontSize: 12, color: t.textFaint }}>→</div>
                   </div>
                 ))}
@@ -1146,7 +1174,7 @@ export default function App() {
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
                 <div style={{ cursor: "pointer", flex: 1 }} onClick={()=>{setCurrentBrief(item.brief);setCurrentFormData(item.formData);setView("display")}}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
-                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {item.formData.videoLength}</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ fontSize: 12, color: t.textFaint }}>{item.date}</div>
