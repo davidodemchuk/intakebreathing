@@ -5,8 +5,14 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.4";
+const APP_VERSION = "2.0.5";
 const CHANGELOG = [
+  { version: "2.0.5", date: "2025-04-01", changes: [
+    "Homepage redesigned — premium dashboard with animated cards, stats bar, gradient accents",
+    "Time-based greeting with manager name",
+    "Live stats bar showing key metrics at a glance",
+    "Cards redesigned with gradient borders, glow effects, and micro-animations",
+  ]},
   { version: "2.0.4", date: "2025-04-01", changes: [
     "Complete PDF overhaul — eliminated dead white space, tighter professional layout",
     "Two-column layout for persona, say/don't, and proof points sections",
@@ -3186,6 +3192,33 @@ export default function App() {
     [creators]
   );
 
+  const activeVideosTotal = useMemo(
+    () =>
+      creators
+        .filter((c) => c.status === "Active")
+        .reduce((sum, c) => sum + (Number(c.totalVideos) || 0), 0),
+    [creators]
+  );
+
+  const mostUsedManagerName = useMemo(() => {
+    if (!library.length) return null;
+    const counts = {};
+    for (const item of library) {
+      const name = managerDisplayName(item.formData);
+      if (!name) continue;
+      counts[name] = (counts[name] || 0) + 1;
+    }
+    let best = null;
+    let bestN = 0;
+    for (const [k, v] of Object.entries(counts)) {
+      if (v > bestN) {
+        bestN = v;
+        best = k;
+      }
+    }
+    return best;
+  }, [library]);
+
   const filteredCreators = useMemo(() => {
     let list = creators;
     if (creatorStatusFilter !== "All") list = list.filter((c) => c.status === creatorStatusFilter);
@@ -3216,6 +3249,10 @@ export default function App() {
           @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
           @keyframes spin { to { transform: rotate(360deg) } }
           @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+          @keyframes pulseGlowOrange { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,170,59,0.3); } 50% { box-shadow: 0 0 8px 2px rgba(255,170,59,0.15); } }
+          @keyframes pulseGlowPurple { 0%, 100% { box-shadow: 0 0 0 0 rgba(192,132,252,0.35); } 50% { box-shadow: 0 0 8px 2px rgba(192,132,252,0.18); } }
+          .home-dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+          @media (max-width: 720px) { .home-dashboard-grid { grid-template-columns: 1fr !important; } }
           * { box-sizing:border-box }
           input::placeholder,textarea::placeholder { color:${t.textFaint} }
           ::-webkit-scrollbar { width:6px }
@@ -3389,145 +3426,339 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME — dashboard (managers only; creators use library) */}
-        {!aiLoading && isCreatorViewAllowed && view === "home" && (
-          <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, letterSpacing: "0.02em", marginBottom: 20 }}>Intake Breathing — Creator Partnerships</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
-              {[
-                {
-                  id: "ugc",
-                  iconName: "film",
-                  accent: t.green,
-                  iconBg: t.green + "12",
-                  title: "UGC Army",
-                  desc: "Create and manage UGC creator briefs",
-                  badge: "Active",
-                  badgeColor: t.green,
-                  sub: `${activeCreatorCount} active creator${activeCreatorCount === 1 ? "" : "s"} · ${library.length} brief${library.length === 1 ? "" : "s"} created`,
-                  onClick: () => { navigate("create"); setFormKey((k) => k + 1); },
-                },
-                {
-                  id: "pipeline",
-                  iconName: "send",
-                  accent: t.orange,
-                  iconBg: t.orange + "12",
-                  title: "Channel Pipeline",
-                  desc: "Track creator outreach and partnerships",
-                  badge: "Coming Soon",
-                  badgeColor: t.orange,
-                  onClick: () => navigate("pipeline"),
-                },
-                {
-                  id: "influencer",
-                  iconName: "dollarSign",
-                  accent: t.purple,
-                  iconBg: t.purple + "12",
-                  title: "Influencer Buys",
-                  desc: "Manage influencer campaigns and spend",
-                  badge: "Coming Soon",
-                  badgeColor: t.orange,
-                  onClick: () => navigate("influencer"),
-                },
-                {
-                  id: "tools",
-                  iconName: "wrench",
-                  accent: t.blue,
-                  iconBg: t.blue + "12",
-                  title: "Tools",
-                  desc: "Video reformatter, analytics, and more",
-                  badge: "1 tool",
-                  badgeColor: t.blue,
-                  onClick: () => navigate("tools"),
-                },
-              ].map((card) => (
+        {/* HOME — premium dashboard (managers only; creators use library) */}
+        {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
+          const hour = new Date().getHours();
+          const greetingWord = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+          const greetingLine =
+            library.length > 0 && mostUsedManagerName ? `${greetingWord}, ${mostUsedManagerName}` : greetingWord;
+          const hoverLiftShadow = t.isLight
+            ? "0 12px 40px rgba(0,140,86,0.1), 0 4px 12px rgba(0,0,0,0.08)"
+            : "0 12px 40px rgba(0,254,169,0.08), 0 4px 12px rgba(0,0,0,0.3)";
+          const statPill = {
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 20,
+            padding: "4px 14px",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          };
+          const cardBase = (id) => ({
+            position: "relative",
+            borderRadius: 20,
+            padding: 0,
+            overflow: "hidden",
+            cursor: "pointer",
+            border: `1px solid ${dashCardHover === id ? t.green + "40" : t.border}`,
+            background: t.card,
+            minHeight: 200,
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            transform: dashCardHover === id ? "translateY(-4px)" : "translateY(0)",
+            boxShadow: dashCardHover === id ? hoverLiftShadow : t.shadow,
+          });
+          return (
+            <div style={{ position: "relative", zIndex: 1, animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
+              <div
+                aria-hidden
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  opacity: 0.015,
+                  background: `radial-gradient(circle at 1px 1px, ${t.textFaint} 1px, transparent 0)`,
+                  backgroundSize: "40px 40px",
+                }}
+              />
+              <div style={{ position: "relative", zIndex: 1 }}>
                 <div
-                  key={card.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={card.onClick}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card.onClick(); } }}
-                  onMouseEnter={() => setDashCardHover(card.id)}
-                  onMouseLeave={() => setDashCardHover(null)}
                   style={{
-                    position: "relative",
-                    background:
-                      dashCardHover === card.id
-                        ? `linear-gradient(${t.card}, ${t.card}) padding-box, linear-gradient(135deg, ${card.accent}70, ${t.green}38) border-box`
-                        : t.card,
-                    border: dashCardHover === card.id ? "1px solid transparent" : `1px solid ${t.border}`,
-                    backgroundClip: dashCardHover === card.id ? "padding-box, border-box" : "border-box",
-                    borderRadius: 16,
-                    padding: 28,
-                    paddingBottom: 36,
-                    cursor: "pointer",
-                    boxShadow: dashCardHover === card.id ? `0 10px 32px ${card.accent}18` : t.shadow,
-                    transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 20,
+                    marginBottom: 28,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 28,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: card.iconBg,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <Icon name={card.iconName} size={32} color={card.accent} />
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>
+                      {greetingLine}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        fontWeight: 600,
+                        color: t.textFaint,
+                      }}
+                    >
+                      Intake Breathing — Creator Partnerships
+                    </div>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>{card.title}</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12, lineHeight: 1.5 }}>{card.desc}</div>
-                  {card.sub && <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 10 }}>{card.sub}</div>}
-                  <div
-                    style={{
-                      display: "inline-block",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "4px 10px",
-                      borderRadius: 20,
-                      background: card.badgeColor + (t.isLight ? "18" : "15"),
-                      color: card.badgeColor,
-                      border: t.isLight ? `1px solid ${card.badgeColor}30` : "none",
-                    }}
-                  >
-                    {card.badge}
-                  </div>
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 16,
-                      right: 16,
-                      opacity: dashCardHover === card.id ? 1 : 0,
-                      transition: "opacity 0.2s",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                    aria-hidden
-                  >
-                    <Icon name="arrowRight" size={18} color={t.textFaint} />
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "flex-end" }}>
+                    <div style={statPill}>
+                      <span style={{ fontWeight: 800, color: t.green }}>{library.length}</span>
+                      <span style={{ fontWeight: 500, color: t.textMuted }}>Briefs</span>
+                    </div>
+                    <div style={statPill}>
+                      <span style={{ fontWeight: 800, color: t.green }}>{activeCreatorCount}</span>
+                      <span style={{ fontWeight: 500, color: t.textMuted }}>Creators</span>
+                    </div>
+                    <div style={statPill}>
+                      <span style={{ fontWeight: 800, color: t.green }}>{activeVideosTotal}</span>
+                      <span style={{ fontWeight: 500, color: t.textMuted }}>Videos</span>
+                    </div>
+                    <div style={{ ...statPill, opacity: 0.75 }}>
+                      <span style={{ fontWeight: 600, color: t.textFaint, fontSize: 11 }}>v{APP_VERSION}</span>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {!apiKey && (
-              <div style={{ marginTop: 28, fontSize: 13, color: t.textFaint }}>
-                Want IB-Ai-powered briefs?{" "}
-                <span onClick={() => navigate("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
+                <div className="home-dashboard-grid">
+                  {/* UGC Army */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("create"); setFormKey((k) => k + 1); } }}
+                    onMouseEnter={() => setDashCardHover("ugc")}
+                    onMouseLeave={() => setDashCardHover(null)}
+                    style={cardBase("ugc")}
+                  >
+                    <div style={{ height: 3, background: "linear-gradient(135deg, #00FEA9, #63B7BA)", width: "100%" }} />
+                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 14,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "linear-gradient(135deg, rgba(0,254,169,0.2), rgba(99,183,186,0.2))",
+                        }}
+                      >
+                        <Icon name="film" size={26} color={t.green} />
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>UGC Army</div>
+                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
+                        Create briefs, manage creators, and track your UGC content pipeline
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "4px 10px",
+                            borderRadius: 20,
+                            background: t.green + (t.isLight ? "18" : "15"),
+                            color: t.green,
+                            border: t.isLight ? `1px solid ${t.green}30` : "none",
+                          }}
+                        >
+                          Active
+                        </span>
+                        <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 500 }}>
+                          {library.length} brief{library.length === 1 ? "" : "s"} · {activeCreatorCount} creator{activeCreatorCount === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
+                      <Icon name="film" size={120} color={t.text} />
+                    </div>
+                  </div>
+
+                  {/* Channel Pipeline */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate("pipeline")}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("pipeline"); } }}
+                    onMouseEnter={() => setDashCardHover("pipeline")}
+                    onMouseLeave={() => setDashCardHover(null)}
+                    style={cardBase("pipeline")}
+                  >
+                    <div style={{ height: 3, background: "linear-gradient(135deg, #ffaa3b, #ff6b6b)", width: "100%" }} />
+                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 14,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "linear-gradient(135deg, rgba(255,170,59,0.2), rgba(255,107,107,0.2))",
+                        }}
+                      >
+                        <Icon name="send" size={26} color={t.orange} />
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>Channel Pipeline</div>
+                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
+                        Track creator outreach, responses, and partnership status
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "4px 10px",
+                            borderRadius: 20,
+                            background: t.orange + (t.isLight ? "18" : "15"),
+                            color: t.orange,
+                            border: t.isLight ? `1px solid ${t.orange}30` : "none",
+                            animation: "pulseGlowOrange 2.5s ease-in-out infinite",
+                          }}
+                        >
+                          Coming Soon
+                        </span>
+                        <span />
+                      </div>
+                    </div>
+                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
+                      <Icon name="send" size={120} color={t.text} />
+                    </div>
+                  </div>
+
+                  {/* Influencer Buys */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate("influencer")}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("influencer"); } }}
+                    onMouseEnter={() => setDashCardHover("influencer")}
+                    onMouseLeave={() => setDashCardHover(null)}
+                    style={cardBase("influencer")}
+                  >
+                    <div style={{ height: 3, background: "linear-gradient(135deg, #c084fc, #818cf8)", width: "100%" }} />
+                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 14,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "linear-gradient(135deg, rgba(192,132,252,0.2), rgba(129,140,248,0.2))",
+                        }}
+                      >
+                        <Icon name="dollarSign" size={26} color={t.purple} />
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>Influencer Buys</div>
+                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
+                        Manage influencer campaigns, negotiate rates, and track spend
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "4px 10px",
+                            borderRadius: 20,
+                            background: t.purple + (t.isLight ? "18" : "15"),
+                            color: t.purple,
+                            border: t.isLight ? `1px solid ${t.purple}30` : "none",
+                            animation: "pulseGlowPurple 2.5s ease-in-out infinite",
+                          }}
+                        >
+                          Coming Soon
+                        </span>
+                        <span />
+                      </div>
+                    </div>
+                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
+                      <Icon name="dollarSign" size={120} color={t.text} />
+                    </div>
+                  </div>
+
+                  {/* Tools */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate("tools")}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("tools"); } }}
+                    onMouseEnter={() => setDashCardHover("tools")}
+                    onMouseLeave={() => setDashCardHover(null)}
+                    style={cardBase("tools")}
+                  >
+                    <div style={{ height: 3, background: "linear-gradient(135deg, #63B7BA, #818cf8)", width: "100%" }} />
+                    <div style={{ padding: 28, position: "relative", zIndex: 1 }}>
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 14,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "linear-gradient(135deg, rgba(99,183,186,0.2), rgba(129,140,248,0.2))",
+                        }}
+                      >
+                        <Icon name="wrench" size={26} color={t.blue} />
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: t.text, marginTop: 16, marginBottom: 4 }}>Tools</div>
+                      <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
+                        Video reformatter, content analytics, and team utilities
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "4px 10px",
+                            borderRadius: 20,
+                            background: t.blue + (t.isLight ? "18" : "15"),
+                            color: t.blue,
+                            border: t.isLight ? `1px solid ${t.blue}30` : "none",
+                          }}
+                        >
+                          1 tool
+                        </span>
+                        <span
+                          role="link"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); navigate("videotool"); }}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); navigate("videotool"); } }}
+                          style={{ fontSize: 12, color: t.blue, fontWeight: 600, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}
+                        >
+                          Video Reformatter
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ position: "absolute", bottom: -10, right: -10, opacity: 0.04, pointerEvents: "none" }} aria-hidden>
+                      <Icon name="wrench" size={120} color={t.text} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 40, textAlign: "center" }}>
+                  Built for Intake Breathing&apos;s marketing team · v{APP_VERSION}
+                </div>
+
+                {!apiKey && (
+                  <div style={{ marginTop: 28, fontSize: 13, color: t.textFaint }}>
+                    Want IB-Ai-powered briefs?{" "}
+                    <span onClick={() => navigate("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
+                  </div>
+                )}
+                {apiKey && apiStatus === "ok" && (
+                  <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Icon name="checkCircle" size={16} color={t.green} />
+                    <span>IB-Ai connected and ready</span>
+                  </div>
+                )}
               </div>
-            )}
-            {apiKey && apiStatus === "ok" && (
-              <div style={{ marginTop: 28, fontSize: 13, color: t.green, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
-                <Icon name="checkCircle" size={16} color={t.green} />
-                <span>IB-Ai connected and ready</span>
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
         {!aiLoading && isCreatorViewAllowed && view === "pipeline" && (
           <ComingSoonPage
