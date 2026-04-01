@@ -39,8 +39,15 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.8.0";
+const APP_VERSION = "5.9.0";
 const CHANGELOG = [
+  { version: "5.9.0", date: "2026-04-01", changes: [
+    "Video reformatter: fixed infinite loading — downloads now have hard timeouts",
+    "Prefer download_addr over play_addr for TikTok (more reliable)",
+    "Try multiple video URLs if first one fails",
+    "Clear error messages instead of infinite spinners",
+    "Cache status shown to user — know exactly what's happening",
+  ]},
   { version: "5.8.0", date: "2026-04-01", changes: [
     "One-click 'Download All Formats' button — ZIP with 1x1, 4x5, 9x16, 16x9",
   ]},
@@ -4578,6 +4585,7 @@ function VideoReformatter({ onBack }) {
   const [downloading, setDownloading] = useState({}); // {formatId: true}
   const [downloadError, setDownloadError] = useState(null);
   const [batchDownloading, setBatchDownloading] = useState(false);
+  const batchAbortRef = useRef(null);
 
   // Fetch video from ScrapeCreators
   const fetchVideo = async () => {
@@ -4620,12 +4628,25 @@ function VideoReformatter({ onBack }) {
       if (platform === "tiktok") {
         const ad = data.aweme_detail || data.data?.aweme_detail || data;
         const v = ad?.video;
+        const brSorted = [...(v?.bit_rate || [])].sort((a, b) => (b.bit_rate || 0) - (a.bit_rate || 0));
+        const videoUrls = [
+          ...(v?.download_addr?.url_list || []),
+          ...brSorted.flatMap((br) => br.play_addr?.url_list || []),
+          ...(v?.play_addr?.url_list || []),
+        ].filter(Boolean);
+        if (ad?.download_url) videoUrls.unshift(ad.download_url);
+        if (data.download_url) videoUrls.unshift(data.download_url);
+        if (data.video_url) videoUrls.unshift(data.video_url);
+        const uniqueUrls = [...new Set(videoUrls)];
+        console.log("[VideoReformatter] Found", uniqueUrls.length, "video URLs");
+
         parsed = {
           platform: "TikTok",
           author: ad?.author?.nickname || "Unknown",
           authorHandle: ad?.author?.unique_id || "",
           caption: ad?.desc || "",
-          videoUrl: v?.play_addr?.url_list?.[0] || v?.download_addr?.url_list?.[0] || v?.bit_rate?.[0]?.play_addr?.url_list?.[0] || "",
+          videoUrl: uniqueUrls[0] || "",
+          videoUrls: uniqueUrls,
           coverUrl: v?.cover?.url_list?.[0] || v?.origin_cover?.url_list?.[0] || v?.dynamic_cover?.url_list?.[0] || "",
           width: v?.width || 0,
           height: v?.height || 0,
@@ -4656,11 +4677,16 @@ function VideoReformatter({ onBack }) {
         if (!isVideo || !parsed.videoUrl) {
           throw new Error("This post doesn't appear to be a video. Paste a Reel or video URL.");
         }
+        const igUrls = [parsed.videoUrl, ...(item.video_versions?.map((x) => x?.url).filter(Boolean) || [])].filter(Boolean);
+        parsed.videoUrls = [...new Set(igUrls)];
+        parsed.videoUrl = parsed.videoUrls[0] || parsed.videoUrl;
       }
 
       if (!parsed.videoUrl) {
         throw new Error("Could not extract video URL from the API response. The video may be private or unavailable.");
       }
+
+      if (!parsed.videoUrls) parsed.videoUrls = [parsed.videoUrl];
 
       setVideo(parsed);
 
@@ -4669,17 +4695,39 @@ function VideoReformatter({ onBack }) {
           const cacheRes = await fetch("/api/cache-video", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ videoUrl: parsed.videoUrl, filename: parsed.authorHandle || "video" }),
+            body: JSON.stringify({
+              videoUrl: parsed.videoUrl,
+              videoUrls: parsed.videoUrls || [parsed.videoUrl],
+              filename: parsed.authorHandle || "video",
+            }),
           });
           if (cacheRes.ok) {
             const cacheData = await cacheRes.json();
             setVideo((prev) =>
-              prev ? { ...prev, cacheId: cacheData.cacheId, cachedWidth: cacheData.width, cachedHeight: cacheData.height, cachedDuration: cacheData.duration } : prev,
+              prev
+                ? {
+                    ...prev,
+                    cacheId: cacheData.cacheId,
+                    cached: true,
+                    cacheFailed: false,
+                    cachedWidth: cacheData.width,
+                    cachedHeight: cacheData.height,
+                    cachedDuration: cacheData.duration,
+                    cacheSizeBytes: cacheData.size,
+                  }
+                : prev,
             );
-            console.log("[VideoReformatter] Video cached:", cacheData.cacheId);
+            console.log("[VideoReformatter] Video cached:", cacheData.cacheId, `${(cacheData.size / 1048576).toFixed(1)}MB`);
+          } else {
+            const errData = await cacheRes.json().catch(() => ({}));
+            console.error("[VideoReformatter] Cache FAILED:", errData.error);
+            setDownloadError(`Video cache failed: ${errData.error || "Server couldn't download the video"}. Try a different video or download manually.`);
+            setVideo((prev) => (prev ? { ...prev, cacheFailed: true } : prev));
           }
         } catch (e) {
-          console.warn("[VideoReformatter] Cache failed (reformat may fail):", e.message);
+          console.error("[VideoReformatter] Cache exception:", e.message);
+          setDownloadError(`Video cache failed: ${e.message}`);
+          setVideo((prev) => (prev ? { ...prev, cacheFailed: true } : prev));
         }
       }
     } catch (e) {
@@ -4701,6 +4749,7 @@ function VideoReformatter({ onBack }) {
         body: JSON.stringify({
           cacheId: video.cacheId || null,
           videoUrl: video.cacheId ? null : video.videoUrl,
+          videoUrls: video.cacheId ? undefined : (video.videoUrls || [video.videoUrl]),
           filename: `${video.authorHandle || "video"}_original`,
         }),
       });
@@ -4724,18 +4773,22 @@ function VideoReformatter({ onBack }) {
   };
 
   const downloadAll = async () => {
-    if (!video) return;
+    if (!video?.cacheId) {
+      setDownloadError("Video not cached yet. Wait for caching to finish.");
+      return;
+    }
     setBatchDownloading(true);
     setDownloadError(null);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 600000);
+    batchAbortRef.current = new AbortController();
+    const controller = batchAbortRef.current;
+    const timeout = setTimeout(() => controller.abort(), 480000);
     try {
       const res = await fetch("/api/reformat-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cacheId: video.cacheId || null,
-          videoUrl: video.cacheId ? null : video.videoUrl,
+          cacheId: video.cacheId,
+          videoUrl: null,
           authorHandle: video.authorHandle || "video",
         }),
         signal: controller.signal,
@@ -4747,6 +4800,8 @@ function VideoReformatter({ onBack }) {
       }
 
       const blob = await res.blob();
+      if (blob.size < 1000) throw new Error("ZIP file is too small — reformatting may have failed.");
+
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `${video.authorHandle || "video"}_all_formats.zip`;
@@ -4756,13 +4811,14 @@ function VideoReformatter({ onBack }) {
       URL.revokeObjectURL(a.href);
     } catch (e) {
       if (e.name === "AbortError") {
-        setDownloadError("Batch processing timed out. Try downloading formats individually.");
+        setDownloadError("Processing timed out after 8 minutes. The video may be too long. Try downloading formats individually or use a shorter clip.");
       } else {
         setDownloadError(`Batch download failed: ${e.message}`);
       }
     } finally {
       clearTimeout(timeout);
       setBatchDownloading(false);
+      batchAbortRef.current = null;
     }
   };
 
@@ -4783,6 +4839,7 @@ function VideoReformatter({ onBack }) {
         body: JSON.stringify({
           cacheId: video.cacheId || null,
           videoUrl: video.cacheId ? null : video.videoUrl,
+          videoUrls: video.cacheId ? undefined : (video.videoUrls || [video.videoUrl]),
           width: w,
           height: h,
           name: `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
@@ -4944,45 +5001,68 @@ function VideoReformatter({ onBack }) {
               >
                 {downloading.original ? "Downloading..." : "Download Original"}
               </button>
-              {(video.cacheId || video.videoUrl) ? (
+
+              {batchDownloading ? (
+                <div style={{ padding: 16, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, marginTop: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <div style={{ width: 16, height: 16, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Processing 4 formats...</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>
+                    1×1 Square · 4×5 Feed · 9×16 Story · 16×9 Landscape
+                  </div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>This takes 1-3 minutes. Don&apos;t close this tab.</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      batchAbortRef.current?.abort();
+                      setBatchDownloading(false);
+                    }}
+                    style={{ marginTop: 10, padding: "6px 14px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => void downloadAll()}
-                  disabled={batchDownloading}
+                  disabled={!video.cacheId}
                   style={{
                     padding: "12px 24px",
                     borderRadius: 8,
                     border: "none",
-                    background: batchDownloading ? t.cardAlt : t.green,
-                    color: batchDownloading ? t.textMuted : (t.isLight ? "#fff" : "#000"),
+                    background: video.cacheId ? t.green : t.cardAlt,
+                    color: video.cacheId ? (t.isLight ? "#fff" : "#000") : t.textFaint,
                     fontSize: 14,
                     fontWeight: 700,
-                    cursor: batchDownloading ? "wait" : "pointer",
-                    opacity: batchDownloading ? 0.7 : 1,
+                    cursor: video.cacheId ? "pointer" : "not-allowed",
                     marginTop: 8,
                     width: "100%",
                   }}
                 >
-                  {batchDownloading ? "Processing 4 formats..." : "⬇ Download All Formats (ZIP)"}
+                  {video.cacheId ? "⬇ Download All Formats (ZIP)" : video.cacheFailed ? "ZIP unavailable — cache failed" : "Caching video..."}
                 </button>
-              ) : null}
-              {!batchDownloading ? (
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
-                  1×1 Square · 4×5 Feed · 9×16 Story · 16×9 Landscape
-                </div>
-              ) : (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 4 }}>This may take 1-2 minutes...</div>
-                  <div style={{ height: 3, borderRadius: 2, background: t.border, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: t.green, borderRadius: 2, animation: "pulse 1.5s ease-in-out infinite", width: "60%" }} />
+              )}
+
+              <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
+                {video.cacheId ? (
+                  <div style={{ color: t.green }}>
+                    ✓ Cached on server
+                    {video.cacheSizeBytes != null ? ` (${(video.cacheSizeBytes / 1048576).toFixed(1)} MB)` : ""}
+                    {" — "}ready for reformat & ZIP
                   </div>
-                </div>
-              )}
-              {video.cacheId ? (
-                <div style={{ fontSize: 11, color: t.green, marginTop: 6 }}>✓ Video cached — ready to reformat</div>
-              ) : (
-                <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>Caching video on server...</div>
-              )}
+                ) : video.cacheFailed ? (
+                  <div style={{ color: t.orange }}>
+                    Cache failed — try individual formats below or Download Original (server will retry URLs).
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: t.textMuted }}>
+                    <div style={{ width: 12, height: 12, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                    <span>Caching video on server…</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

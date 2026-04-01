@@ -40,39 +40,111 @@ app.get("/api/health", async (req, res) => {
   res.json({ status: "ok", ffmpeg: ffOk, ffprobe: fpOk, ffmpegPath: FFMPEG, version: ffVer, node: process.version, uptime: Math.round(process.uptime()) });
 });
 
-// ── Download with proper headers + redirect following ──
+// ── Download with proper headers + redirect following + hard timeouts ──
 function download(url, dest, depth = 0) {
   return new Promise((resolve, reject) => {
     if (depth > 6) return reject(new Error("Too many redirects"));
+
+    const timeout = setTimeout(() => {
+      try { fs.unlinkSync(dest); } catch {}
+      reject(new Error("Download timed out after 30 seconds"));
+    }, 30000);
+
     let parsedUrl;
-    try { parsedUrl = new URL(url); } catch { return reject(new Error("Invalid URL")); }
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      clearTimeout(timeout);
+      return reject(new Error("Invalid URL"));
+    }
+
     const client = parsedUrl.protocol === "https:" ? https : http;
     const file = fs.createWriteStream(dest);
-    client.get({
-      hostname: parsedUrl.hostname,
-      path: parsedUrl.pathname + parsedUrl.search,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Referer": "https://www.tiktok.com/",
-        "Accept": "*/*",
-        "Accept-Encoding": "identity",
+    const referer = parsedUrl.hostname.includes("tiktok")
+      ? "https://www.tiktok.com/"
+      : parsedUrl.hostname.includes("instagram")
+        ? "https://www.instagram.com/"
+        : "";
+
+    const req = client.get(
+      {
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          Referer: referer,
+          Accept: "*/*",
+          "Accept-Encoding": "identity",
+          Connection: "keep-alive",
+        },
+        timeout: 30000,
       },
-    }, (resp) => {
-      if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-        file.close();
-        try { fs.unlinkSync(dest); } catch {}
-        const next = /^https?:\/\//i.test(resp.headers.location) ? resp.headers.location : new URL(resp.headers.location, url).href;
-        return download(next, dest, depth + 1).then(resolve).catch(reject);
-      }
-      if (resp.statusCode !== 200) {
-        file.close();
-        try { fs.unlinkSync(dest); } catch {}
-        return reject(new Error(`HTTP ${resp.statusCode}`));
-      }
-      resp.pipe(file);
-      file.on("finish", () => file.close(resolve));
-    }).on("error", (e) => { file.close(); try { fs.unlinkSync(dest); } catch {} reject(e); });
+      (resp) => {
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          clearTimeout(timeout);
+          file.close();
+          try { fs.unlinkSync(dest); } catch {}
+          const next = /^https?:\/\//i.test(resp.headers.location)
+            ? resp.headers.location
+            : new URL(resp.headers.location, url).href;
+          return download(next, dest, depth + 1).then(resolve).catch(reject);
+        }
+        if (resp.statusCode !== 200) {
+          clearTimeout(timeout);
+          file.close();
+          try { fs.unlinkSync(dest); } catch {}
+          return reject(new Error(`HTTP ${resp.statusCode} from ${parsedUrl.hostname}`));
+        }
+        resp.pipe(file);
+        resp.on("error", (e) => {
+          clearTimeout(timeout);
+          file.close();
+          try { fs.unlinkSync(dest); } catch {}
+          reject(e);
+        });
+        file.on("finish", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      },
+    );
+
+    req.on("error", (e) => {
+      clearTimeout(timeout);
+      file.close();
+      try { fs.unlinkSync(dest); } catch {}
+      reject(e);
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      clearTimeout(timeout);
+      file.close();
+      try { fs.unlinkSync(dest); } catch {}
+      reject(new Error("Connection timed out"));
+    });
   });
+}
+
+async function downloadWithRetry(urls, dest) {
+  const errors = [];
+  const list = [...new Set((urls || []).filter(Boolean))];
+  for (const u of list) {
+    try {
+      console.log(`[download] Trying: ${u.substring(0, 80)}...`);
+      await download(u, dest);
+      const sz = fs.statSync(dest).size;
+      if (sz > 5000) {
+        console.log(`[download] Success: ${(sz / 1048576).toFixed(1)}MB`);
+        return;
+      }
+      try { fs.unlinkSync(dest); } catch {}
+      errors.push(`URL returned tiny file (${sz} bytes)`);
+    } catch (e) {
+      errors.push(`${e.message} (${u.substring(0, 50)}...)`);
+      try { fs.unlinkSync(dest); } catch {}
+    }
+  }
+  throw new Error(`All download URLs failed: ${errors.join("; ")}`);
 }
 
 // ── Video cache (download once, reuse for reformats) ──
@@ -89,22 +161,22 @@ setInterval(() => {
 }, 300000);
 
 app.post("/api/cache-video", async (req, res) => {
-  const { videoUrl, filename } = req.body;
-  if (!videoUrl) return res.status(400).json({ error: "Missing videoUrl" });
+  const { videoUrl, videoUrls, filename } = req.body;
+  const urls = (Array.isArray(videoUrls) && videoUrls.length > 0
+    ? [...new Set(videoUrls.filter(Boolean))]
+    : videoUrl
+      ? [videoUrl]
+      : []);
+  if (urls.length === 0) return res.status(400).json({ error: "Missing videoUrl" });
 
   const cacheId = "cache-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
   const filePath = path.join(os.tmpdir(), `${cacheId}.mp4`);
 
   try {
-    console.log(`[cache] Downloading ${videoUrl.substring(0, 60)}...`);
-    await download(videoUrl, filePath);
+    console.log(`[cache] Downloading (${urls.length} URL(s) to try)...`);
+    await downloadWithRetry(urls, filePath);
     const sz = fs.statSync(filePath).size;
     console.log(`[cache] Cached ${(sz / 1048576).toFixed(1)}MB as ${cacheId}`);
-
-    if (sz < 5000) {
-      try { fs.unlinkSync(filePath); } catch {}
-      throw new Error("Download too small — video URL may be invalid or expired.");
-    }
 
     let width = 0, height = 0, duration = 0;
     try {
@@ -114,7 +186,7 @@ app.post("/api/cache-video", async (req, res) => {
       duration = Math.round(Number(probe.format?.duration || 0));
     } catch {}
 
-    videoCache.set(cacheId, { filePath, originalUrl: videoUrl, cachedAt: Date.now(), filename: filename || "video" });
+    videoCache.set(cacheId, { filePath, originalUrl: urls[0], cachedAt: Date.now(), filename: filename || "video" });
 
     res.json({ cacheId, size: sz, width, height, duration });
   } catch (e) {
@@ -126,8 +198,14 @@ app.post("/api/cache-video", async (req, res) => {
 
 // ── Reformat ──
 app.post("/api/reformat", async (req, res) => {
-  const { videoUrl, cacheId, width, height, name } = req.body;
-  if ((!videoUrl && !cacheId) || width == null || height == null) return res.status(400).json({ error: "Missing videoUrl/cacheId, width, or height" });
+  const { videoUrl, videoUrls, cacheId, width, height, name } = req.body;
+  const urlList =
+    Array.isArray(videoUrls) && videoUrls.length > 0
+      ? [...new Set(videoUrls.filter(Boolean))]
+      : videoUrl
+        ? [videoUrl]
+        : [];
+  if ((!urlList.length && !cacheId) || width == null || height == null) return res.status(400).json({ error: "Missing videoUrl/cacheId, width, or height" });
 
   const w = Number(width), h = Number(height);
   const tmp = os.tmpdir();
@@ -137,12 +215,12 @@ app.post("/api/reformat", async (req, res) => {
   if (cacheId && videoCache.has(cacheId)) {
     inp = videoCache.get(cacheId).filePath;
     console.log(`[reformat] Using cached video ${cacheId}`);
-  } else if (videoUrl) {
+  } else if (urlList.length) {
     inp = path.join(tmp, `in-${Date.now()}.mp4`);
     needsCleanupInp = true;
-    console.log(`[reformat] ${w}x${h} from ${videoUrl.substring(0, 60)}...`);
+    console.log(`[reformat] ${w}x${h} from ${urlList.length} URL(s) to try...`);
     try {
-      await download(videoUrl, inp);
+      await downloadWithRetry(urlList, inp);
       const sz = fs.statSync(inp).size;
       console.log(`[reformat] Downloaded ${(sz / 1048576).toFixed(1)}MB`);
       if (sz < 5000) {
@@ -211,18 +289,24 @@ app.post("/api/reformat", async (req, res) => {
 
 // ── Proxy download (passes video through server to avoid CORS) ──
 app.post("/api/proxy-download", async (req, res) => {
-  const { videoUrl, cacheId, filename } = req.body;
+  const { videoUrl, videoUrls, cacheId, filename } = req.body;
+  const urlList =
+    Array.isArray(videoUrls) && videoUrls.length > 0
+      ? [...new Set(videoUrls.filter(Boolean))]
+      : videoUrl
+        ? [videoUrl]
+        : [];
 
   let filePath;
   let needsCleanup = false;
 
   if (cacheId && videoCache.has(cacheId)) {
     filePath = videoCache.get(cacheId).filePath;
-  } else if (videoUrl) {
+  } else if (urlList.length) {
     filePath = path.join(os.tmpdir(), `proxy-${Date.now()}.mp4`);
     needsCleanup = true;
     try {
-      await download(videoUrl, filePath);
+      await downloadWithRetry(urlList, filePath);
       const sz = fs.statSync(filePath).size;
       if (sz < 5000) {
         try { fs.unlinkSync(filePath); } catch {}
@@ -254,8 +338,14 @@ app.post("/api/proxy-download", async (req, res) => {
 
 // ── Batch reformat — all 4 ad ratios in a ZIP ──
 app.post("/api/reformat-all", async (req, res) => {
-  const { videoUrl, cacheId, authorHandle } = req.body;
-  if (!videoUrl && !cacheId) return res.status(400).json({ error: "Missing video source" });
+  const { videoUrl, videoUrls, cacheId, authorHandle } = req.body;
+  const urlList =
+    Array.isArray(videoUrls) && videoUrls.length > 0
+      ? [...new Set(videoUrls.filter(Boolean))]
+      : videoUrl
+        ? [videoUrl]
+        : [];
+  if (!urlList.length && !cacheId) return res.status(400).json({ error: "Missing video source" });
 
   const formats = [
     { name: "1x1_Square", width: 1080, height: 1080 },
@@ -271,11 +361,11 @@ app.post("/api/reformat-all", async (req, res) => {
 
   if (cacheId && videoCache.has(cacheId)) {
     inp = videoCache.get(cacheId).filePath;
-  } else if (videoUrl) {
+  } else if (urlList.length) {
     inp = path.join(tmp, `batch-in-${Date.now()}.mp4`);
     needsCleanupInp = true;
     try {
-      await download(videoUrl, inp);
+      await downloadWithRetry(urlList, inp);
       const sz = fs.statSync(inp).size;
       if (sz < 5000) throw new Error("Download too small — video URL may have expired.");
     } catch (e) {
@@ -324,14 +414,20 @@ app.post("/api/reformat-all", async (req, res) => {
       }
 
       console.log(`[batch] ${fmt.name} (${w}x${h})...`);
-      await new Promise((ok, no) => {
-        execFile(
-          FFMPEG,
-          ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", outPath],
-          { timeout: 300000, maxBuffer: 10485760 },
-          (e, _, stderr) => (e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok()),
-        );
-      });
+      const formatTimeout = 120000;
+      await Promise.race([
+        new Promise((ok, no) => {
+          execFile(
+            FFMPEG,
+            ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", outPath],
+            { timeout: formatTimeout, maxBuffer: 10485760 },
+            (e, _, stderr) => (e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok()),
+          );
+        }),
+        new Promise((_, no) =>
+          setTimeout(() => no(new Error(`Timed out processing ${fmt.name} (${formatTimeout / 1000}s)`)), formatTimeout),
+        ),
+      ]);
 
       outputFiles.push({ path: outPath, name: `${prefix}_${fmt.name}.mp4` });
       console.log(`[batch] ${fmt.name} done.`);
