@@ -40,8 +40,12 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.18.0";
+const APP_VERSION = "5.19.0";
 const CHANGELOG = [
+  { version: "5.19.0", date: "2026-04-01", changes: [
+    "Notes textarea on creator detail is smaller (2 rows instead of large box)",
+    "Notes column in table is more compact",
+  ]},
   { version: "5.18.0", date: "2026-04-01", changes: [
     "Channel Pipeline reads LIVE from Google Sheets — all formulas, all data, always current",
     "Server-side Google Sheets proxy with caching",
@@ -6065,7 +6069,21 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               onBlur={(e) => updateCreator(c.id, { address: e.target.value })}
               placeholder="No address yet — creator can add from their portal"
               rows={2}
-              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, resize: "vertical", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: `1px solid ${t.border}`,
+                background: t.inputBg,
+                color: t.inputText,
+                fontSize: 13,
+                resize: "vertical",
+                fontFamily: "inherit",
+                outline: "none",
+                boxSizing: "border-box",
+                minHeight: 44,
+                maxHeight: 100,
+              }}
             />
           </div>
         </div>
@@ -6202,7 +6220,28 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       <div id="creator-notes-section" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8, color: t.text }}>Notes</div>
-        <textarea value={c.notes || ""} onChange={(e) => updateCreator(c.id, { notes: e.target.value })} rows={8} style={{ width: "100%", padding: 12, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.5, resize: "vertical" }} placeholder="Campaign notes, hooks, performance…" />
+        <textarea
+          value={c.notes || ""}
+          onChange={(e) => updateCreator(c.id, { notes: e.target.value })}
+          placeholder="Campaign notes, hooks, performance..."
+          rows={2}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: `1px solid ${t.border}`,
+            background: t.inputBg,
+            color: t.inputText,
+            fontSize: 13,
+            resize: "vertical",
+            fontFamily: "inherit",
+            outline: "none",
+            boxSizing: "border-box",
+            minHeight: 48,
+            maxHeight: 150,
+            lineHeight: 1.45,
+          }}
+        />
       </div>
 
       <ManagerCreatorChat creatorId={c.id} t={t} />
@@ -9296,7 +9335,15 @@ export default function App() {
                         setEditingCell({ creatorId: c.id, column: "notes" });
                       }}
                       title="Double-click to edit"
-                      style={{ fontSize: 11, color: t.textFaint }}
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        color: t.textMuted,
+                        maxWidth: 150,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
                     >
                       {n || "—"}
                     </span>
@@ -9317,6 +9364,12 @@ export default function App() {
                   <div style={{ fontSize: 13, color: t.textMuted }}>
                     {creators.filter((cr) => cr.status === "Active").length} active · {creators.filter((cr) => cr.ibScore != null).length} scored · {creators.length} total
                   </div>
+                  {creators.length > 0 &&
+                    creators.filter((c) => c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl).length < creators.length * 0.3 && (
+                      <div style={{ fontSize: 11, color: t.orange, marginTop: 4 }}>
+                        Most creators need enrichment to show avatars. Use Bulk Enrich or click into each profile → Refresh Metrics.
+                      </div>
+                    )}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <button
