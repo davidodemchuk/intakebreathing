@@ -37,8 +37,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.2.0";
+const APP_VERSION = "5.3.0";
 const CHANGELOG = [
+  { version: "5.3.0", date: "2026-04-01", changes: [
+    "Fixed video preview — shows thumbnail image instead of broken video player",
+    "Fixed reformat timeout — server caches video immediately on fetch, reformat uses cached copy",
+    "Download Original and all reformat operations use server-cached video",
+  ]},
   { version: "5.2.0", date: "2026-04-01", changes: [
     "Homepage redesigned to match intakebreathing.com brand — dark, minimal, editorial",
     "Removed metrics bar from homepage",
@@ -4650,6 +4655,25 @@ function VideoReformatter({ onBack }) {
       }
 
       setVideo(parsed);
+
+      if (parsed.videoUrl) {
+        try {
+          const cacheRes = await fetch("/api/cache-video", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ videoUrl: parsed.videoUrl, filename: parsed.authorHandle || "video" }),
+          });
+          if (cacheRes.ok) {
+            const cacheData = await cacheRes.json();
+            setVideo((prev) =>
+              prev ? { ...prev, cacheId: cacheData.cacheId, cachedWidth: cacheData.width, cachedHeight: cacheData.height, cachedDuration: cacheData.duration } : prev,
+            );
+            console.log("[VideoReformatter] Video cached:", cacheData.cacheId);
+          }
+        } catch (e) {
+          console.warn("[VideoReformatter] Cache failed (reformat may fail):", e.message);
+        }
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -4659,7 +4683,7 @@ function VideoReformatter({ onBack }) {
 
   // Download original via server proxy (avoids CORS)
   const downloadOriginal = async () => {
-    if (!video?.videoUrl) return;
+    if (!video || (!video.videoUrl && !video.cacheId)) return;
     setDownloading((prev) => ({ ...prev, original: true }));
     setDownloadError(null);
     try {
@@ -4667,7 +4691,8 @@ function VideoReformatter({ onBack }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          videoUrl: video.videoUrl,
+          cacheId: video.cacheId || null,
+          videoUrl: video.cacheId ? null : video.videoUrl,
           filename: `${video.authorHandle || "video"}_original`,
         }),
       });
@@ -4692,28 +4717,27 @@ function VideoReformatter({ onBack }) {
 
   // Reformat via server FFmpeg
   const reformat = async (format) => {
-    if (!video?.videoUrl) return;
+    if (!video || (!video.videoUrl && !video.cacheId)) return;
     const [w, h] = String(format.dimensions).split(/[×x]/i).map(Number);
     if (!w || !h) return;
 
     setDownloading((prev) => ({ ...prev, [format.id]: true }));
     setDownloadError(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180000);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000); // 3 min timeout
-      
       const res = await fetch("/api/reformat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          videoUrl: video.videoUrl,
+          cacheId: video.cacheId || null,
+          videoUrl: video.cacheId ? null : video.videoUrl,
           width: w,
           height: h,
           name: `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
         }),
         signal: controller.signal,
       });
-      clearTimeout(timeout);
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -4730,11 +4754,12 @@ function VideoReformatter({ onBack }) {
       URL.revokeObjectURL(a.href);
     } catch (e) {
       if (e.name === "AbortError") {
-        setDownloadError("Processing timed out (3 min). The video may be too long or the server is overloaded. Try downloading the original and reformatting in CapCut or Premiere.");
+        setDownloadError("Processing timed out. Try downloading the original and reformatting in CapCut or Premiere.");
       } else {
         setDownloadError(`Reformat failed: ${e.message}`);
       }
     } finally {
+      clearTimeout(timeout);
       setDownloading((prev) => ({ ...prev, [format.id]: false }));
     }
   };
@@ -4792,18 +4817,36 @@ function VideoReformatter({ onBack }) {
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 24 }}>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             
-            {/* Left: thumbnail or placeholder */}
+            {/* Left: thumbnail (TikTok blocks direct <video> playback in browser) */}
             <div style={{ width: 180, flexShrink: 0 }}>
-              {video.videoUrl ? (
-                <video
-                  src={video.videoUrl}
-                  controls
-                  preload="metadata"
+              {video.coverUrl ? (
+                <img
+                  src={video.coverUrl}
+                  alt="Video thumbnail"
+                  referrerPolicy="no-referrer"
                   style={{ width: 180, maxHeight: 320, objectFit: "cover", borderRadius: 8, background: t.cardAlt, display: "block" }}
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                    const ph = e.target.nextElementSibling;
+                    if (ph) ph.style.display = "flex";
+                  }}
                 />
-              ) : (
-                <div style={{ width: 180, height: 240, borderRadius: 8, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: t.textFaint }}>▶</div>
-              )}
+              ) : null}
+              <div
+                style={{
+                  width: 180,
+                  height: 240,
+                  borderRadius: 8,
+                  background: t.cardAlt,
+                  display: video.coverUrl ? "none" : "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 32,
+                  color: t.textFaint,
+                }}
+              >
+                ▶
+              </div>
             </div>
 
             {/* Right: info */}
@@ -4850,6 +4893,11 @@ function VideoReformatter({ onBack }) {
               >
                 {downloading.original ? "Downloading..." : "Download Original"}
               </button>
+              {video.cacheId ? (
+                <div style={{ fontSize: 11, color: t.green, marginTop: 6 }}>✓ Video cached — ready to reformat</div>
+              ) : (
+                <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>Caching video on server...</div>
+              )}
             </div>
           </div>
         </div>
@@ -4870,7 +4918,7 @@ function VideoReformatter({ onBack }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
               {group.items.map((item) => {
                 const isLoading = !!downloading[item.id];
-                const canClick = !!video?.videoUrl && !isLoading;
+                const canClick = !!video && !!(video.cacheId || video.videoUrl) && !isLoading;
                 return (
                   <div
                     key={item.id}

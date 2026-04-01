@@ -74,26 +74,97 @@ function download(url, dest, depth = 0) {
   });
 }
 
-// ── Reformat ──
-app.post("/api/reformat", async (req, res) => {
-  const { videoUrl, width, height, name } = req.body;
-  if (!videoUrl || !width || !height) return res.status(400).json({ error: "Missing videoUrl, width, or height" });
-  
-  const w = Number(width), h = Number(height);
-  const tmp = os.tmpdir();
-  const inp = path.join(tmp, `in-${Date.now()}.mp4`);
-  const out = path.join(tmp, `out-${Date.now()}.mp4`);
-  const cleanup = () => { try { fs.unlinkSync(inp); } catch {} try { fs.unlinkSync(out); } catch {} };
+// ── Video cache (download once, reuse for reformats) ──
+const videoCache = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of videoCache) {
+    if (now - entry.cachedAt > 600000) {
+      try { fs.unlinkSync(entry.filePath); } catch {}
+      videoCache.delete(id);
+    }
+  }
+}, 300000);
+
+app.post("/api/cache-video", async (req, res) => {
+  const { videoUrl, filename } = req.body;
+  if (!videoUrl) return res.status(400).json({ error: "Missing videoUrl" });
+
+  const cacheId = "cache-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+  const filePath = path.join(os.tmpdir(), `${cacheId}.mp4`);
 
   try {
-    console.log(`[reformat] ${w}x${h} from ${videoUrl.substring(0, 60)}...`);
-    
-    // Download
-    await download(videoUrl, inp);
-    const sz = fs.statSync(inp).size;
-    console.log(`[reformat] Downloaded ${(sz / 1048576).toFixed(1)}MB`);
-    if (sz < 5000) throw new Error("Download too small — video URL may have expired. Re-fetch the video and try again.");
+    console.log(`[cache] Downloading ${videoUrl.substring(0, 60)}...`);
+    await download(videoUrl, filePath);
+    const sz = fs.statSync(filePath).size;
+    console.log(`[cache] Cached ${(sz / 1048576).toFixed(1)}MB as ${cacheId}`);
 
+    if (sz < 5000) {
+      try { fs.unlinkSync(filePath); } catch {}
+      throw new Error("Download too small — video URL may be invalid or expired.");
+    }
+
+    let width = 0, height = 0, duration = 0;
+    try {
+      const probe = await new Promise((ok, no) => execFile(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_streams", "-show_format", filePath], { timeout: 15000, maxBuffer: 2097152 }, (e, o) => e ? no(e) : ok(JSON.parse(o))));
+      const vs = probe.streams?.find((s) => s.codec_type === "video");
+      if (vs) { width = vs.width || 0; height = vs.height || 0; }
+      duration = Math.round(Number(probe.format?.duration || 0));
+    } catch {}
+
+    videoCache.set(cacheId, { filePath, originalUrl: videoUrl, cachedAt: Date.now(), filename: filename || "video" });
+
+    res.json({ cacheId, size: sz, width, height, duration });
+  } catch (e) {
+    try { fs.unlinkSync(filePath); } catch {}
+    console.error("[cache] ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Reformat ──
+app.post("/api/reformat", async (req, res) => {
+  const { videoUrl, cacheId, width, height, name } = req.body;
+  if ((!videoUrl && !cacheId) || width == null || height == null) return res.status(400).json({ error: "Missing videoUrl/cacheId, width, or height" });
+
+  const w = Number(width), h = Number(height);
+  const tmp = os.tmpdir();
+  let inp;
+  let needsCleanupInp = false;
+
+  if (cacheId && videoCache.has(cacheId)) {
+    inp = videoCache.get(cacheId).filePath;
+    console.log(`[reformat] Using cached video ${cacheId}`);
+  } else if (videoUrl) {
+    inp = path.join(tmp, `in-${Date.now()}.mp4`);
+    needsCleanupInp = true;
+    console.log(`[reformat] ${w}x${h} from ${videoUrl.substring(0, 60)}...`);
+    try {
+      await download(videoUrl, inp);
+      const sz = fs.statSync(inp).size;
+      console.log(`[reformat] Downloaded ${(sz / 1048576).toFixed(1)}MB`);
+      if (sz < 5000) {
+        try { fs.unlinkSync(inp); } catch {}
+        if (!res.headersSent) return res.status(500).json({ error: "Download too small — video URL may have expired. Re-fetch the video." });
+        return;
+      }
+    } catch (e) {
+      try { fs.unlinkSync(inp); } catch {}
+      if (!res.headersSent) return res.status(500).json({ error: e.message });
+      return;
+    }
+  } else {
+    return res.status(400).json({ error: "Video not found in cache. Re-fetch the video." });
+  }
+
+  const out = path.join(tmp, `out-${Date.now()}.mp4`);
+  const cleanup = () => {
+    if (needsCleanupInp) try { fs.unlinkSync(inp); } catch {}
+    try { fs.unlinkSync(out); } catch {}
+  };
+
+  try {
     // Probe
     let srcW = 1080, srcH = 1920;
     try {
@@ -139,22 +210,43 @@ app.post("/api/reformat", async (req, res) => {
 
 // ── Proxy download (passes video through server to avoid CORS) ──
 app.post("/api/proxy-download", async (req, res) => {
-  const { videoUrl, filename } = req.body;
-  if (!videoUrl) return res.status(400).json({ error: "Missing videoUrl" });
-  
-  const tmp = path.join(os.tmpdir(), `proxy-${Date.now()}.mp4`);
+  const { videoUrl, cacheId, filename } = req.body;
+
+  let filePath;
+  let needsCleanup = false;
+
+  if (cacheId && videoCache.has(cacheId)) {
+    filePath = videoCache.get(cacheId).filePath;
+  } else if (videoUrl) {
+    filePath = path.join(os.tmpdir(), `proxy-${Date.now()}.mp4`);
+    needsCleanup = true;
+    try {
+      await download(videoUrl, filePath);
+      const sz = fs.statSync(filePath).size;
+      if (sz < 5000) {
+        try { fs.unlinkSync(filePath); } catch {}
+        throw new Error("Download too small.");
+      }
+    } catch (e) {
+      try { fs.unlinkSync(filePath); } catch {}
+      if (!res.headersSent) res.status(500).json({ error: e.message });
+      return;
+    }
+  } else {
+    return res.status(400).json({ error: "No video source" });
+  }
+
   try {
-    await download(videoUrl, tmp);
-    const sz = fs.statSync(tmp).size;
-    if (sz < 5000) throw new Error("Download too small — URL may have expired.");
+    const sz = fs.statSync(filePath).size;
     res.setHeader("Content-Disposition", `attachment; filename="${filename || "video"}.mp4"`);
     res.setHeader("Content-Type", "video/mp4");
     res.setHeader("Content-Length", sz);
-    const stream = fs.createReadStream(tmp);
+    const stream = fs.createReadStream(filePath);
     stream.pipe(res);
-    stream.on("close", () => { try { fs.unlinkSync(tmp); } catch {} });
+    stream.on("close", () => { if (needsCleanup) try { fs.unlinkSync(filePath); } catch {} });
+    stream.on("error", () => { if (needsCleanup) try { fs.unlinkSync(filePath); } catch {} });
   } catch (e) {
-    try { fs.unlinkSync(tmp); } catch {}
+    if (needsCleanup) try { fs.unlinkSync(filePath); } catch {}
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
 });
