@@ -92,23 +92,34 @@ app.post("/api/reformat", async (req, res) => {
     const srcW = videoStream ? videoStream.width : 1080;
     const srcH = videoStream ? videoStream.height : 1920;
 
+    const w = Number(width);
+    const h = Number(height);
     const srcAspect = srcW / srcH;
-    const tgtAspect = width / height;
+    const tgtAspect = w / h;
 
     let filterComplex;
-    if (Math.abs(srcAspect - tgtAspect) < 0.01) {
-      filterComplex = `scale=${width}:${height}`;
-    } else if (srcAspect > tgtAspect) {
-      filterComplex = `scale=-2:${height},crop=${width}:${height}`;
+
+    if (Math.abs(srcAspect - tgtAspect) < 0.05) {
+      // Same aspect ratio — just scale directly
+      filterComplex = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black`;
     } else {
-      filterComplex = `scale=${width}:-2,crop=${width}:${height}`;
+      // Different aspect ratio — blurred background + centered original
+      filterComplex = [
+        `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=20:20[bg]`,
+        `[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg]`,
+        `[bg][fg]overlay=(W-w)/2:(H-h)/2`,
+      ].join(";");
     }
 
-    await runFFmpeg([
-      "-i",
-      inputPath,
-      "-vf",
-      filterComplex,
+    const ffmpegArgs = ["-i", inputPath];
+
+    if (filterComplex.includes("[")) {
+      ffmpegArgs.push("-filter_complex", filterComplex);
+    } else {
+      ffmpegArgs.push("-vf", filterComplex);
+    }
+
+    ffmpegArgs.push(
       "-c:v",
       "libx264",
       "-preset",
@@ -122,11 +133,13 @@ app.post("/api/reformat", async (req, res) => {
       "-movflags",
       "+faststart",
       "-y",
-      outputPath,
-    ]);
+      outputPath
+    );
+
+    await runFFmpeg(ffmpegArgs);
 
     const safeName = (name || "reformatted").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const fileName = `${safeName}_${width}x${height}.mp4`;
+    const fileName = `${safeName}_${w}x${h}.mp4`;
 
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader("Content-Type", "video/mp4");
