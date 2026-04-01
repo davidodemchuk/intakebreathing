@@ -27,8 +27,15 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.7.0";
+const APP_VERSION = "3.8.0";
 const CHANGELOG = [
+  { version: "3.8.0", date: "2026-04-01", changes: [
+    "Separate handles per platform — Instagram, TikTok, YouTube, Twitter can each have different handles",
+    "Platform cards are clickable and link to the correct profile",
+    "Each platform handle is editable from the creator detail view",
+    "Search button per platform — searches ScrapeCreators to find the right profile",
+    "Enrichment uses platform-specific handles instead of assuming they match",
+  ]},
   { version: "3.7.0", date: "2026-04-01", changes: [
     "Video Reformatter completely rebuilt from scratch",
     "Download Original now works — downloads the source video directly in browser",
@@ -856,6 +863,8 @@ const CREATOR_FIELD_PATCHES = {
   bymattson: { name: "Matt Son" },
   "michael_fong.spt": { name: "Michael Fong" },
   natedank: {
+    tiktokHandle: "nategotdealz",
+    instagramHandle: "natedank",
     notes:
       "600K impression video, mouth breathing content, huge performance in male 25-34 range",
   },
@@ -878,15 +887,30 @@ function normalizeCreatorRow(c) {
   const tt = typeof c.tiktokData === "object" && c.tiktokData ? c.tiktokData : {};
   const ig = typeof c.instagramData === "object" && c.instagramData ? c.instagramData : {};
   const cleanH = String(c.handle || "").replace(/^@/, "").trim();
+  const ttH =
+    c.tiktokHandle != null && String(c.tiktokHandle).trim() !== ""
+      ? String(c.tiktokHandle).replace(/^@/, "").trim()
+      : cleanH;
   const igH =
     c.instagramHandle != null && String(c.instagramHandle).trim() !== ""
       ? String(c.instagramHandle).replace(/^@/, "").trim()
       : cleanH;
+  const ytH =
+    c.youtubeHandle != null && String(c.youtubeHandle).trim() !== ""
+      ? String(c.youtubeHandle).replace(/^@/, "").trim()
+      : "";
+  const twH =
+    c.twitterHandle != null && String(c.twitterHandle).trim() !== ""
+      ? String(c.twitterHandle).replace(/^@/, "").trim()
+      : "";
   return {
     ...c,
     videoLog: Array.isArray(c.videoLog) ? c.videoLog : [],
     dateAdded: c.dateAdded || "2025-03-31",
+    tiktokHandle: ttH,
     instagramHandle: igH,
+    youtubeHandle: ytH,
+    twitterHandle: twH,
     tiktokData: { ...DEFAULT_TIKTOK_DATA, ...tt },
     instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...ig },
     engagementRate: c.engagementRate != null && c.engagementRate !== "" ? c.engagementRate : null,
@@ -952,10 +976,29 @@ function hydrateCreator(c) {
 function backfillCreatorSocialUrls(c) {
   const clean = String(c.handle || "").replace(/@/g, "").trim();
   if (!clean) return c;
+  const tt = String(c.tiktokHandle || clean).replace(/^@/, "").trim();
+  const ig = String(c.instagramHandle || clean).replace(/^@/, "").trim();
   const updates = {};
-  if (!String(c.tiktokUrl || "").trim()) updates.tiktokUrl = `https://www.tiktok.com/@${clean}`;
-  if (!String(c.instagramUrl || "").trim()) updates.instagramUrl = `https://www.instagram.com/${clean}/`;
+  if (!String(c.tiktokUrl || "").trim()) updates.tiktokUrl = tt ? `https://www.tiktok.com/@${tt}` : "";
+  if (!String(c.instagramUrl || "").trim()) updates.instagramUrl = ig ? `https://www.instagram.com/${ig}/` : "";
   return Object.keys(updates).length ? { ...c, ...updates } : c;
+}
+
+function buildPlatformUrls(creator) {
+  const clean = String(creator.handle || "").replace("@", "").trim();
+  const tt = String(creator.tiktokHandle || clean).replace("@", "").trim();
+  const ig = String(creator.instagramHandle || clean).replace("@", "").trim();
+  const yt = String(creator.youtubeHandle || "").replace("@", "").trim();
+  const tw = String(creator.twitterHandle || "").replace("@", "").trim();
+  return {
+    tiktok: tt ? `https://www.tiktok.com/@${tt}` : "",
+    instagram: ig ? `https://www.instagram.com/${ig}/` : "",
+    youtube: yt ? `https://www.youtube.com/@${yt}` : (creator.youtubeData?.channelUrl || ""),
+    twitter: tw ? `https://x.com/${tw}` : "",
+    facebook: creator.facebookData?.profileUrl || "",
+    linkedin: creator.linkedinData?.profileUrl || "",
+    snapchat: "",
+  };
 }
 
 /** Dot + label for how stale TikTok enrichment is (uses tt lastEnriched). */
@@ -1969,10 +2012,16 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
   const sk = String(scrapeKey || "").trim();
   const ak = String(aiKey || "").trim();
   const skipAi = !!opts?.skipAi;
+  const ttHandle = String(opts?.tiktokHandle || "").replace(/^@/, "").trim() || cleanHandle;
   const igHandle = String(opts?.instagramHandle || "").replace(/^@/, "").trim() || cleanHandle;
+  const ytHandle = String(opts?.youtubeHandle || "").replace(/^@/, "").trim() || cleanHandle;
+  const twHandle = String(opts?.twitterHandle || "").replace(/^@/, "").trim() || cleanHandle;
   const bump = opts?.onCreditUsed;
   const h = encodeURIComponent(cleanHandle);
+  const ttEnc = encodeURIComponent(ttHandle);
   const igEnc = encodeURIComponent(igHandle);
+  const ytEnc = encodeURIComponent(ytHandle);
+  const twEnc = encodeURIComponent(twHandle);
   const base = "https://api.scrapecreators.com";
 
   const fetchOne = async (url, stepId) => {
@@ -2005,14 +2054,14 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     snapRaw,
     fbRaw,
   ] = await Promise.all([
-    fetchOne(`${base}/v1/tiktok/profile?handle=${h}`, "tt_profile"),
-    fetchOne(`${base}/v3/tiktok/profile/videos?handle=${h}`, "tt_videos"),
-    fetchOne(`${base}/v1/tiktok/user/showcase?handle=${h}`, "tt_shop"),
+    fetchOne(`${base}/v1/tiktok/profile?handle=${ttEnc}`, "tt_profile"),
+    fetchOne(`${base}/v3/tiktok/profile/videos?handle=${ttEnc}`, "tt_videos"),
+    fetchOne(`${base}/v1/tiktok/user/showcase?handle=${ttEnc}`, "tt_shop"),
     fetchOne(`${base}/v1/instagram/profile?handle=${igEnc}`, "ig_profile"),
     fetchOne(`${base}/v2/instagram/user/posts?handle=${igEnc}`, "ig_posts"),
     fetchOne(`${base}/v1/instagram/user/reels?handle=${igEnc}`, "ig_reels"),
-    fetchOne(`${base}/v1/youtube/channel?handle=${h}`, "youtube"),
-    fetchOne(`${base}/v1/twitter/profile?handle=${h}`, "twitter"),
+    fetchOne(`${base}/v1/youtube/channel?handle=${ytEnc}`, "youtube"),
+    fetchOne(`${base}/v1/twitter/profile?handle=${twEnc}`, "twitter"),
     fetchOne(`${base}/v1/linkedin/profile?handle=${h}`, "linkedin"),
     fetchOne(`${base}/v1/snapchat/profile?handle=${h}`, "snapchat"),
     fetchOne(`${base}/v1/facebook/profile?handle=${h}`, "facebook"),
@@ -4257,6 +4306,93 @@ function ExpandableInsight({ t, label, value, valueColor, valueFontSize = 14, ex
   );
 }
 
+function PlatformCard({ t, platform, brandColor, handle, url, followers, followerLabel = "followers", secondaryText, extraInfo, onHandleChange, onSearch }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(handle || "");
+
+  useEffect(() => { setDraft(handle || ""); }, [handle]);
+
+  const hasData = followers != null && followers > 0;
+
+  return (
+    <div
+      style={{
+        flex: "1 1 160px",
+        minWidth: 160,
+        background: t.card,
+        border: `1px solid ${t.border}`,
+        borderRadius: 10,
+        padding: 14,
+        cursor: url && !editing ? "pointer" : "default",
+        transition: "border-color 0.15s",
+      }}
+      onClick={() => {
+        if (url && !editing) window.open(url, "_blank");
+      }}
+      onMouseEnter={(e) => { if (url && !editing) e.currentTarget.style.borderColor = brandColor + "50"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: brandColor }}>{platform}</span>
+        <div style={{ display: "flex", gap: 4 }}>
+          {url && !editing ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+          {onHandleChange ? (
+            <span
+              onClick={(e) => { e.stopPropagation(); setEditing(!editing); }}
+              style={{ fontSize: 10, color: t.textFaint, cursor: "pointer", padding: "0 2px" }}
+              title="Edit handle"
+            >
+              ✎
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {!editing ? (
+        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 4 }}>@{handle || "not set"}</div>
+      ) : (
+        <div style={{ marginBottom: 6 }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: "flex", gap: 4 }}>
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.replace("@", "").trim())}
+              placeholder="handle"
+              style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: `1px solid ${brandColor}40`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { onHandleChange?.(draft); setEditing(false); }
+                if (e.key === "Escape") { setDraft(handle || ""); setEditing(false); }
+              }}
+            />
+            <button
+              onClick={() => { onHandleChange?.(draft); setEditing(false); }}
+              style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: brandColor, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+            >
+              Save
+            </button>
+            {onSearch ? (
+              <button
+                onClick={() => onSearch(draft || handle || "")}
+                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.textMuted, fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+              >
+                Search
+              </button>
+            ) : null}
+          </div>
+          <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>Enter save, Esc cancel</div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 2 }}>
+        {hasData ? formatMetricShort(followers) : "—"}
+      </div>
+      <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>{followerLabel}</div>
+      {secondaryText ? <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.4 }}>{secondaryText}</div> : null}
+      {extraInfo ? <div style={{ fontSize: 11, color: brandColor, marginTop: 4, fontWeight: 600 }}>{extraInfo}</div> : null}
+    </div>
+  );
+}
+
 function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {} }) {
   const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
@@ -4293,28 +4429,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     return names.size;
   }, [c.videoLog]);
 
-  const ttUrl = c.tiktokUrl?.trim() || tiktokUrlFromHandle(c.handle);
+  const ttUrl = c.tiktokUrl?.trim() || tiktokUrlFromHandle(c.tiktokHandle || c.handle);
   const videoCount = creatorDisplayVideoCount(c);
   const ttD = c.tiktokData || {};
   const igD = c.instagramData || {};
   const igFollowers = Number(c.instagramData?.followers) || 0;
   const ttFollowers = Number(c.tiktokData?.followers) || 0;
   const primaryPlatform = igFollowers >= ttFollowers ? "instagram" : "tiktok";
-  const primaryUrl = primaryPlatform === "instagram"
-    ? (c.instagramUrl || `https://www.instagram.com/${(c.instagramHandle || c.handle || "").replace("@", "")}/`)
-    : (c.tiktokUrl || `https://www.tiktok.com/@${(c.handle || "").replace("@", "")}`);
+  const platformLinks = buildPlatformUrls(c);
+  const primaryUrl = primaryPlatform === "instagram" ? platformLinks.instagram : platformLinks.tiktok;
   const primaryLabel = primaryPlatform === "instagram" ? "IG" : "TT";
   const clean = String(c.handle || "").replace("@", "").trim();
-  const igClean = String(c.instagramHandle || clean).replace("@", "").trim();
-  const platformLinks = {
-    instagram: c.instagramUrl || (igClean ? `https://www.instagram.com/${igClean}/` : ""),
-    tiktok: c.tiktokUrl || (clean ? `https://www.tiktok.com/@${clean}` : ""),
-    youtube: c.youtubeData?.channelUrl || "",
-    twitter: c.twitterData?.handle ? `https://x.com/${c.twitterData.handle}` : (clean ? `https://x.com/${clean}` : ""),
-    facebook: c.facebookData?.profileUrl || "",
-    linkedin: c.linkedinData?.profileUrl || "",
-    snapchat: "",
-  };
   const showEngRate = (rate) => rate != null && rate >= 0.1 && rate <= 50;
   const lastEnriched = ttD.lastEnriched || igD.lastEnriched;
   const handleLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
@@ -4380,7 +4505,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     };
     try {
       const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak, onStep, {
+        tiktokHandle: c.tiktokHandle || cleanHandle,
         instagramHandle: c.instagramHandle,
+        youtubeHandle: c.youtubeHandle || "",
+        twitterHandle: c.twitterHandle || "",
         existingInstagramData: c.instagramData,
         onCreditUsed: onScrapeCreditUsed,
       });
@@ -4605,9 +4733,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             );
           })()}
           <div style={{ minWidth: 0 }}>
-            <a href={primaryUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
+            <a href={primaryUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
               {c.handle}
-              <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, padding: "2px 6px", borderRadius: 4, background: t.cardAlt }}>{primaryLabel}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: t.textFaint, padding: "2px 6px", borderRadius: 4, background: t.cardAlt, border: `1px solid ${t.border}` }}>{primaryLabel}</span>
             </a>
             {c.name?.trim() ? <div style={{ fontSize: 13, color: t.textMuted }}>{c.name.trim()}</div> : null}
             <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: c.status === "Active" ? t.green + "18" : t.cardAlt, color: c.status === "Active" ? t.green : t.textMuted, marginTop: 4, display: "inline-block" }}>{c.status}</span>
@@ -4641,115 +4769,98 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginBottom: 14 }}>{enrichMsg}</div> : null}
 
       <div id="creator-detail-content" style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Platforms</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {(igD.followers != null || igD.lastEnriched) && !igD.enrichError ? (
-            <div
-              onClick={() => platformLinks.instagram && window.open(platformLinks.instagram, "_blank")}
-              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.instagram ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.instagram) e.currentTarget.style.borderColor = "#E1306C50"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#E1306C", marginBottom: 6 }}>Instagram</span>
-                {platformLinks.instagram ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(igD.followers)}</div>
-              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>
-                {igD.posts != null ? `${igD.posts} posts` : "—"}{showEngRate(Number(c.instagramEngRate)) ? ` · ${Number(c.instagramEngRate).toFixed(2)}% eng` : ""}
-              </div>
-              {igD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>Category: {igD.category}</div> : null}
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{igD.verified ? "✓ Verified " : ""}{igD.isBusiness ? "· Business" : ""}</div>
-            </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Platforms</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <PlatformCard
+            t={t}
+            platform="Instagram"
+            brandColor="#E1306C"
+            handle={c.instagramHandle || cleanHandle}
+            url={platformLinks.instagram}
+            followers={c.instagramData?.followers}
+            secondaryText={[
+              c.instagramData?.posts ? `${c.instagramData.posts} posts` : null,
+              c.instagramEngRate != null && c.instagramEngRate >= 0.1 && c.instagramEngRate <= 50 ? `${Number(c.instagramEngRate).toFixed(2)}% eng` : null,
+              c.instagramData?.category || null,
+            ].filter(Boolean).join(" · ")}
+            onHandleChange={(newHandle) => {
+              updateCreator(c.id, {
+                instagramHandle: newHandle,
+                instagramUrl: newHandle ? `https://www.instagram.com/${newHandle}/` : "",
+              });
+            }}
+            onSearch={async (query) => {
+              window.open(`https://www.instagram.com/${query}/`, "_blank");
+            }}
+          />
+
+          <PlatformCard
+            t={t}
+            platform="TikTok"
+            brandColor={t.green}
+            handle={c.tiktokHandle || cleanHandle}
+            url={platformLinks.tiktok}
+            followers={c.tiktokData?.followers}
+            secondaryText={[
+              c.tiktokData?.hearts ? `${formatMetricShort(c.tiktokData.hearts)} hearts` : null,
+              c.tiktokData?.videoCount ? `${c.tiktokData.videoCount} videos` : null,
+              c.tiktokEngRate != null && c.tiktokEngRate >= 0.1 && c.tiktokEngRate <= 50 ? `${Number(c.tiktokEngRate).toFixed(2)}% eng` : null,
+            ].filter(Boolean).join(" · ")}
+            extraInfo={shop.hasShop ? `TikTok Shop (${shop.productCount || 0})` : null}
+            onHandleChange={(newHandle) => {
+              updateCreator(c.id, {
+                tiktokHandle: newHandle,
+                tiktokUrl: newHandle ? `https://www.tiktok.com/@${newHandle}` : "",
+              });
+            }}
+            onSearch={(query) => {
+              window.open(`https://www.tiktok.com/@${query}`, "_blank");
+            }}
+          />
+
+          {(c.youtubeData || c.youtubeHandle) ? (
+            <PlatformCard
+              t={t}
+              platform="YouTube"
+              brandColor="#FF0000"
+              handle={c.youtubeHandle || ""}
+              url={platformLinks.youtube}
+              followers={c.youtubeData?.subscribers}
+              followerLabel="subscribers"
+              secondaryText={[
+                c.youtubeData?.videoCount ? `${c.youtubeData.videoCount} videos` : null,
+              ].filter(Boolean).join(" · ")}
+              onHandleChange={(newHandle) => {
+                updateCreator(c.id, { youtubeHandle: newHandle });
+              }}
+              onSearch={(query) => {
+                window.open(`https://www.youtube.com/@${query}`, "_blank");
+              }}
+            />
           ) : null}
-          {ttD.lastEnriched || ttD.followers != null ? (
-            <div
-              onClick={() => platformLinks.tiktok && window.open(platformLinks.tiktok, "_blank")}
-              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.tiktok ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.tiktok) e.currentTarget.style.borderColor = `${t.green}50`; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>TikTok</span>
-                {platformLinks.tiktok ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ttD.followers)}</div>
-              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{formatMetricShort(ttD.hearts)} hearts · {ttD.videoCount ?? "—"} videos</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>
-                {ttD.avgViews != null ? `${formatMetricShort(ttD.avgViews)} avg views` : "—"}{showEngRate(Number(c.tiktokEngRate)) ? ` · ${Number(c.tiktokEngRate).toFixed(2)}% eng` : ""}
-              </div>
-              {shop.hasShop ? <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>TikTok Shop ({shop.productCount || 0})</div> : null}
-            </div>
+
+          {(c.twitterData || c.twitterHandle) ? (
+            <PlatformCard
+              t={t}
+              platform="X / Twitter"
+              brandColor="#1DA1F2"
+              handle={c.twitterHandle || ""}
+              url={platformLinks.twitter}
+              followers={c.twitterData?.followers}
+              secondaryText={c.twitterData?.tweets ? `${formatMetricShort(c.twitterData.tweets)} tweets` : ""}
+              onHandleChange={(newHandle) => {
+                updateCreator(c.id, { twitterHandle: newHandle });
+              }}
+              onSearch={(query) => {
+                window.open(`https://x.com/${query}`, "_blank");
+              }}
+            />
           ) : null}
-          {ytD.subscribers != null || ytD.lastEnriched ? (
-            <div
-              onClick={() => platformLinks.youtube && window.open(platformLinks.youtube, "_blank")}
-              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.youtube ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.youtube) e.currentTarget.style.borderColor = "#FF000050"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>YouTube</span>
-                {platformLinks.youtube ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ytD.subscribers)}</div>
-              <div style={{ fontSize: 11, color: t.textFaint }}>subscribers</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{ytD.totalViews != null ? `${formatMetricShort(ytD.totalViews)} views` : "—"} · {ytD.videoCount ?? "—"} videos</div>
-            </div>
-          ) : null}
-          {twD.followers != null || twD.lastEnriched ? (
-            <div
-              onClick={() => platformLinks.twitter && window.open(platformLinks.twitter, "_blank")}
-              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.twitter ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.twitter) e.currentTarget.style.borderColor = "#1DA1F250"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>X / Twitter</span>
-                {platformLinks.twitter ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(twD.followers)}</div>
-              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{twD.tweets != null ? `${twD.tweets} tweets` : "—"}</div>
-            </div>
-          ) : null}
-          {fbD.followers != null || fbD.lastEnriched ? (
-            <div
-              onClick={() => platformLinks.facebook && window.open(platformLinks.facebook, "_blank")}
-              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.facebook ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.facebook) e.currentTarget.style.borderColor = "#1877F250"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>Facebook</span>
-                {platformLinks.facebook ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(fbD.followers)}</div>
-              <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
-              {fbD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>Category: {fbD.category}</div> : null}
-            </div>
-          ) : null}
-          {liD.lastEnriched ? (
-            <div
-              onClick={() => platformLinks.linkedin && window.open(platformLinks.linkedin, "_blank")}
-              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.linkedin ? "pointer" : "default", transition: "border-color 0.15s" }}
-              onMouseEnter={(e) => { if (platformLinks.linkedin) e.currentTarget.style.borderColor = "#0A66C250"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>LinkedIn</span>
-                {platformLinks.linkedin ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-              </div>
-              <div style={{ fontSize: 12, color: t.text, lineHeight: 1.4 }}>{liD.headline || "—"}</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{liD.location || ""} {liD.connections != null ? `· ${liD.connections} conn.` : ""}</div>
-            </div>
-          ) : null}
-          {snD.lastEnriched ? (
+
+          {c.snapchatData ? (
             <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>Snapchat</div>
-              <div style={{ fontSize: 13, color: t.text }}>{snD.displayName || "Present"}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#FFFC00", marginBottom: 6 }}>Snapchat</div>
+              <div style={{ fontSize: 13, color: t.text }}>{c.snapchatData.displayName || "Present"}</div>
             </div>
           ) : null}
         </div>
@@ -5292,7 +5403,18 @@ export default function App() {
 
   useEffect(() => {
     if (!storageReady) return;
-    setCreators((prev) => prev.map(hydrateCreator));
+    setCreators((prev) =>
+      prev.map((c) => {
+        const clean = String(c.handle || "").replace("@", "").trim();
+        return hydrateCreator({
+          ...c,
+          tiktokHandle: c.tiktokHandle || clean,
+          instagramHandle: c.instagramHandle || clean,
+          youtubeHandle: c.youtubeHandle || "",
+          twitterHandle: c.twitterHandle || "",
+        });
+      })
+    );
   }, [storageReady]);
 
   // ── Save library whenever it changes ──
@@ -5455,7 +5577,10 @@ export default function App() {
       try {
         const payload = await runScrapeAndAiPipeline(ch, key.trim(), ak, null, {
           skipAi: !!cr.aiAnalysis?.ibScore,
+          tiktokHandle: cr.tiktokHandle || ch,
           instagramHandle: cr.instagramHandle,
+          youtubeHandle: cr.youtubeHandle || "",
+          twitterHandle: cr.twitterHandle || "",
           existingInstagramData: cr.instagramData,
           onCreditUsed: bumpScrapeCredit,
         });
@@ -5552,7 +5677,10 @@ export default function App() {
         quality: "Standard",
         tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
         instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
+        tiktokHandle: cleanHandle,
         instagramHandle: cleanHandle,
+        youtubeHandle: "",
+        twitterHandle: "",
         costPerVideo: "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
@@ -5580,10 +5708,17 @@ export default function App() {
 
     try {
       const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, onStep, {
+        tiktokHandle: cleanHandle,
+        instagramHandle: cleanHandle,
+        youtubeHandle: "",
+        twitterHandle: "",
         onCreditUsed: bumpScrapeCredit,
         requireTikTokProfile: true,
       });
       const ai = payload.aiAnalysis;
+      const ttBio = payload?.ttData?.bio || "";
+      const igFromBio = ttBio.match(/(?:ig|insta|instagram)[:\s]*@?([a-zA-Z0-9_.]+)/i)?.[1] || "";
+      const ytFromBio = ttBio.match(/(?:yt|youtube)[:\s]*@?([a-zA-Z0-9_.]+)/i)?.[1] || "";
       const id = `c-${Date.now()}`;
       const stub = {
         niche: "",
@@ -5602,8 +5737,11 @@ export default function App() {
         totalVideos: 0,
         notes: "",
         tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
-        instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
-        instagramHandle: cleanHandle,
+        instagramUrl: `https://www.instagram.com/${igFromBio || cleanHandle}/`,
+        tiktokHandle: cleanHandle,
+        instagramHandle: igFromBio || cleanHandle,
+        youtubeHandle: ytFromBio || "",
+        twitterHandle: "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
         bestVideos: [],
@@ -5673,7 +5811,10 @@ export default function App() {
       const existing = creators.find((c) => c.id === existingId);
       if (!existing) return;
       const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, null, {
+        tiktokHandle: existing.tiktokHandle || cleanHandle,
         instagramHandle: existing.instagramHandle,
+        youtubeHandle: existing.youtubeHandle || "",
+        twitterHandle: existing.twitterHandle || "",
         existingInstagramData: existing.instagramData,
         onCreditUsed: bumpScrapeCredit,
       });
@@ -7165,7 +7306,8 @@ export default function App() {
               );
             }
             if (col.key === "tt") {
-              const ttUrl = ((c.tiktokUrl || "").trim() || tiktokUrlFromHandle(c.handle)).trim();
+              const ttHandle = String(c.tiktokHandle || c.handle || "").replace(/^@/, "").trim();
+              const ttUrl = ((c.tiktokUrl || "").trim() || (ttHandle ? `https://www.tiktok.com/@${ttHandle}` : "")).trim();
               return (
                 <div key={col.key} style={{ ...base, textAlign: "center" }}>
                   {ttUrl ? (
@@ -7191,7 +7333,8 @@ export default function App() {
               );
             }
             if (col.key === "ig") {
-              const igUrl = (c.instagramUrl || "").trim();
+              const igHandle = String(c.instagramHandle || c.handle || "").replace(/^@/, "").trim();
+              const igUrl = ((c.instagramUrl || "").trim() || (igHandle ? `https://www.instagram.com/${igHandle}/` : "")).trim();
               return (
                 <div key={col.key} style={{ ...base, textAlign: "center" }}>
                   {igUrl ? (
