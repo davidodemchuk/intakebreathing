@@ -5,8 +5,15 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.7.0";
+const APP_VERSION = "2.8.0";
 const CHANGELOG = [
+  { version: "2.8.0", date: "2026-03-31", changes: [
+    "Auto-enrichment pipeline — adding a creator by handle triggers automatic data pull",
+    "ScrapeCreators auto-pulls TikTok profile, stats, and recent videos on creator add",
+    "IB-Ai auto-analyzes each new creator: suggested niche, content style, estimated rate, fit score",
+    "Creator add flow redesigned: paste handle → loading screen → fully enriched profile appears",
+    "Architecture foundations for future outreach and follow-up systems",
+  ]},
   { version: "2.7.0", date: "2026-03-31", changes: [
     "Creator enrichment via ScrapeCreators — pull live TikTok and Instagram metrics",
     "Enrich button on creator detail pulls: followers, hearts, video count, bio, avatar, verified status",
@@ -690,6 +697,20 @@ const DEFAULT_INSTAGRAM_DATA = {
   lastEnriched: null,
 };
 
+// ═══ FUTURE: Outreach & Follow-Up System ═══
+// outreachStatus tracks the pipeline: not_contacted → contacted → replied → negotiating → onboarded
+// followUpDue triggers reminders in the Channel Pipeline section
+// campaigns links creators to specific briefs
+// payments tracks cost per creator per campaign
+
+const ENRICH_STEPS = [
+  { id: "tt_profile", label: "Pulling TikTok profile...", duration: 2000 },
+  { id: "tt_videos", label: "Fetching recent videos...", duration: 3000 },
+  { id: "ig_profile", label: "Checking Instagram profile...", duration: 2000 },
+  { id: "ai_analyze", label: "IB-Ai analyzing creator fit...", duration: 4000 },
+  { id: "saving", label: "Saving to database...", duration: 1000 },
+];
+
 /** Canonical CSV/spreadsheet field fixes keyed by normalized handle (no @). */
 const CREATOR_FIELD_PATCHES = {
   "jack.manning": { name: "Jack Manning", address: "306 Grove Ave NW Cleveland TN 37311" },
@@ -733,6 +754,13 @@ function normalizeCreatorRow(c) {
     tiktokData: { ...DEFAULT_TIKTOK_DATA, ...tt },
     instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...ig },
     engagementRate: c.engagementRate != null && c.engagementRate !== "" ? c.engagementRate : null,
+    aiAnalysis: c.aiAnalysis && typeof c.aiAnalysis === "object" ? c.aiAnalysis : null,
+    outreachStatus: c.outreachStatus ?? null,
+    lastContactDate: c.lastContactDate ?? null,
+    contactMethod: c.contactMethod ?? null,
+    followUpDue: c.followUpDue ?? null,
+    campaigns: Array.isArray(c.campaigns) ? c.campaigns : [],
+    payments: Array.isArray(c.payments) ? c.payments : [],
   };
 }
 
@@ -828,6 +856,261 @@ async function enrichInstagramFromApi(handle, apiKey) {
   } catch {
     return null;
   }
+}
+
+function parseTikTokUserStats(raw) {
+  const data = raw?.data ?? raw;
+  const user = data?.user ?? data;
+  const stats = data?.stats ?? data;
+  return { user, stats, data };
+}
+
+function instagramDataFromProfileResponse(raw) {
+  if (!raw) return { ...DEFAULT_INSTAGRAM_DATA, lastEnriched: null };
+  const data = raw?.data ?? raw;
+  return {
+    followers: data?.follower_count ?? data?.edge_followed_by?.count ?? null,
+    following: data?.following_count ?? data?.edge_follow?.count ?? null,
+    posts: data?.media_count ?? data?.edge_owner_to_timeline_media?.count ?? null,
+    bio: data?.biography ?? "",
+    avatarUrl: data?.profile_pic_url_hd ?? data?.profile_pic_url ?? "",
+    verified: !!data?.is_verified,
+    lastEnriched: new Date().toISOString(),
+  };
+}
+
+function tiktokDataFromUserStats(user, stats) {
+  return {
+    followers: stats?.followerCount ?? stats?.follower_count ?? null,
+    following: stats?.followingCount ?? stats?.following_count ?? null,
+    hearts: stats?.heartCount ?? stats?.heart ?? stats?.diggCount ?? null,
+    videoCount: stats?.videoCount ?? null,
+    bio: user?.signature ?? user?.bio ?? "",
+    avatarUrl: user?.avatarMedium ?? user?.avatarLarger ?? user?.avatarThumb ?? "",
+    verified: !!user?.verified,
+    lastEnriched: new Date().toISOString(),
+  };
+}
+
+function extractTikTokVideoList(raw) {
+  const data = raw?.data ?? raw;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.videos)) return data.videos;
+  if (Array.isArray(data?.aweme_list)) return data.aweme_list;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(raw?.videos)) return raw.videos;
+  return [];
+}
+
+function videoPlayCount(v) {
+  return Number(v?.statistics?.play_count ?? v?.play_count ?? v?.stats?.playCount ?? v?.playCount ?? 0) || 0;
+}
+
+function videoDesc(v) {
+  return String(v?.desc ?? v?.caption ?? v?.description ?? "").trim();
+}
+
+function topVideosForAi(raw) {
+  const list = extractTikTokVideoList(raw)
+    .map((v) => ({ v, pc: videoPlayCount(v) }))
+    .sort((a, b) => b.pc - a.pc)
+    .slice(0, 10)
+    .map((x) => x.v);
+  return list;
+}
+
+function normalizeQualityTier(q) {
+  const s = String(q || "").toLowerCase();
+  if (s.includes("high")) return "High";
+  return "Standard";
+}
+
+/** @returns {Promise<object|null>} */
+async function runCreatorAiAnalysis({
+  cleanHandle,
+  user,
+  stats,
+  videoDescriptions,
+  apiKey,
+}) {
+  const key = String(apiKey || "").trim();
+  if (!key) return null;
+  const nickname = user?.nickname ?? user?.uniqueId ?? "";
+  const body = {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `You are a UGC talent scout for Intake Breathing, a magnetic nasal dilator company. Analyze this TikTok creator for potential UGC partnership.
+
+CREATOR: @${cleanHandle}
+NAME: ${nickname || "Unknown"}
+BIO: ${user?.signature || user?.bio || "None"}
+FOLLOWERS: ${stats?.followerCount ?? stats?.follower_count ?? 0}
+TOTAL HEARTS: ${stats?.heartCount ?? stats?.heart ?? 0}
+TOTAL VIDEOS: ${stats?.videoCount ?? 0}
+VERIFIED: ${user?.verified || false}
+
+THEIR RECENT VIDEO CAPTIONS:
+${videoDescriptions || "No captions available"}
+
+Based on this data, return ONLY a JSON object with:
+{
+  "suggestedNiche": "their primary content niche, pick the best 2-3 from: Lifestyle, Gen Z, Gym Bro, Medical, Skincare, UGC Creator, Family, Foodie, Athlete, Breathing, Women's Fitness, Holistic Wellness, Running, Pets, Gaming, ASMR, Comedy",
+  "contentStyle": "1-2 sentence description of their content style and what makes them unique",
+  "estimatedRate": "estimated cost per video in USD based on follower count and engagement (e.g. '$150-250')",
+  "fitScore": <integer 1-10, how good a fit for Intake Breathing UGC, 10 = perfect>,
+  "fitReason": "1 sentence explaining why they would or wouldn't be a good fit for nasal breathing/sleep/athletic performance content",
+  "suggestedCampaigns": "what type of Intake campaigns they'd be best for (e.g. 'Athletic performance, gym content')",
+  "qualityTier": "High or Standard based on follower count, engagement, and content quality"
+}
+
+Return ONLY the JSON, nothing else.`,
+      },
+    ],
+  };
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "x-api-key": key,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  const aiData = await res.json();
+  const aiText = (aiData.content || []).map((i) => i.text || "").join("");
+  const aiMatch = aiText.match(/\{[\s\S]*\}/);
+  if (!aiMatch) return null;
+  try {
+    const parsed = JSON.parse(aiMatch[0]);
+    if (typeof parsed.fitScore === "string") parsed.fitScore = parseInt(parsed.fitScore, 10);
+    if (!Number.isFinite(parsed.fitScore)) parsed.fitScore = null;
+    parsed.qualityTier = normalizeQualityTier(parsed.qualityTier);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
+  if (!aiAnalysis) return {};
+  const out = { aiAnalysis };
+  if (!String(creator.niche || "").trim()) out.niche = aiAnalysis.suggestedNiche || creator.niche;
+  if (creator.quality === "High") {
+    /* keep manager-set High */
+  } else if (!creator.quality || creator.quality === "Standard") {
+    out.quality = aiAnalysis.qualityTier === "High" ? "High" : "Standard";
+  }
+  if (!String(creator.costPerVideo || "").trim()) out.costPerVideo = aiAnalysis.estimatedRate || creator.costPerVideo;
+  return out;
+}
+
+function fitScoreBadgeStyle(score, t) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return { bg: t.cardAlt, color: t.textFaint, label: "" };
+  if (n >= 8) return { bg: t.green + "22", color: t.green, label: "Great Fit" };
+  if (n >= 5) return { bg: t.orange + "22", color: t.orange, label: "Potential Fit" };
+  return { bg: t.red + "18", color: t.red, label: "Low Fit" };
+}
+
+async function fetchTikTokProfileRaw(cleanHandle, scrapeKey) {
+  const res = await Promise.race([
+    fetch(`https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(cleanHandle)}`, {
+      headers: { "x-api-key": scrapeKey },
+    }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+  ]);
+  const raw = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(res.status === 404 ? "NOT_FOUND" : `HTTP_${res.status}`);
+    e.status = res.status;
+    throw e;
+  }
+  return raw;
+}
+
+async function fetchTikTokVideosRaw(cleanHandle, scrapeKey) {
+  try {
+    const res = await Promise.race([
+      fetch(`https://api.scrapecreators.com/v3/tiktok/profile/videos?handle=${encodeURIComponent(cleanHandle)}`, {
+        headers: { "x-api-key": scrapeKey },
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 20000)),
+    ]);
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+/** Full ScrapeCreators + optional IB-Ai pipeline for one handle (TikTok + videos + IG + AI). onStep(id) fires after each phase starts. opts.skipAi: skip Anthropic (e.g. bulk refresh when aiAnalysis already exists). */
+async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opts) {
+  const sk = String(scrapeKey || "").trim();
+  const ak = String(aiKey || "").trim();
+  const skipAi = !!opts?.skipAi;
+  const notes = [];
+  onStep?.("tt_profile");
+  const ttRaw = await fetchTikTokProfileRaw(cleanHandle, sk);
+  const { user, stats } = parseTikTokUserStats(ttRaw);
+  onStep?.("tt_videos");
+  const vidRaw = await fetchTikTokVideosRaw(cleanHandle, sk);
+  const tops = topVideosForAi(vidRaw || {});
+  const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
+
+  onStep?.("ig_profile");
+  let igRaw = null;
+  try {
+    const igRes = await fetch(`https://api.scrapecreators.com/v1/instagram/profile?handle=${encodeURIComponent(cleanHandle)}`, {
+      headers: { "x-api-key": sk },
+    });
+    if (igRes.ok) igRaw = await igRes.json();
+    else notes.push("Instagram profile not found — handle may differ. Add manually in the detail view.");
+  } catch {
+    notes.push("Instagram profile not found — handle may differ. Add manually in the detail view.");
+  }
+
+  const igData = igRaw ? instagramDataFromProfileResponse(igRaw) : { ...DEFAULT_INSTAGRAM_DATA, lastEnriched: null };
+
+  onStep?.("ai_analyze");
+  let aiAnalysis = null;
+  if (!skipAi) {
+    if (ak) {
+      aiAnalysis = await runCreatorAiAnalysis({
+        cleanHandle,
+        user,
+        stats,
+        videoDescriptions,
+        apiKey: ak,
+      });
+      if (!aiAnalysis) notes.push("Add your Anthropic API key in Settings to enable AI analysis");
+    } else {
+      notes.push("Add your Anthropic API key in Settings to enable AI analysis");
+    }
+  }
+
+  const ttData = tiktokDataFromUserStats(user, stats);
+  const fc = Number(stats?.followerCount ?? stats?.follower_count ?? 0);
+  const hc = stats?.heartCount ?? stats?.heart ?? null;
+  const engagementRate = fc > 0 && hc != null ? ((Number(hc) / fc) * 100).toFixed(1) : null;
+  const nickname = user?.nickname || user?.uniqueId || "";
+
+  onStep?.("saving");
+  return {
+    user,
+    stats,
+    ttData,
+    igData,
+    aiAnalysis,
+    engagementRate,
+    videoDescriptions,
+    nickname,
+    notes,
+  };
 }
 
 /** Sort numeric metrics; null/invalid always sort to the bottom. */
@@ -3036,7 +3319,7 @@ const VIDEO_LOG_STATUSES = [
   { value: "draft", label: "Draft" },
 ];
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, S }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S }) {
   const [showShipping, setShowShipping] = useState(false);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
@@ -3078,6 +3361,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
 
   const enrichProfile = async () => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
+    const ak = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
     if (!key.trim()) {
       alert("Add your ScrapeCreators API key in Settings");
       return;
@@ -3085,25 +3369,65 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
     setEnriching(true);
     setEnrichMsg("Pulling live data from TikTok...");
     try {
-      const tt = await enrichTikTokFromApi(c.handle, key.trim());
-      setEnrichMsg("Pulling live data from Instagram...");
-      const ig = await enrichInstagramFromApi(c.handle, key.trim());
-      const engagementRate =
-        tt && Number(tt.followers) > 0 && tt.hearts != null
-          ? ((Number(tt.hearts) / Number(tt.followers)) * 100).toFixed(1)
-          : null;
+      const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
+      const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak);
+      const patch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(c, payload.aiAnalysis) : {};
       updateCreator(c.id, {
-        tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...tt },
-        instagramData: ig
-          ? { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...ig }
-          : { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}) },
-        engagementRate,
+        tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(c.tiktokData || {}), ...payload.ttData },
+        instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...payload.igData },
+        engagementRate: payload.engagementRate,
+        ...patch,
+        ...(!c.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
       });
-      const f = formatMetricShort(tt.followers);
-      const h = formatMetricShort(tt.hearts);
-      setEnrichMsg(`Profile enriched — ${f} followers, ${h} hearts`);
+      const f = formatMetricShort(payload.ttData.followers);
+      const h = formatMetricShort(payload.ttData.hearts);
+      const extra = payload.notes.length ? ` ${payload.notes[0]}` : "";
+      setEnrichMsg(`Profile enriched — ${f} followers, ${h} hearts.${extra}`);
     } catch (err) {
       setEnrichMsg(err.message || "Enrichment failed.");
+    } finally {
+      setEnriching(false);
+    }
+  };
+
+  const reanalyzeOnly = async () => {
+    const ak = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
+    const sk = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
+    if (!ak.trim()) {
+      alert("Add your Anthropic API key in Settings to enable AI analysis");
+      return;
+    }
+    setEnriching(true);
+    setEnrichMsg("IB-Ai re-analyzing…");
+    try {
+      const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
+      const vidRaw = sk ? await fetchTikTokVideosRaw(cleanHandle, sk) : null;
+      const tops = topVideosForAi(vidRaw || {});
+      const videoDescriptions = tops.map(videoDesc).filter(Boolean).join("\n");
+      const ttD = c.tiktokData || {};
+      const user = { nickname: c.name, signature: ttD.bio, verified: ttD.verified };
+      const stats = {
+        followerCount: ttD.followers,
+        followingCount: ttD.following,
+        heartCount: ttD.hearts,
+        videoCount: ttD.videoCount,
+      };
+      const ai = await runCreatorAiAnalysis({
+        cleanHandle,
+        user,
+        stats,
+        videoDescriptions,
+        apiKey: ak.trim(),
+      });
+      if (ai) {
+        const patch = mergeAiFieldsIntoExisting(c, ai);
+        updateCreator(c.id, patch);
+        setEnrichMsg("IB-Ai analysis updated.");
+      } else {
+        setEnrichMsg("Could not parse AI response.");
+      }
+    } catch (err) {
+      setEnrichMsg(err.message || "Re-analyze failed.");
     } finally {
       setEnriching(false);
     }
@@ -3223,7 +3547,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
         </div>
       </div>
       {enrichMsg ? (
-        <div style={{ fontSize: 12, color: enrichMsg.includes("Profile enriched") || enrichMsg.includes("enriched") ? t.green : t.orange, marginBottom: 16 }}>{enrichMsg}</div>
+        <div style={{ fontSize: 12, color: enrichMsg.includes("Profile enriched") || enrichMsg.includes("enriched") || enrichMsg.includes("IB-Ai analysis") ? t.green : t.orange, marginBottom: 16 }}>{enrichMsg}</div>
       ) : null}
 
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 24, boxShadow: t.shadow }}>
@@ -3261,6 +3585,84 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, 
           </>
         )}
       </div>
+
+      {c.aiAnalysis ? (
+        <div
+          style={{
+            background: `linear-gradient(145deg, ${t.green}10 0%, ${t.card} 45%)`,
+            border: `1px solid ${t.green}35`,
+            borderRadius: 14,
+            padding: 22,
+            marginBottom: 24,
+            boxShadow: t.shadow,
+            position: "relative",
+          }}
+        >
+          <div style={{ position: "absolute", top: 14, right: 16, fontSize: 10, fontWeight: 900, color: t.green, letterSpacing: "0.12em" }}>IB-Ai</div>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>IB-Ai Analysis</div>
+            <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>
+              Re-analyze
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
+            {(() => {
+              const fs = c.aiAnalysis.fitScore;
+              const badge = fitScoreBadgeStyle(fs, t);
+              return (
+                <div style={{ textAlign: "center", flexShrink: 0 }}>
+                  <div
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: 36,
+                      background: badge.bg,
+                      color: badge.color,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 26,
+                      fontWeight: 800,
+                      margin: "0 auto 6px",
+                      border: `1px solid ${t.border}`,
+                    }}
+                  >
+                    {Number.isFinite(Number(fs)) ? fs : "—"}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.label || "—"}</div>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 4 }}>Fit Score</div>
+                </div>
+              );
+            })()}
+            <div style={{ flex: "1 1 260px", minWidth: 0, fontSize: 13, color: t.textSecondary, lineHeight: 1.55 }}>
+              {c.aiAnalysis.fitReason ? (
+                <div style={{ marginBottom: 10 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Why fit</span>
+                  <div style={{ color: t.text, marginTop: 4 }}>{c.aiAnalysis.fitReason}</div>
+                </div>
+              ) : null}
+              {c.aiAnalysis.contentStyle ? (
+                <div style={{ marginBottom: 10 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Content style</span>
+                  <div style={{ marginTop: 4 }}>{c.aiAnalysis.contentStyle}</div>
+                </div>
+              ) : null}
+              {c.aiAnalysis.suggestedCampaigns ? (
+                <div style={{ marginBottom: 10 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Suggested campaigns</span>
+                  <div style={{ marginTop: 4 }}>{c.aiAnalysis.suggestedCampaigns}</div>
+                </div>
+              ) : null}
+              {c.aiAnalysis.estimatedRate ? (
+                <div>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Estimated rate</span>
+                  <div style={{ marginTop: 4, fontWeight: 700, color: t.green }}>{c.aiAnalysis.estimatedRate}</div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ flex: "2 1 420px", minWidth: 300, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -3574,10 +3976,10 @@ export default function App() {
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All Statuses", niche: "All Niches", quality: "All Quality" });
   const [openFilter, setOpenFilter] = useState(null);
-  const [showAddCreator, setShowAddCreator] = useState(false);
-  const [newCreatorForm, setNewCreatorForm] = useState({
-    handle: "", name: "", email: "", niche: "", tiktokUrl: "", instagramUrl: "", status: "Active", quality: "Standard", costPerVideo: "", notes: "",
-  });
+  const [addHandleInput, setAddHandleInput] = useState("");
+  const [addEnrichBusy, setAddEnrichBusy] = useState(false);
+  const [addEnrichStepState, setAddEnrichStepState] = useState(null);
+  const [duplicateModal, setDuplicateModal] = useState(null);
   const [creatorImportToast, setCreatorImportToast] = useState(null);
   const csvInputRef = useRef(null);
   const timerRef = useRef(null);
@@ -3732,6 +4134,9 @@ export default function App() {
             instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(c.instagramData || {}), ...updates.instagramData },
           };
         }
+        if ("aiAnalysis" in updates) {
+          next = { ...next, aiAnalysis: updates.aiAnalysis };
+        }
         return next;
       })
     );
@@ -3741,83 +4146,232 @@ export default function App() {
 
   const runBulkEnrichAll = useCallback(async () => {
     const key = (scrapeKey || "").trim() || storageGet("intake-scrape-key") || "";
+    const ak = (apiKey || "").trim() || storageGet("intake-apikey") || "";
     if (!key.trim()) {
       alert("Add your ScrapeCreators API key in Settings");
       return;
     }
     const active = creators.filter((c) => c.status === "Active");
-    const need = active.filter((c) => {
+    const stale = active.filter((c) => {
       const last = c.tiktokData?.lastEnriched;
       if (!last) return true;
       return Date.now() - new Date(last).getTime() > 24 * 60 * 60 * 1000;
     });
+    const skipped = active.length - stale.length;
     if (
       !window.confirm(
-        `This will pull live TikTok data for ${need.length} active creators. Costs ${need.length} API credits. Continue?`
+        `This will pull live TikTok data for ${stale.length} active creators (skipping ${skipped} enriched in the last 24h). Uses about ${stale.length} ScrapeCreators credits plus IB-Ai for creators missing analysis. Continue?`
       )
     ) {
       return;
     }
     let done = 0;
     let fail = 0;
-    for (let i = 0; i < need.length; i++) {
-      const cr = need[i];
-      setBulkEnrichProgress({ cur: i + 1, total: need.length, done, fail });
+    let topDiscovery = null;
+    const clean = (h) => String(h || "").replace(/^@/, "").trim().toLowerCase();
+    for (let i = 0; i < stale.length; i++) {
+      const cr = stale[i];
+      const ch = clean(cr.handle);
+      setBulkEnrichProgress({
+        cur: i + 1,
+        total: stale.length,
+        done,
+        fail,
+        skipped,
+        handle: cr.handle,
+        line: "",
+      });
       try {
-        const tt = await enrichTikTokFromApi(cr.handle, key.trim());
-        const engagementRate =
-          tt && Number(tt.followers) > 0 && tt.hearts != null
-            ? ((Number(tt.hearts) / Number(tt.followers)) * 100).toFixed(1)
-            : null;
+        const payload = await runScrapeAndAiPipeline(ch, key.trim(), ak, null, { skipAi: !!cr.aiAnalysis });
+        const tt = payload.ttData;
+        const engagementRate = payload.engagementRate;
+        const mergePatch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(cr, payload.aiAnalysis) : {};
         updateCreator(cr.id, {
           tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(cr.tiktokData || {}), ...tt },
+          instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(cr.instagramData || {}), ...payload.igData },
           engagementRate,
+          ...mergePatch,
+          ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         });
+        const fs = payload.aiAnalysis?.fitScore ?? cr.aiAnalysis?.fitScore;
+        const fol = tt.followers;
+        setBulkEnrichProgress({
+          cur: i + 1,
+          total: stale.length,
+          done: done + 1,
+          fail,
+          skipped,
+          handle: cr.handle,
+          line: `${fol != null ? formatMetricShort(fol) + " followers" : ""}${fs != null ? `, Fit Score: ${fs}` : ""}`,
+        });
+        const score = Number(payload.aiAnalysis?.fitScore ?? cr.aiAnalysis?.fitScore);
+        if (Number.isFinite(score) && (!topDiscovery || score > topDiscovery.score)) {
+          topDiscovery = { handle: cr.handle, score, followers: fol };
+        }
         done++;
       } catch {
         fail++;
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, ak ? 2000 : 1000));
     }
     setBulkEnrichProgress(null);
-    setCreatorImportToast(`Enriched ${done} creators. ${fail} failed.`);
-    setTimeout(() => setCreatorImportToast(null), 8000);
-  }, [creators, scrapeKey, updateCreator]);
+    const td = topDiscovery
+      ? `\nTop discovery: ${topDiscovery.handle} — ${topDiscovery.score}/10 fit score${topDiscovery.followers != null ? `, ${formatMetricShort(topDiscovery.followers)} followers` : ""}`
+      : "";
+    setCreatorImportToast(
+      `Bulk enrichment complete:\n• ${done} creators updated\n• ${skipped} skipped (enriched < 24h ago)\n• ${fail} failed (handle not found or API error)${td}`
+    );
+    setTimeout(() => setCreatorImportToast(null), 12000);
+  }, [creators, scrapeKey, apiKey, updateCreator]);
 
-  const addCreator = useCallback(() => {
-    const h = newCreatorForm.handle.trim();
-    if (!h) {
-      alert("Handle is required");
+  const runAddAndEnrich = useCallback(async () => {
+    const raw = addHandleInput.trim();
+    if (!raw) {
+      alert("Paste a TikTok or Instagram handle first.");
       return;
     }
-    const handleNorm = h.startsWith("@") ? h : `@${h}`;
-    const id = `c-${Date.now()}`;
-    const tt = (newCreatorForm.tiktokUrl || "").trim() || tiktokUrlFromHandle(handleNorm);
-    const ig = (newCreatorForm.instagramUrl || "").trim();
-    const row = {
-      id,
-      status: newCreatorForm.status,
-      handle: handleNorm,
-      name: newCreatorForm.name.trim(),
-      email: newCreatorForm.email.trim(),
-      niche: newCreatorForm.niche.trim(),
-      address: "",
-      totalVideos: 0,
-      notes: newCreatorForm.notes.trim(),
-      quality: newCreatorForm.quality,
-      tiktokUrl: tt,
-      instagramUrl: ig,
-      costPerVideo: newCreatorForm.costPerVideo.trim(),
-      bestVideos: [],
-      videoLog: [],
-      dateAdded: new Date().toISOString().slice(0, 10),
+    const cleanHandle = raw.replace(/^@/, "").trim().split(/[/?\s]/)[0];
+    if (!cleanHandle) return;
+
+    const dup = creators.find((c) => normalizeHandleKey(c.handle) === cleanHandle.toLowerCase());
+    if (dup) {
+      setDuplicateModal({ handle: `@${cleanHandle}`, existingId: dup.id });
+      return;
+    }
+
+    const sk = (scrapeKey || "").trim() || storageGet("intake-scrape-key") || "";
+    const ak = (apiKey || "").trim() || storageGet("intake-apikey") || "";
+
+    if (!sk) {
+      const id = `c-${Date.now()}`;
+      const row = {
+        id,
+        status: "Active",
+        handle: `@${cleanHandle}`,
+        name: "",
+        email: "",
+        niche: "",
+        address: "",
+        totalVideos: 0,
+        notes: "",
+        quality: "Standard",
+        tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
+        instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
+        costPerVideo: "",
+        videoLog: [],
+        dateAdded: new Date().toISOString().slice(0, 10),
+        bestVideos: [],
+        outreachStatus: null,
+        lastContactDate: null,
+        contactMethod: null,
+        followUpDue: null,
+        campaigns: [],
+        payments: [],
+      };
+      setCreators((p) => [hydrateCreator(row), ...p]);
+      setAddHandleInput("");
+      setCreatorImportToast("Add your ScrapeCreators API key in Settings to auto-pull creator data");
+      setTimeout(() => setCreatorImportToast(null), 8000);
+      navigate("creatorDetail", { creatorId: id });
+      return;
+    }
+
+    setAddEnrichBusy(true);
+    const order = ENRICH_STEPS.map((x) => x.id);
+    const onStep = (id) => {
+      const idx = order.indexOf(id);
+      const completed = idx > 0 ? order.slice(0, idx) : [];
+      setAddEnrichStepState({ completed, current: id });
     };
-    setCreators((prev) => [hydrateCreator(row), ...prev]);
-    setShowAddCreator(false);
-    setNewCreatorForm({
-      handle: "", name: "", email: "", niche: "", tiktokUrl: "", instagramUrl: "", status: "Active", quality: "Standard", costPerVideo: "", notes: "",
-    });
-  }, [newCreatorForm]);
+    setAddEnrichStepState({ completed: [], current: "tt_profile" });
+
+    try {
+      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, onStep);
+      const ai = payload.aiAnalysis;
+      const id = `c-${Date.now()}`;
+      const newCreator = {
+        id,
+        status: "Active",
+        handle: `@${cleanHandle}`,
+        name: payload.nickname || "",
+        email: "",
+        niche: ai?.suggestedNiche || "",
+        address: "",
+        totalVideos: 0,
+        notes: "",
+        quality: ai ? normalizeQualityTier(ai.qualityTier) : "Standard",
+        tiktokUrl: `https://www.tiktok.com/@${cleanHandle}`,
+        instagramUrl: `https://www.instagram.com/${cleanHandle}/`,
+        costPerVideo: ai?.estimatedRate || "",
+        videoLog: [],
+        dateAdded: new Date().toISOString().slice(0, 10),
+        bestVideos: [],
+        tiktokData: payload.ttData,
+        instagramData: payload.igData,
+        engagementRate: payload.engagementRate,
+        aiAnalysis: ai || null,
+        outreachStatus: null,
+        lastContactDate: null,
+        contactMethod: null,
+        followUpDue: null,
+        campaigns: [],
+        payments: [],
+      };
+      setCreators((p) => [hydrateCreator(newCreator), ...p]);
+      setAddHandleInput("");
+      if (payload.notes.length) {
+        setCreatorImportToast(payload.notes.filter(Boolean).join(" "));
+        setTimeout(() => setCreatorImportToast(null), 10000);
+      }
+      navigate("creatorDetail", { creatorId: id });
+    } catch (e) {
+      const msg = e?.message || String(e);
+      if (msg === "NOT_FOUND" || e?.status === 404) {
+        alert(`Couldn't find @${cleanHandle} on TikTok — check the handle and try again`);
+      } else {
+        alert(msg || "Enrichment failed");
+      }
+    } finally {
+      setAddEnrichBusy(false);
+      setAddEnrichStepState(null);
+    }
+  }, [addHandleInput, creators, scrapeKey, apiKey, navigate]);
+
+  const runReEnrichExisting = useCallback(async () => {
+    if (!duplicateModal) return;
+    const { existingId, handle: h } = duplicateModal;
+    const cleanHandle = h.replace(/^@/, "").trim();
+    setDuplicateModal(null);
+    const sk = (scrapeKey || "").trim() || storageGet("intake-scrape-key") || "";
+    const ak = (apiKey || "").trim() || storageGet("intake-apikey") || "";
+    if (!sk) {
+      alert("Add your ScrapeCreators API key in Settings to re-enrich.");
+      return;
+    }
+    setAddEnrichBusy(true);
+    try {
+      const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak);
+      const existing = creators.find((c) => c.id === existingId);
+      if (!existing) return;
+      const merged = mergeAiFieldsIntoExisting(existing, payload.aiAnalysis);
+      updateCreator(existingId, {
+        tiktokData: { ...DEFAULT_TIKTOK_DATA, ...(existing.tiktokData || {}), ...payload.ttData },
+        instagramData: { ...DEFAULT_INSTAGRAM_DATA, ...(existing.instagramData || {}), ...payload.igData },
+        engagementRate: payload.engagementRate,
+        ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
+        ...merged,
+      });
+      if (payload.notes.length) {
+        setCreatorImportToast(payload.notes[0]);
+        setTimeout(() => setCreatorImportToast(null), 8000);
+      }
+      navigate("creatorDetail", { creatorId: existingId });
+    } catch (e) {
+      alert(e?.message || "Re-enrich failed");
+    } finally {
+      setAddEnrichBusy(false);
+    }
+  }, [duplicateModal, creators, scrapeKey, apiKey, updateCreator, navigate]);
 
   const handleCsvImport = useCallback(
     (file) => {
@@ -4242,6 +4796,7 @@ export default function App() {
 
     const statusOrder = { Active: 0, "One-time": 1, "Off-boarded": 2 };
     list.sort((a, b) => {
+      if (sortCol === "fitScore") return cmpMetric(a, b, (x) => x.aiAnalysis?.fitScore, sortDir);
       if (sortCol === "followers") return cmpMetric(a, b, (x) => x.tiktokData?.followers, sortDir);
       if (sortCol === "hearts") return cmpMetric(a, b, (x) => x.tiktokData?.hearts, sortDir);
       if (sortCol === "engagement") {
@@ -4323,7 +4878,7 @@ export default function App() {
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         return prev;
       }
-      const descFirst = ["followers", "hearts", "engagement", "videos"];
+      const descFirst = ["fitScore", "followers", "hearts", "engagement", "videos"];
       setSortDir(descFirst.includes(col) ? "desc" : "asc");
       return col;
     });
@@ -5061,13 +5616,13 @@ export default function App() {
         {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {creatorImportToast && (
-          <div className="no-print" style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 300, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 20px", fontSize: 13, color: t.textSecondary, boxShadow: t.shadow }}>
+          <div className="no-print" style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 300, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 20px", fontSize: 13, color: t.textSecondary, boxShadow: t.shadow, maxWidth: 520, whiteSpace: "pre-line" }}>
             {creatorImportToast}
           </div>
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "creators" && (() => {
-          const gridCols = "60px 130px 36px 140px 80px 80px 55px 55px 160px 34px 34px 60px 70px 1fr";
+          const gridCols = "60px 40px 130px 36px 140px 80px 80px 55px 55px 160px 34px 34px 60px 70px 1fr";
           const filterSelect = (active) => ({
             ...S.select,
             padding: "6px 10px",
@@ -5086,7 +5641,7 @@ export default function App() {
             position: "sticky",
             top: 0,
             zIndex: 10,
-            minWidth: 1100,
+            minWidth: 1140,
           };
           const rowCell = {
             display: "grid",
@@ -5098,7 +5653,7 @@ export default function App() {
             color: t.textSecondary,
             lineHeight: 1.4,
             transition: "background 0.1s",
-            minWidth: 1100,
+            minWidth: 1140,
           };
           const ttLinkStyle = {
             fontWeight: 800,
@@ -5292,6 +5847,48 @@ export default function App() {
               <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20, background: t.green + (t.isLight ? "18" : "15"), color: t.green }}>{creators.length}</span>
             </div>
 
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Add a Creator</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <input
+                  type="text"
+                  value={addHandleInput}
+                  onChange={(e) => setAddHandleInput(e.target.value)}
+                  disabled={addEnrichBusy}
+                  placeholder="Paste a TikTok or Instagram handle (e.g. @natedank)"
+                  onKeyDown={(e) => { if (e.key === "Enter" && !addEnrichBusy) runAddAndEnrich(); }}
+                  style={{ flex: 1, minWidth: 220, padding: "10px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+                />
+                <button type="button" disabled={addEnrichBusy} onClick={runAddAndEnrich} style={{ ...S.btnP, padding: "10px 18px", fontSize: 13, opacity: addEnrichBusy ? 0.65 : 1 }}>
+                  {addEnrichBusy ? "Enriching…" : "Add & Enrich"}
+                </button>
+              </div>
+              {addEnrichStepState ? (
+                <div style={{ marginTop: 14, padding: 16, background: t.cardAlt, borderRadius: 12, border: `1px solid ${t.border}` }}>
+                  {ENRICH_STEPS.map((step) => {
+                    const done = addEnrichStepState.completed.includes(step.id);
+                    const active = addEnrichStepState.current === step.id;
+                    return (
+                      <div key={step.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, fontSize: 13, color: done ? t.green : active ? t.text : t.textFaint }}>
+                        <span style={{ width: 18, textAlign: "center" }}>{done ? "✓" : active ? "…" : "○"}</span>
+                        {step.label}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {duplicateModal ? (
+                <div style={{ marginTop: 12, padding: 14, background: t.cardAlt, borderRadius: 12, border: `1px solid ${t.orange}55` }}>
+                  <div style={{ fontSize: 13, marginBottom: 10, color: t.text }}>{duplicateModal.handle} already exists in your database</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => { navigate("creatorDetail", { creatorId: duplicateModal.existingId }); setDuplicateModal(null); }} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>View Existing</button>
+                    <button type="button" disabled={addEnrichBusy} onClick={runReEnrichExisting} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>Re-enrich</button>
+                    <button type="button" onClick={() => setDuplicateModal(null)} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>Cancel</button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, padding: "0 0 12px 0", borderBottom: `1px solid ${t.border}`, flexWrap: "wrap" }}>
               <input
                 type="text"
@@ -5328,7 +5925,6 @@ export default function App() {
                 <option value="High">★ High</option>
                 <option value="Standard">Standard</option>
               </select>
-              <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>+ Add Creator</button>
               <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12, opacity: bulkEnrichProgress ? 0.6 : 1 }}>
                 Enrich All
               </button>
@@ -5350,7 +5946,9 @@ export default function App() {
             </div>
             {bulkEnrichProgress ? (
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>
-                Enriching {bulkEnrichProgress.cur} of {bulkEnrichProgress.total} creators… (done {bulkEnrichProgress.done}, failed {bulkEnrichProgress.fail})
+                Enriching {bulkEnrichProgress.cur} of {bulkEnrichProgress.total} — {bulkEnrichProgress.handle}
+                {bulkEnrichProgress.line ? ` (${bulkEnrichProgress.line})` : ""}
+                {bulkEnrichProgress.skipped != null ? ` · skipped ${bulkEnrichProgress.skipped} (< 24h)` : ""}
               </div>
             ) : null}
 
@@ -5358,6 +5956,7 @@ export default function App() {
               <div style={{ position: "relative" }}>
                 <div style={headCell}>
                   {hdr("status", "Status", "status")}
+                  {hdr("fitScore", "Fit", null)}
                   {hdr("handle", "Handle", null)}
                   <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, display: "flex", alignItems: "center", justifyContent: "center" }}>Av</div>
                   {hdr("niche", "Niche", "niche")}
@@ -5418,61 +6017,6 @@ export default function App() {
                 </div>
 
                 <div style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto", overflowX: "auto" }}>
-                  {showAddCreator ? (
-                    <div
-                      style={{ ...rowCell, cursor: "default", background: t.cardAlt + "80" }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <select value={newCreatorForm.status} onChange={(e) => setNewCreatorForm((p) => ({ ...p, status: e.target.value }))} style={{ width: "100%", padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}>
-                          <option value="Active">Active</option>
-                          <option value="One-time">One-time</option>
-                          <option value="Off-boarded">Off-boarded</option>
-                        </select>
-                      </div>
-                      <input
-                        value={newCreatorForm.handle}
-                        onChange={(e) => {
-                          const handle = e.target.value;
-                          const clean = handle.replace(/@/g, "").trim();
-                          setNewCreatorForm((p) => ({
-                            ...p,
-                            handle,
-                            ...(clean
-                              ? {
-                                  tiktokUrl: `https://www.tiktok.com/@${clean}`,
-                                  instagramUrl: `https://www.instagram.com/${clean}/`,
-                                }
-                              : { tiktokUrl: "", instagramUrl: "" }),
-                          }));
-                        }}
-                        placeholder="@handle"
-                        style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}
-                      />
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <span style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, border: `1px solid ${t.border}` }} />
-                      </span>
-                      <input value={newCreatorForm.niche} onChange={(e) => setNewCreatorForm((p) => ({ ...p, niche: e.target.value }))} placeholder="Niche" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
-                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
-                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
-                      <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
-                      <span style={{ textAlign: "right", fontSize: 11, color: t.textFaint }}>0</span>
-                      <input value={newCreatorForm.email} onChange={(e) => setNewCreatorForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
-                      <input value={newCreatorForm.tiktokUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, tiktokUrl: e.target.value }))} placeholder="TikTok URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
-                      <input value={newCreatorForm.instagramUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, instagramUrl: e.target.value }))} placeholder="Instagram URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
-                      <select value={newCreatorForm.quality} onChange={(e) => setNewCreatorForm((p) => ({ ...p, quality: e.target.value }))} style={{ width: "100%", padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}>
-                        <option value="Standard">Standard</option>
-                        <option value="High">High</option>
-                      </select>
-                      <input value={newCreatorForm.costPerVideo} onChange={(e) => setNewCreatorForm((p) => ({ ...p, costPerVideo: e.target.value }))} placeholder="$" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                        <input value={newCreatorForm.notes} onChange={(e) => setNewCreatorForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" style={{ flex: 1, minWidth: 0, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
-                        <button type="button" onClick={addCreator} style={{ ...S.btnP, padding: "4px 10px", fontSize: 11, flexShrink: 0 }}>Save</button>
-                        <button type="button" onClick={() => setShowAddCreator(false)} style={{ ...S.btnS, padding: "4px 10px", fontSize: 11, flexShrink: 0 }}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : null}
-
                   {sortedCreators.length === 0 ? (
                     <div style={{ padding: 48, textAlign: "center", color: t.textMuted, fontSize: 14 }}>
                       <div style={{ marginBottom: 12 }}>No creators match your filters</div>
@@ -5498,6 +6042,8 @@ export default function App() {
                             ? t.blue
                             : t.textMuted;
                       const avLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
+                      const fs = c.aiAnalysis?.fitScore;
+                      const fsSt = fitScoreBadgeStyle(fs, t);
                       return (
                         <div
                           key={c.id}
@@ -5512,6 +6058,9 @@ export default function App() {
                           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                             <span style={{ width: 8, height: 8, borderRadius: 4, background: dotBg, flexShrink: 0 }} />
                             <span style={{ fontSize: 11, color: dotBg, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
+                          </div>
+                          <div style={{ textAlign: "center", fontSize: 12, fontWeight: 800, color: Number.isFinite(Number(fs)) ? fsSt.color : t.textFaint }}>
+                            {Number.isFinite(Number(fs)) ? fs : "—"}
                           </div>
                           <div style={{ ...ellip, fontWeight: 600, color: t.text }} title={hDisp}>{hDisp}</div>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
@@ -5613,6 +6162,7 @@ export default function App() {
               library={library}
               navigate={navigate}
               scrapeKey={scrapeKey}
+              apiKey={apiKey}
               t={t}
               S={S}
             />
