@@ -6777,6 +6777,28 @@ function ChannelPipeline({ navigate, creators, t, S }) {
     return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   };
 
+  const fmtSigned = (n) => {
+    if (n == null || n === "") return "—";
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    const abs = Math.abs(x);
+    const body =
+      abs >= 1e6 ? (abs / 1e6).toFixed(2) + "M" : abs >= 1e3 ? (abs / 1e3).toFixed(1) + "K" : abs.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return (x < 0 ? "-" : "") + "$" + body;
+  };
+
+  const findSpendCreator = (r) => {
+    const raw = String(r.creator_handle || "").trim();
+    const em = String(r.creator_email || "").trim().toLowerCase();
+    const normHandle = (h) => String(h || "").replace(/^@/, "").trim().toLowerCase();
+    return creators.find((c) => {
+      if (em && String(c.email || "").trim().toLowerCase() === em) return true;
+      if (raw.includes("@") && String(c.email || "").trim().toLowerCase() === raw.toLowerCase()) return true;
+      if (raw && c.handle && normHandle(c.handle) === normHandle(raw)) return true;
+      return false;
+    });
+  };
+
   const saveSpendRow = async (id) => {
     const updates = { ...editDraft };
     for (const k of ["pay", "new_pay", "pl", "paid_pl", "organic_views", "ad_views", "ad_spend", "purchase_value", "roas", "num_videos"]) {
@@ -6786,6 +6808,9 @@ function ChannelPipeline({ navigate, creators, t, S }) {
     }
     if (updates.deliverable_met !== undefined) updates.deliverable_met = updates.deliverable_met === true || updates.deliverable_met === "true";
     if (updates.creator_paid !== undefined) updates.creator_paid = updates.creator_paid === true || updates.creator_paid === "true";
+    if (updates.ad_usage !== undefined) updates.ad_usage = updates.ad_usage === "" || updates.ad_usage == null ? null : String(updates.ad_usage);
+    if (updates.contract !== undefined) updates.contract = updates.contract === "" ? null : String(updates.contract);
+    if (updates.notes !== undefined) updates.notes = updates.notes === "" ? null : String(updates.notes);
 
     const { error } = await supabase.from("partnership_spend").update(updates).eq("id", id);
     if (error) {
@@ -6990,119 +7015,219 @@ function ChannelPipeline({ navigate, creators, t, S }) {
                     <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{fmt(sectionTotal)}</div>
                   </div>
                   <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ borderBottom: `1px solid ${t.border}` }}>
-                          {["Status", "Creator", "Pay", "Platform", "Type", "Videos", "Delivered", "Paid"].map((h) => (
-                            <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((r) => {
-                          const isEditing = editing === r.id;
-                          const statusColors = {
-                            Active: t.green,
-                            Pause: t.orange,
-                            "Under Review": t.blue,
-                            Complete: t.green,
-                            "": t.textFaint,
-                          };
-                          const sc = statusColors[r.status] || t.textFaint;
+                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                      <table style={{ width: "100%", minWidth: 1400, borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${t.border}` }}>
+                            {[
+                              "Status",
+                              "Creator",
+                              "Pay",
+                              "New Pay",
+                              "P&L",
+                              "Paid P&L",
+                              "Platform",
+                              "Ad use",
+                              "Org views",
+                              "Ad views",
+                              "Ad spend",
+                              "Purchase",
+                              "ROAS",
+                              "Type",
+                              "Videos",
+                              "Contract",
+                              "Del.",
+                              "Paid",
+                              "Notes",
+                            ].map((h) => (
+                              <th
+                                key={h}
+                                style={{
+                                  padding: "8px 8px",
+                                  textAlign: h === "Del." || h === "Paid" ? "center" : "left",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: t.textFaint,
+                                  textTransform: "uppercase",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r) => {
+                            const isEditing = editing === r.id;
+                            const statusColors = {
+                              Active: t.green,
+                              Approved: t.green,
+                              Pause: t.orange,
+                              "Under Review": t.blue,
+                              Complete: t.green,
+                              "Off Board": t.purple,
+                              "": t.textFaint,
+                            };
+                            const sc = statusColors[r.status] || t.textFaint;
 
-                          const matchedCreator = creators.find(
-                            (c) =>
-                              c.handle?.toLowerCase() === r.creator_handle?.toLowerCase() ||
-                              c.handle?.toLowerCase() === ("@" + String(r.creator_handle || "").replace("@", "")).toLowerCase(),
-                          );
+                            const matchedCreator = findSpendCreator(r);
 
-                          return (
-                            <tr
-                              key={r.id}
-                              style={{ borderBottom: `1px solid ${t.border}08`, cursor: isEditing ? "default" : "pointer" }}
-                              onDoubleClick={() => {
-                                if (!isEditing) {
-                                  setEditing(r.id);
-                                  setEditDraft({});
-                                }
-                              }}
-                            >
-                              <td style={{ padding: "8px 10px" }}>
-                                {isEditing ? (
-                                  <select
-                                    value={editDraft.status ?? r.status ?? ""}
-                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, status: e.target.value }))}
-                                    style={{ padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
-                                  >
-                                    {["", "Active", "Pause", "Under Review", "Complete"].map((s) => (
-                                      <option key={s || "empty"} value={s}>
-                                        {s || "—"}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8, background: sc + "15", color: sc }}>{r.status || "—"}</span>
-                                )}
-                              </td>
-                              <td style={{ padding: "8px 10px" }}>
-                                {matchedCreator ? (
-                                  <span
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigate("creatorDetail", { creatorId: matchedCreator.id });
-                                    }}
-                                    style={{ color: t.green, fontWeight: 600, cursor: "pointer", textDecoration: "none" }}
-                                  >
-                                    {r.creator_handle}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: t.text, fontWeight: 600 }}>{r.creator_handle}</span>
-                                )}
-                                {r.creator_name ? <div style={{ fontSize: 10, color: t.textFaint }}>{r.creator_name}</div> : null}
-                              </td>
-                              <td style={{ padding: "8px 10px" }}>
-                                {isEditing ? (
-                                  <input
-                                    value={editDraft.pay ?? r.pay ?? ""}
-                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, pay: e.target.value }))}
-                                    style={{ width: 60, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
-                                  />
-                                ) : (
-                                  <span style={{ color: t.text }}>{r.pay != null ? `$${Number(r.pay).toLocaleString()}` : "—"}</span>
-                                )}
-                              </td>
-                              <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11 }}>{r.platform || "—"}</td>
-                              <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11 }}>{r.content_type || "—"}</td>
-                              <td style={{ padding: "8px 10px", color: t.textMuted, textAlign: "center" }}>{r.num_videos ?? "—"}</td>
-                              <td style={{ padding: "8px 10px", textAlign: "center" }}>
-                                {isEditing ? (
-                                  <input
-                                    type="checkbox"
-                                    checked={editDraft.deliverable_met ?? r.deliverable_met ?? false}
-                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, deliverable_met: e.target.checked }))}
-                                  />
-                                ) : (
-                                  <span style={{ color: r.deliverable_met ? t.green : t.textFaint }}>{r.deliverable_met ? "✓" : "☐"}</span>
-                                )}
-                              </td>
-                              <td style={{ padding: "8px 10px", textAlign: "center" }}>
-                                {isEditing ? (
-                                  <input
-                                    type="checkbox"
-                                    checked={editDraft.creator_paid ?? r.creator_paid ?? false}
-                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, creator_paid: e.target.checked }))}
-                                  />
-                                ) : (
-                                  <span style={{ color: r.creator_paid ? t.green : t.textFaint }}>{r.creator_paid ? "✓" : "☐"}</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            return (
+                              <tr
+                                key={r.id}
+                                style={{ borderBottom: `1px solid ${t.border}08`, cursor: isEditing ? "default" : "pointer" }}
+                                onDoubleClick={() => {
+                                  if (!isEditing) {
+                                    setEditing(r.id);
+                                    setEditDraft({});
+                                  }
+                                }}
+                              >
+                                <td style={{ padding: "8px 8px" }}>
+                                  {isEditing ? (
+                                    <select
+                                      value={editDraft.status ?? r.status ?? ""}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, status: e.target.value }))}
+                                      style={{ padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11, maxWidth: 120 }}
+                                    >
+                                      {["", "Active", "Approved", "Pause", "Under Review", "Off Board", "Complete"].map((s) => (
+                                        <option key={s || "empty"} value={s}>
+                                          {s || "—"}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8, background: sc + "15", color: sc }}>{r.status || "—"}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", minWidth: 120 }}>
+                                  {matchedCreator ? (
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate("creatorDetail", { creatorId: matchedCreator.id });
+                                      }}
+                                      style={{ color: t.green, fontWeight: 600, cursor: "pointer", textDecoration: "none" }}
+                                    >
+                                      {r.creator_handle}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: t.text, fontWeight: 600 }}>{r.creator_handle}</span>
+                                  )}
+                                  {r.creator_name ? <div style={{ fontSize: 10, color: t.textFaint }}>{r.creator_name}</div> : null}
+                                  {r.creator_email && String(r.creator_email).toLowerCase() !== String(r.creator_handle || "").toLowerCase() ? (
+                                    <div style={{ fontSize: 10, color: t.textFaint }}>{r.creator_email}</div>
+                                  ) : null}
+                                </td>
+                                <td style={{ padding: "8px 8px", whiteSpace: "nowrap" }}>
+                                  {isEditing ? (
+                                    <input
+                                      value={editDraft.pay ?? r.pay ?? ""}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, pay: e.target.value }))}
+                                      style={{ width: 64, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+                                    />
+                                  ) : (
+                                    <span style={{ color: t.text }}>{r.pay != null ? `$${Number(r.pay).toLocaleString()}` : "—"}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", whiteSpace: "nowrap" }}>
+                                  {isEditing ? (
+                                    <input
+                                      value={editDraft.new_pay ?? r.new_pay ?? ""}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, new_pay: e.target.value }))}
+                                      style={{ width: 64, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+                                    />
+                                  ) : (
+                                    <span style={{ color: t.text }}>{r.new_pay != null ? `$${Number(r.new_pay).toLocaleString()}` : "—"}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, whiteSpace: "nowrap" }}>{fmtSigned(r.pl)}</td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, whiteSpace: "nowrap" }}>{fmtSigned(r.paid_pl)}</td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, maxWidth: 100 }}>{r.platform || "—"}</td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11 }}>
+                                  {isEditing ? (
+                                    <input
+                                      value={editDraft.ad_usage ?? r.ad_usage ?? ""}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, ad_usage: e.target.value }))}
+                                      style={{ width: 44, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+                                    />
+                                  ) : (
+                                    r.ad_usage ?? "—"
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, textAlign: "right" }}>
+                                  {r.organic_views != null ? Number(r.organic_views).toLocaleString() : "—"}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, textAlign: "right" }}>
+                                  {r.ad_views != null ? Number(r.ad_views).toLocaleString() : "—"}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, textAlign: "right" }}>
+                                  {r.ad_spend != null ? `$${Number(r.ad_spend).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, textAlign: "right" }}>
+                                  {r.purchase_value != null ? `$${Number(r.purchase_value).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, textAlign: "right" }}>
+                                  {r.roas != null ? Number(r.roas).toFixed(2) : "—"}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 11, maxWidth: 140 }}>{r.content_type || "—"}</td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, textAlign: "center" }}>
+                                  {r.num_videos != null ? Number(r.num_videos) : "—"}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 10, maxWidth: 100 }}>
+                                  {isEditing ? (
+                                    <input
+                                      value={editDraft.contract ?? r.contract ?? ""}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, contract: e.target.value }))}
+                                      style={{ width: "100%", minWidth: 72, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 10 }}
+                                    />
+                                  ) : (
+                                    r.contract || "—"
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", textAlign: "center" }}>
+                                  {isEditing ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={editDraft.deliverable_met ?? r.deliverable_met ?? false}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, deliverable_met: e.target.checked }))}
+                                    />
+                                  ) : (
+                                    <span style={{ color: r.deliverable_met ? t.green : t.textFaint }}>{r.deliverable_met ? "✓" : "☐"}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", textAlign: "center" }}>
+                                  {isEditing ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={editDraft.creator_paid ?? r.creator_paid ?? false}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, creator_paid: e.target.checked }))}
+                                    />
+                                  ) : (
+                                    <span style={{ color: r.creator_paid ? t.green : t.textFaint }}>{r.creator_paid ? "✓" : "☐"}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "8px 8px", color: t.textMuted, fontSize: 10, maxWidth: 160, verticalAlign: "top" }}>
+                                  {isEditing ? (
+                                    <textarea
+                                      value={editDraft.notes ?? r.notes ?? ""}
+                                      onChange={(e) => setEditDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                                      rows={2}
+                                      style={{ width: "100%", minWidth: 120, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 10, resize: "vertical" }}
+                                    />
+                                  ) : r.notes ? (
+                                    <span title={r.notes}>{String(r.notes).length > 48 ? String(r.notes).slice(0, 48) + "…" : r.notes}</span>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
                   {rows.some((r) => editing === r.id) ? (
