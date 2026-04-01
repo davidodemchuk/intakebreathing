@@ -39,8 +39,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.10.0";
+const APP_VERSION = "5.11.0";
 const CHANGELOG = [
+  { version: "5.11.0", date: "2026-04-01", changes: [
+    "Homepage reverted to card-based layout matching UGC Army dashboard style",
+  ]},
   { version: "5.10.0", date: "2026-04-01", changes: [
     "Custom ratio input on Video Reformatter — enter any aspect ratio and download",
   ]},
@@ -6549,7 +6552,6 @@ export default function App() {
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
   const [formKey, setFormKey] = useState(0);
-  const [homeSectionHover, setHomeSectionHover] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -7960,191 +7962,57 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME — editorial dashboard (managers only; creators use library) */}
-        {!aiLoading && isCreatorViewAllowed && view === "home" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 60px", textAlign: "center" }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.15em",
-                  textTransform: "uppercase",
-                  color: t.textFaint,
-                  marginBottom: 20,
-                }}
-              >
-                Intake Breathing Technology
+        {/* HOME — card grid (managers only; creators use library) */}
+        {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
+          const activeCreatorCount = creators.filter((c) => c.status === "Active").length;
+          const cardStyle = (accent) => ({
+            background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24,
+            cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s",
+          });
+          const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${accent}08`; };
+          const hoverOut = (e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; };
+
+          return (
+            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creator Partnerships</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 32 }}>Intake Breathing Technology</div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 32 }}>
+                <div style={cardStyle(t.green)} onClick={() => navigate("ugcDashboard")}
+                  onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={hoverOut}>
+                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.green, marginBottom: 16 }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>UGC Army</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create briefs, manage creators, and track content</div>
+                  <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{library.length} briefs · {activeCreatorCount} creators</div>
+                </div>
+
+                <div style={{ ...cardStyle(t.orange), cursor: "default", opacity: 0.6 }}>
+                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Track outreach, responses, and partnerships</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
+                </div>
+
+                <div style={{ ...cardStyle(t.purple), cursor: "default", opacity: 0.6 }}>
+                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.purple, marginBottom: 16 }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Influencer Buys</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Manage campaigns, rates, and spend</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
+                </div>
+
+                <div style={cardStyle(t.blue)} onClick={() => navigate("tools")}
+                  onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={hoverOut}>
+                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.blue, marginBottom: 16 }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Tools</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Video reformatter and team utilities</div>
+                  <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>1 tool available</div>
+                </div>
               </div>
-              <h1
-                style={{
-                  fontSize: 44,
-                  fontWeight: 800,
-                  color: t.text,
-                  letterSpacing: "-0.03em",
-                  lineHeight: 1.1,
-                  marginBottom: 16,
-                  maxWidth: 700,
-                  margin: "0 auto 16px",
-                }}
-              >
-                Creator <em style={{ fontStyle: "italic", color: t.green }}>Partnerships</em>
-              </h1>
-              <p
-                style={{
-                  fontSize: 16,
-                  color: t.textMuted,
-                  lineHeight: 1.6,
-                  maxWidth: 480,
-                  margin: "0 auto",
-                }}
-              >
-                Build briefs, manage creators, and scale UGC content for the world&apos;s most advanced nasal breathing technology.
-              </p>
+
+              <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60" }}>v{APP_VERSION}</div>
             </div>
-
-            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "0 24px" }}>
-              <div style={{ borderTop: `1px solid ${t.border}` }} />
-            </div>
-
-            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 80px" }}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate("ugcDashboard")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    navigate("ugcDashboard");
-                  }
-                }}
-                onMouseEnter={() => setHomeSectionHover("ugc")}
-                onMouseLeave={() => setHomeSectionHover(null)}
-                style={{
-                  padding: "36px 0",
-                  borderBottom: `1px solid ${t.border}`,
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 24,
-                  transition: "opacity 0.2s",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.green, marginBottom: 8 }}>01</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>UGC Army</div>
-                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
-                    Create AI-powered briefs, manage your creator roster, enrich profiles with live data, and track content across campaigns.
-                  </div>
-                </div>
-                <div
-                  aria-hidden
-                  style={{
-                    fontSize: 24,
-                    color: homeSectionHover === "ugc" ? t.green : t.textFaint,
-                    transition: "transform 0.2s, color 0.2s",
-                    transform: homeSectionHover === "ugc" ? "translateX(4px)" : "translateX(0)",
-                    flexShrink: 0,
-                  }}
-                >
-                  →
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "36px 0",
-                  borderBottom: `1px solid ${t.border}`,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 24,
-                  opacity: 0.5,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.textFaint, marginBottom: 8 }}>02</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Channel Pipeline</div>
-                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
-                    Track creator outreach, manage responses, and move partnerships from discovery to onboarding.
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600, flexShrink: 0 }}>Coming Soon</div>
-              </div>
-
-              <div
-                style={{
-                  padding: "36px 0",
-                  borderBottom: `1px solid ${t.border}`,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 24,
-                  opacity: 0.5,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.textFaint, marginBottom: 8 }}>03</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Influencer Buys</div>
-                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
-                    Manage influencer campaigns, negotiate rates, track spend, and measure ROI across partnerships.
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600, flexShrink: 0 }}>Coming Soon</div>
-              </div>
-
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate("tools")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    navigate("tools");
-                  }
-                }}
-                onMouseEnter={() => setHomeSectionHover("tools")}
-                onMouseLeave={() => setHomeSectionHover(null)}
-                style={{
-                  padding: "36px 0",
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 24,
-                  transition: "opacity 0.2s",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: t.blue, marginBottom: 8 }}>04</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Tools</div>
-                  <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, maxWidth: 500 }}>
-                    Video reformatter for ad platforms, content analytics, and team utilities.
-                  </div>
-                </div>
-                <div
-                  aria-hidden
-                  style={{
-                    fontSize: 24,
-                    color: homeSectionHover === "tools" ? t.green : t.textFaint,
-                    transition: "transform 0.2s, color 0.2s",
-                    transform: homeSectionHover === "tools" ? "translateX(4px)" : "translateX(0)",
-                    flexShrink: 0,
-                  }}
-                >
-                  →
-                </div>
-              </div>
-            </div>
-
-            <div style={{ textAlign: "center", padding: "0 24px 40px" }}>
-              <div style={{ fontSize: 10, color: t.textFaint + "50", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                Intake Breathing Technology LLC · v{APP_VERSION}
-              </div>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {!aiLoading && isCreatorViewAllowed && view === "ugcDashboard" && (
           <UGCDashboard
