@@ -560,6 +560,7 @@ function buildRejectionsArray(d) {
 }
 
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
+const CREATOR_ALLOWED_VIEWS = ["library", "display"];
 
 function genShareId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -1783,12 +1784,16 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
       )}
       <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>← Back</button>
-        {isManager && <>
-          <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>IB-Ai Regenerate</button>
-          <button type="button" onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="zap" size={14} color={t.text} />Quick Regen</button>
-          <button type="button" onClick={downloadPDF} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.blue + "55", color: t.blue }}>Download PDF</button>
+        {isManager && (
+          <>
+            <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>IB-Ai Regenerate</button>
+            <button type="button" onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="zap" size={14} color={t.text} />Quick Regen</button>
+          </>
+        )}
+        <button type="button" onClick={downloadPDF} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.blue + "55", color: t.blue }}>Download PDF</button>
+        {isManager && (
           <button type="button" onClick={copyShareLink} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.border, color: t.textMuted }}>Copy Share Link</button>
-        </>}
+        )}
       </div>
       <div style={{ marginBottom: 24 }}>
         <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11, display: "inline-flex", alignItems: "center", gap: 6 }}>{wasAI ? "IB-Ai" : <><Icon name="zap" size={12} color={t.textFaint} />Template Draft</>}</span>
@@ -2453,19 +2458,6 @@ export default function App() {
     setView(newView);
   }, []);
 
-  useEffect(() => {
-    const handlePopState = (event) => {
-      if (event.state && event.state.view) {
-        setView(event.state.view);
-      } else {
-        setView(getViewFromPath());
-      }
-    };
-    window.addEventListener("popstate", handlePopState);
-    window.history.replaceState({ view: getViewFromPath() }, "", window.location.pathname);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
   const [currentBrief, setCurrentBrief] = useState(null);
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
@@ -2525,6 +2517,25 @@ export default function App() {
     if (!storageReady) return;
     storageSet("intake-theme", isDark ? "dark" : "light");
   }, [isDark, storageReady]);
+
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (event.state && event.state.view) {
+        setView(event.state.view);
+      } else {
+        setView(getViewFromPath());
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    window.history.replaceState({ view: getViewFromPath() }, "", window.location.pathname);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (currentRole === ROLES.CREATOR && !CREATOR_ALLOWED_VIEWS.includes(view)) {
+      navigate("library");
+    }
+  }, [currentRole, view, navigate]);
 
   const t = isDark ? THEMES.dark : THEMES.light;
   const S = getS(t);
@@ -2794,6 +2805,8 @@ export default function App() {
     if (currentFormData) handleGenerate({ ...currentFormData, mode: "ai" });
   }, [currentFormData, handleGenerate]);
 
+  const isCreatorViewAllowed = currentRole !== ROLES.CREATOR || CREATOR_ALLOWED_VIEWS.includes(view);
+
   return (
     <ThemeContext.Provider value={ctx}>
       <div style={S.app}>
@@ -2830,8 +2843,21 @@ export default function App() {
 
         {storageReady && <>
 
-        {/* NAV — context-aware */}
+        {/* NAV — context-aware (creators: UGC Army library only) */}
         {(() => {
+          if (currentRole === ROLES.CREATOR) {
+            return (
+              <div className="no-print" style={S.nav}>
+                <div style={S.navLogo} onClick={() => navigate("library")}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill={t.green}/><path d="M7 12h10M12 7v10" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                  <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>{NAV_SUB_LABELS.ugcArmy}</div></div>
+                </div>
+                <div style={S.navLinks}>
+                  <button type="button" style={S.navBtn(view === "library" || view === "display")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
+                </div>
+              </div>
+            );
+          }
           const section = getCurrentSection(view);
           const navSubText = NAV_SUB_LABELS[section] ?? NAV_SUB_LABELS.dashboard;
           const dashBtn = { ...S.navBtn(false), color: t.textFaint, fontWeight: 600 };
@@ -2877,9 +2903,9 @@ export default function App() {
         })()}
 
         {currentRole === ROLES.CREATOR && (
-          <div className="no-print" style={{ background: t.orange + (t.isLight ? "18" : "15"), borderBottom: `1px solid ${t.orange}35`, padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap", fontSize: 13, color: t.text }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="eye" size={18} color={t.text} />Viewing as Creator — read-only mode</span>
-            <button type="button" onClick={() => setCurrentRole(ROLES.MANAGER)} style={{ ...S.btnS, fontSize: 12, padding: "6px 14px", borderColor: t.orange + "50", color: t.orange }}>Switch to Manager</button>
+          <div className="no-print" style={{ background: t.orange + "15", borderBottom: `1px solid ${t.orange}30`, padding: "8px 24px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center", color: t.text, gap: 12, flexWrap: "wrap" }}>
+            <span>👁 Viewing as Creator — read-only · Creators only see briefs</span>
+            <button type="button" onClick={() => { setCurrentRole(ROLES.MANAGER); navigate("home"); }} style={{ ...S.btnS, fontSize: 12, padding: "6px 14px", borderColor: t.orange + "50", color: t.orange, flexShrink: 0 }}>Switch to Manager</button>
           </div>
         )}
 
@@ -2960,8 +2986,8 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME — dashboard */}
-        {!aiLoading && view === "home" && (
+        {/* HOME — dashboard (managers only; creators use library) */}
+        {!aiLoading && isCreatorViewAllowed && view === "home" && (
           <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, letterSpacing: "0.02em", marginBottom: 20 }}>Intake Breathing — Creator Partnerships</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
@@ -3100,25 +3126,25 @@ export default function App() {
           </div>
         )}
 
-        {!aiLoading && view === "pipeline" && (
+        {!aiLoading && isCreatorViewAllowed && view === "pipeline" && (
           <ComingSoonPage
             title="Channel Pipeline"
             message="Channel Pipeline — Coming Soon. Track creator outreach, responses, and partnership status."
             onBack={() => navigate("home")}
           />
         )}
-        {!aiLoading && view === "influencer" && (
+        {!aiLoading && isCreatorViewAllowed && view === "influencer" && (
           <ComingSoonPage
             title="Influencer Buys"
             message="Influencer Buys — Coming Soon. Manage influencer campaigns and spend in one place."
             onBack={() => navigate("home")}
           />
         )}
-        {!aiLoading && view === "tools" && <ToolsPage onBack={() => navigate("home")} onOpenVideo={() => navigate("videotool")} />}
-        {!aiLoading && view === "videotool" && <VideoReformatter onBack={() => navigate("tools")} />}
+        {!aiLoading && isCreatorViewAllowed && view === "tools" && <ToolsPage onBack={() => navigate("home")} onOpenVideo={() => navigate("videotool")} />}
+        {!aiLoading && isCreatorViewAllowed && view === "videotool" && <VideoReformatter onBack={() => navigate("tools")} />}
 
         {/* SETTINGS */}
-        {!aiLoading && view === "settings" && (
+        {!aiLoading && isCreatorViewAllowed && view === "settings" && (
           <div style={{ maxWidth: 600, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
             <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
@@ -3255,10 +3281,18 @@ export default function App() {
             {/* Preview Mode — developer testing */}
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginTop: 20, boxShadow: t.shadow }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 6 }}>Preview Mode</div>
-              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.6 }}>Switch to Creator view to see what creators will see (read-only)</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.6 }}>Preview what creators see — they can only view and download briefs from the UGC Army library. All other sections are hidden.</div>
               <button
                 type="button"
-                onClick={() => setCurrentRole((r) => (r === ROLES.MANAGER ? ROLES.CREATOR : ROLES.MANAGER))}
+                onClick={() => {
+                  if (currentRole === ROLES.MANAGER) {
+                    setCurrentRole(ROLES.CREATOR);
+                    navigate("library");
+                  } else {
+                    setCurrentRole(ROLES.MANAGER);
+                    navigate("home");
+                  }
+                }}
                 style={{
                   padding: "10px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600,
                   border: `1px solid ${currentRole === ROLES.CREATOR ? t.green + "50" : t.border}`,
@@ -3289,24 +3323,37 @@ export default function App() {
           </div>
         )}
 
-        {!aiLoading && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
-        {!aiLoading && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
+        {!aiLoading && isCreatorViewAllowed && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
+        {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {!aiLoading && view === "library" && (
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ ...S.formTitle, marginBottom: 24 }}>Brief Library</div>
             {library.length === 0 ? (
-              <div style={S.empty}><div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}><Icon name="folder" size={32} color={t.textFaint} /></div><div style={{ fontSize: 15, marginBottom: 8 }}>No briefs yet</div><div style={{ fontSize: 13, marginBottom: 24 }}>Generated briefs will appear here.</div><button style={S.btnP} onClick={()=>navigate("create")}>Create Your First Brief</button></div>
+              <div style={S.empty}>
+                <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}><Icon name="folder" size={32} color={t.textFaint} /></div>
+                <div style={{ fontSize: 15, marginBottom: 8 }}>No briefs yet</div>
+                <div style={{ fontSize: 13, marginBottom: currentRole === ROLES.CREATOR ? 0 : 24 }}>
+                  {currentRole === ROLES.CREATOR ? "Briefs shared with you will appear here." : "Generated briefs will appear here."}
+                </div>
+                {currentRole !== ROLES.CREATOR && <button style={S.btnP} onClick={()=>navigate("create")}>Create Your First Brief</button>}
+              </div>
             ) : library.map(item => (
-              <div key={item.id} style={S.listItem}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
+              <div
+                key={item.id}
+                style={S.listItem}
+                onMouseEnter={currentRole === ROLES.CREATOR ? undefined : (e)=>{e.currentTarget.style.borderColor=t.green+"50"}}
+                onMouseLeave={currentRole === ROLES.CREATOR ? undefined : (e)=>{e.currentTarget.style.borderColor=t.border}}
+              >
                 <div style={{ cursor: "pointer", flex: 1 }} onClick={()=>openLibraryItem(item)}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{managerDisplayName(item.formData)} · {item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ fontSize: 12, color: t.textFaint }}>{item.date}</div>
-                  <button type="button" onClick={(e)=>{e.stopPropagation();deleteBrief(item.id)}} style={{ background: "none", border: "none", color: t.red, cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, opacity: 0.6, display: "flex", alignItems: "center" }} title="Delete brief"><Icon name="x" size={16} color={t.red} /></button>
+                  {currentRole !== ROLES.CREATOR && (
+                    <button type="button" onClick={(e)=>{e.stopPropagation();deleteBrief(item.id)}} style={{ background: "none", border: "none", color: t.red, cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, opacity: 0.6, display: "flex", alignItems: "center" }} title="Delete brief"><Icon name="x" size={16} color={t.red} /></button>
+                  )}
                 </div>
               </div>
             ))}
