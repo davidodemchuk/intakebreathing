@@ -5,8 +5,17 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.6";
+const APP_VERSION = "2.2.0";
 const CHANGELOG = [
+  { version: "2.2.0", date: "2025-04-01", changes: [
+    "Creator Database 2.0 — completely redesigned list view with rich info at a glance",
+    "Clickable TikTok and Instagram links directly on each creator card",
+    "Video tracking per creator — log videos with URLs, campaign, date, and performance",
+    "Creator cards show niche tags, video count, quality tier, cost, and contact links inline",
+    "Fetch live TikTok/Instagram profile data via ScrapeCreators API",
+    "Creator search improved — searches across handle, name, niche, and notes",
+    "Sort options: by name, video count, status, most recent activity",
+  ]},
   { version: "2.0.6", date: "2025-04-01", changes: [
     "Added budget per video field to Brief Details — defaults to $100",
     "Added supervision level dropdown — Full Review, Light Touch, or Hands Off",
@@ -621,14 +630,69 @@ function tiktokUrlFromHandle(handle) {
   return `https://www.tiktok.com/@${h}`;
 }
 
+function instagramUsernameFromUrl(url) {
+  try {
+    const u = new URL(String(url || "").trim());
+    const parts = u.pathname.split("/").filter(Boolean);
+    return parts[0] || "";
+  } catch {
+    return "";
+  }
+}
+
+function creatorDisplayVideoCount(c) {
+  const logLen = Array.isArray(c?.videoLog) ? c.videoLog.length : 0;
+  const legacy = Number(c?.totalVideos) || 0;
+  return Math.max(logLen, legacy);
+}
+
+function normalizeCreatorRow(c) {
+  if (!c || typeof c !== "object") return c;
+  return {
+    ...c,
+    videoLog: Array.isArray(c.videoLog) ? c.videoLog : [],
+    dateAdded: c.dateAdded || "2025-03-31",
+  };
+}
+
 function sortCreatorsForDisplay(arr) {
   const order = { Active: 0, "One-time": 1, "Off-boarded": 2 };
   return [...arr].sort((a, b) => {
     const ao = order[a.status] ?? 99;
     const bo = order[b.status] ?? 99;
     if (ao !== bo) return ao - bo;
-    return (Number(b.totalVideos) || 0) - (Number(a.totalVideos) || 0);
+    return creatorDisplayVideoCount(b) - creatorDisplayVideoCount(a);
   });
+}
+
+/** @param {"videos"|"name"|"handle"|"recent"|"status"} sortKey */
+function sortCreatorsList(arr, sortKey) {
+  const list = [...arr];
+  const statusOrder = { Active: 0, "One-time": 1, "Off-boarded": 2 };
+  const nameKey = (c) => (c.name || "").trim().toLowerCase() || String(c.handle || "").toLowerCase();
+  switch (sortKey) {
+    case "videos":
+      return list.sort((a, b) => creatorDisplayVideoCount(b) - creatorDisplayVideoCount(a));
+    case "name":
+      return list.sort((a, b) => nameKey(a).localeCompare(nameKey(b)));
+    case "handle":
+      return list.sort((a, b) => String(a.handle || "").localeCompare(String(b.handle || ""), undefined, { sensitivity: "base" }));
+    case "recent":
+      return list.sort((a, b) => {
+        const db = new Date(b.dateAdded || 0).getTime();
+        const da = new Date(a.dateAdded || 0).getTime();
+        return db - da;
+      });
+    case "status":
+      return list.sort((a, b) => {
+        const ao = statusOrder[a.status] ?? 99;
+        const bo = statusOrder[b.status] ?? 99;
+        if (ao !== bo) return ao - bo;
+        return String(a.handle || "").localeCompare(String(b.handle || ""));
+      });
+    default:
+      return sortCreatorsForDisplay(list);
+  }
 }
 
 function genShareId() {
@@ -2776,6 +2840,483 @@ function VideoReformatter({ onBack }) {
   );
 }
 
+const VIDEO_LOG_PLATFORMS = ["TikTok", "Instagram", "YouTube Shorts", "Facebook", "Other"];
+const VIDEO_LOG_STATUSES = [
+  { value: "live", label: "Live" },
+  { value: "in_review", label: "In Review" },
+  { value: "draft", label: "Draft" },
+];
+
+function pickFollowers(obj) {
+  if (obj == null) return null;
+  if (typeof obj === "number") return obj;
+  const tryPaths = [
+    obj.follower_count,
+    obj.followers,
+    obj.followerCount,
+    obj.stats?.followerCount,
+    obj.stats?.follower_count,
+    obj.user?.follower_count,
+    obj.user?.followerCount,
+    obj.data?.follower_count,
+    obj.edge_followed_by?.count,
+  ];
+  for (const p of tryPaths) {
+    if (typeof p === "number" && !Number.isNaN(p)) return p;
+    if (typeof p === "string") {
+      const n = parseInt(p.replace(/,/g, ""), 10);
+      if (!Number.isNaN(n)) return n;
+    }
+  }
+  return null;
+}
+
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, t, S }) {
+  const [showAddress, setShowAddress] = useState(false);
+  const [showVideoForm, setShowVideoForm] = useState(false);
+  const [videoDraft, setVideoDraft] = useState({
+    url: "",
+    campaign: "",
+    platform: "TikTok",
+    status: "live",
+    notes: "",
+    date: new Date().toISOString().slice(0, 10),
+    views: "",
+  });
+  const [fetchingProfile, setFetchingProfile] = useState(false);
+  const [fetchMsg, setFetchMsg] = useState(null);
+
+  const campaignNames = useMemo(() => {
+    const s = new Set();
+    (library || []).forEach((item) => {
+      const n = (item.formData?.campaignName || "").trim();
+      if (n) s.add(n);
+    });
+    return [...s].sort();
+  }, [library]);
+
+  const activeCampaignCount = useMemo(() => {
+    const logs = Array.isArray(c.videoLog) ? c.videoLog : [];
+    const names = new Set();
+    logs.forEach((v) => {
+      if (String(v.status || "").toLowerCase() === "live" && (v.campaign || "").trim()) names.add(v.campaign.trim());
+    });
+    return names.size;
+  }, [c.videoLog]);
+
+  const ttUrl = c.tiktokUrl?.trim() || tiktokUrlFromHandle(c.handle);
+  const videoCount = creatorDisplayVideoCount(c);
+
+  const fetchLiveProfiles = async () => {
+    const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
+    if (!key.trim()) {
+      setFetchMsg("Add your ScrapeCreators API key in Settings.");
+      return;
+    }
+    setFetchingProfile(true);
+    setFetchMsg(null);
+    try {
+      const h = String(c.handle || "").replace(/^@/, "").trim();
+      if (!h) throw new Error("Missing handle");
+      const ttRes = await fetch(`https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(h)}`, {
+        headers: { "x-api-key": key.trim() },
+      });
+      const ttJson = await ttRes.json().catch(() => ({}));
+      if (!ttRes.ok) throw new Error(ttJson?.message || ttJson?.error || `TikTok profile HTTP ${ttRes.status}`);
+      const ttRoot = ttJson?.data ?? ttJson;
+      const tiktokFollowers = pickFollowers(ttRoot) ?? pickFollowers(ttRoot?.user) ?? pickFollowers(ttRoot?.stats);
+
+      let instagramFollowers = null;
+      const igUrl = (c.instagramUrl || "").trim();
+      if (igUrl) {
+        const igUser = instagramUsernameFromUrl(igUrl);
+        if (igUser) {
+          const igRes = await fetch(`https://api.scrapecreators.com/v1/instagram/profile?username=${encodeURIComponent(igUser)}`, {
+            headers: { "x-api-key": key.trim() },
+          });
+          const igJson = await igRes.json().catch(() => ({}));
+          if (igRes.ok) {
+            const igRoot = igJson?.data ?? igJson;
+            instagramFollowers = pickFollowers(igRoot) ?? pickFollowers(igRoot?.user);
+          }
+        }
+      }
+
+      updateCreator(c.id, {
+        socialStats: {
+          tiktokFollowers: tiktokFollowers ?? undefined,
+          instagramFollowers: instagramFollowers ?? undefined,
+          fetchedAt: new Date().toISOString(),
+        },
+      });
+      setFetchMsg("Live profile data saved.");
+    } catch (err) {
+      setFetchMsg(err.message || "Could not fetch profiles.");
+    } finally {
+      setFetchingProfile(false);
+    }
+  };
+
+  const saveVideoLogEntry = () => {
+    const id = `v-${Date.now()}`;
+    const entry = {
+      id,
+      url: videoDraft.url.trim(),
+      campaign: videoDraft.campaign.trim(),
+      date: videoDraft.date,
+      platform: videoDraft.platform,
+      status: videoDraft.status,
+      views: Number(videoDraft.views) || 0,
+      notes: videoDraft.notes.trim(),
+    };
+    const prevLog = Array.isArray(c.videoLog) ? c.videoLog : [];
+    const videoLog = [...prevLog, entry];
+    const totalVideos = Math.max(videoLog.length, Number(c.totalVideos) || 0);
+    updateCreator(c.id, { videoLog, totalVideos });
+    setShowVideoForm(false);
+    setVideoDraft({
+      url: "",
+      campaign: "",
+      platform: "TikTok",
+      status: "live",
+      notes: "",
+      date: new Date().toISOString().slice(0, 10),
+      views: "",
+    });
+  };
+
+  const statusPill = (status) => {
+    const st = String(status || "").toLowerCase();
+    if (st === "live") return { bg: t.green + "18", color: t.green, border: t.green + "35", label: "Live" };
+    if (st === "in_review") return { bg: t.orange + "18", color: t.orange, border: t.orange + "35", label: "In Review" };
+    return { bg: t.cardAlt, color: t.textFaint, border: t.border, label: "Draft" };
+  };
+
+  const pillLink = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    color: t.textMuted,
+    textDecoration: "none",
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: `1px solid ${t.border}`,
+    background: t.cardAlt,
+    cursor: "pointer",
+  };
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 28 }}>
+        <div style={{ flex: "1 1 280px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 28, fontWeight: 800, color: t.text, textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
+              {c.handle}
+            </a>
+            {c.name?.trim() ? <span style={{ fontSize: 16, color: t.textMuted, fontWeight: 500 }}>{c.name.trim()}</span> : null}
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "4px 12px",
+                borderRadius: 20,
+                background: c.status === "Active" ? t.green + "18" : c.status === "One-time" ? t.orange + "18" : t.red + "18",
+                color: c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red,
+                border: `1px solid ${c.status === "Active" ? t.green + "35" : c.status === "One-time" ? t.orange + "35" : t.red + "35"}`,
+              }}
+            >
+              {c.status}
+            </span>
+            {c.quality === "High" ? (
+              <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 12px", borderRadius: 20, background: "#f59e0b15", color: "#f59e0b", border: "1px solid #f59e0b30" }}>★ High</span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: t.cardAlt, color: t.textMuted, border: `1px solid ${t.border}` }}>Standard</span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>
+            ← Back
+          </button>
+          <button type="button" onClick={() => document.getElementById("creator-notes-section")?.scrollIntoView({ behavior: "smooth" })} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>
+            Edit
+          </button>
+          <button
+            type="button"
+            disabled={fetchingProfile}
+            onClick={fetchLiveProfiles}
+            style={{ ...S.btnP, padding: "9px 18px", fontSize: 13, opacity: fetchingProfile ? 0.65 : 1 }}
+          >
+            {fetchingProfile ? "Fetching…" : "Fetch live profiles"}
+          </button>
+        </div>
+      </div>
+      {fetchMsg ? (
+        <div style={{ fontSize: 12, color: fetchMsg.includes("saved") || fetchMsg.includes("updated") ? t.green : t.orange, marginBottom: 16 }}>{fetchMsg}</div>
+      ) : null}
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ flex: "2 1 420px", minWidth: 300, display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16, color: t.text }}>About</div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Handle</div>
+              <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 18, fontWeight: 700, color: t.green }}>
+                {c.handle}
+              </a>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Name</div>
+              <input
+                value={c.name || ""}
+                onChange={(e) => updateCreator(c.id, { name: e.target.value })}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+              />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche (comma separated)</div>
+              <input
+                value={c.niche || ""}
+                onChange={(e) => updateCreator(c.id, { niche: e.target.value })}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+              />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
+                <select value={c.quality || "Standard"} onChange={(e) => updateCreator(c.id, { quality: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
+                  <option value="High">★ High</option>
+                  <option value="Standard">Standard</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
+                <select value={c.status || "Active"} onChange={(e) => updateCreator(c.id, { status: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
+                  <option value="Active">Active</option>
+                  <option value="One-time">One-time</option>
+                  <option value="Off-boarded">Off-boarded</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Cost per video</div>
+              <div style={{ display: "flex", alignItems: "stretch" }}>
+                <span style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRight: "none", borderRadius: "8px 0 0 8px", padding: "10px 12px", color: t.textMuted, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center" }}>$</span>
+                <input
+                  value={String(c.costPerVideo || "").replace(/^\$/, "")}
+                  onChange={(e) => updateCreator(c.id, { costPerVideo: e.target.value })}
+                  placeholder="100"
+                  style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: "0 8px 8px 0", border: `1px solid ${t.border}`, borderLeft: "none", background: t.inputBg, color: t.inputText, fontSize: 14 }}
+                />
+              </div>
+            </div>
+            <div>
+              <button type="button" onClick={() => setShowAddress((v) => !v)} style={{ background: "none", border: "none", color: t.green, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: showAddress ? 8 : 0 }}>
+                {showAddress ? "Hide address" : "Show address"}
+              </button>
+              {showAddress ? (
+                <textarea
+                  value={c.address || ""}
+                  onChange={(e) => updateCreator(c.id, { address: e.target.value })}
+                  rows={3}
+                  placeholder="Mailing address"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, resize: "vertical" }}
+                />
+              ) : null}
+            </div>
+          </div>
+
+          <div id="creator-notes-section" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, color: t.text }}>Notes &amp; Performance</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10, lineHeight: 1.5 }}>What this creator excels at, best hooks, audience fit, and performance highlights.</div>
+            <textarea
+              value={c.notes || ""}
+              onChange={(e) => updateCreator(c.id, { notes: e.target.value })}
+              rows={12}
+              style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.55, resize: "vertical", minHeight: 200 }}
+              placeholder="Strong hooks, audience notes, campaign wins, what to avoid…"
+            />
+          </div>
+
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Video Log</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: t.green + "15", color: t.green }}>{(Array.isArray(c.videoLog) ? c.videoLog : []).length}</span>
+              </div>
+              <button type="button" onClick={() => setShowVideoForm((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>
+                + Add Video
+              </button>
+            </div>
+
+            {showVideoForm ? (
+              <div style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>URL</div>
+                    <input value={videoDraft.url} onChange={(e) => setVideoDraft((d) => ({ ...d, url: e.target.value }))} placeholder="https://…" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Campaign</div>
+                    <input list={`camp-${c.id}`} value={videoDraft.campaign} onChange={(e) => setVideoDraft((d) => ({ ...d, campaign: e.target.value }))} placeholder="Campaign name" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                    <datalist id={`camp-${c.id}`}>
+                      {campaignNames.map((n) => (
+                        <option key={n} value={n} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Date</div>
+                    <input type="date" value={videoDraft.date} onChange={(e) => setVideoDraft((d) => ({ ...d, date: e.target.value }))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Platform</div>
+                    <select value={videoDraft.platform} onChange={(e) => setVideoDraft((d) => ({ ...d, platform: e.target.value }))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+                      {VIDEO_LOG_PLATFORMS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Status</div>
+                    <select value={videoDraft.status} onChange={(e) => setVideoDraft((d) => ({ ...d, status: e.target.value }))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+                      {VIDEO_LOG_STATUSES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Views</div>
+                    <input value={videoDraft.views} onChange={(e) => setVideoDraft((d) => ({ ...d, views: e.target.value }))} placeholder="0" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Notes</div>
+                  <input value={videoDraft.notes} onChange={(e) => setVideoDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Optional" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                </div>
+                <button type="button" onClick={saveVideoLogEntry} style={{ ...S.btnP, padding: "8px 16px", fontSize: 13 }}>
+                  Save
+                </button>
+              </div>
+            ) : null}
+
+            {(Array.isArray(c.videoLog) ? c.videoLog : []).length === 0 ? (
+              <div style={{ fontSize: 13, color: t.textFaint, fontStyle: "italic" }}>No videos logged yet. Add one to track deliverables and performance.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[...(Array.isArray(c.videoLog) ? c.videoLog : [])]
+                  .slice()
+                  .reverse()
+                  .map((v) => {
+                    const sp = statusPill(v.status);
+                    return (
+                      <div key={v.id || v.url} style={{ border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 14px", background: t.cardAlt }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, color: t.textFaint }}>{v.date || "—"}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: t.card, border: `1px solid ${t.border}`, color: t.textMuted }}>{v.platform || "—"}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: sp.bg, color: sp.color, border: `1px solid ${sp.border}` }}>{sp.label}</span>
+                          {v.views ? <span style={{ fontSize: 11, color: t.textMuted }}>{Number(v.views).toLocaleString()} views</span> : null}
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>{v.campaign || "Untitled"}</div>
+                        {v.url?.trim() ? (
+                          <a href={v.url.trim()} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>
+                            View →
+                          </a>
+                        ) : null}
+                        {v.notes?.trim() ? <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>{v.notes}</div> : null}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex: "1 1 300px", minWidth: 260, display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 14, color: t.text }}>Quick Contact</div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Email</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  value={c.email || ""}
+                  onChange={(e) => updateCreator(c.id, { email: e.target.value })}
+                  placeholder="email@…"
+                  style={{ flex: "1 1 160px", minWidth: 140, padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+                />
+                {c.email?.trim() ? (
+                  <a href={`mailto:${c.email.trim()}`} style={{ ...pillLink, textDecoration: "none" }}>
+                    Send Email
+                  </a>
+                ) : null}
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>TikTok</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  value={c.tiktokUrl || ""}
+                  onChange={(e) => updateCreator(c.id, { tiktokUrl: e.target.value })}
+                  placeholder="Profile URL"
+                  style={{ flex: "1 1 160px", minWidth: 140, padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+                />
+                <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ ...pillLink, textDecoration: "none" }}>
+                  Open TikTok
+                </a>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>Instagram</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  value={c.instagramUrl || ""}
+                  onChange={(e) => updateCreator(c.id, { instagramUrl: e.target.value })}
+                  placeholder="Profile URL"
+                  style={{ flex: "1 1 160px", minWidth: 140, padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+                />
+                {c.instagramUrl?.trim() ? (
+                  <a href={c.instagramUrl.trim()} target="_blank" rel="noopener noreferrer" style={{ ...pillLink, textDecoration: "none" }}>
+                    Open Instagram
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 14, color: t.text }}>Stats Snapshot</div>
+            <div style={{ fontSize: 36, fontWeight: 800, color: t.green, lineHeight: 1 }}>{videoCount}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>Total videos</div>
+            <div style={{ fontSize: 14, color: t.text, marginBottom: 8 }}>
+              <span style={{ color: t.textMuted }}>Active campaigns: </span>
+              <strong>{activeCampaignCount}</strong>
+            </div>
+            <div style={{ fontSize: 14, color: t.text, marginBottom: 8 }}>
+              <span style={{ color: t.textMuted }}>Member since: </span>
+              <strong>{c.dateAdded || "—"}</strong>
+            </div>
+            {c.socialStats?.fetchedAt ? (
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 10 }}>Live data fetched {new Date(c.socialStats.fetchedAt).toLocaleString()}</div>
+            ) : null}
+            {c.socialStats?.tiktokFollowers != null ? (
+              <div style={{ fontSize: 13, color: t.textSecondary, marginBottom: 4 }}>TikTok followers: {Number(c.socialStats.tiktokFollowers).toLocaleString()}</div>
+            ) : null}
+            {c.socialStats?.instagramFollowers != null ? (
+              <div style={{ fontSize: 13, color: t.textSecondary }}>Instagram followers: {Number(c.socialStats.instagramFollowers).toLocaleString()}</div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════
@@ -2817,6 +3358,8 @@ export default function App() {
   const [creatorSearch, setCreatorSearch] = useState("");
   const [creatorStatusFilter, setCreatorStatusFilter] = useState("All");
   const [creatorQualityFilter, setCreatorQualityFilter] = useState("All");
+  const [creatorSort, setCreatorSort] = useState("videos");
+  const [creatorSearchDebounced, setCreatorSearchDebounced] = useState("");
   const [showAddCreator, setShowAddCreator] = useState(false);
   const [newCreatorForm, setNewCreatorForm] = useState({
     handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard",
@@ -2860,10 +3403,10 @@ export default function App() {
     if (creatorsVal) {
       try {
         const parsed = JSON.parse(creatorsVal);
-        if (Array.isArray(parsed)) setCreators(parsed);
+        if (Array.isArray(parsed)) setCreators(parsed.map(normalizeCreatorRow));
       } catch {}
     } else {
-      setCreators(JSON.parse(JSON.stringify(SEED_CREATORS)));
+      setCreators(JSON.parse(JSON.stringify(SEED_CREATORS)).map(normalizeCreatorRow));
     }
 
     setStorageReady(true);
@@ -2906,6 +3449,11 @@ export default function App() {
       navigate("library");
     }
   }, [currentRole, view, navigate]);
+
+  useEffect(() => {
+    const tm = setTimeout(() => setCreatorSearchDebounced(creatorSearch), 300);
+    return () => clearTimeout(tm);
+  }, [creatorSearch]);
 
   useEffect(() => {
     if (view !== "creatorDetail" || typeof window === "undefined") return;
@@ -2971,6 +3519,8 @@ export default function App() {
       instagramUrl: newCreatorForm.instagramUrl.trim(),
       costPerVideo: "",
       bestVideos: [],
+      videoLog: [],
+      dateAdded: new Date().toISOString().slice(0, 10),
     };
     setCreators((prev) => [row, ...prev]);
     setShowAddCreator(false);
@@ -3048,10 +3598,12 @@ export default function App() {
               instagramUrl: "",
               costPerVideo: "",
               bestVideos: [],
+              videoLog: [],
+              dateAdded: new Date().toISOString().slice(0, 10),
             };
             if (idxByHandle.has(key)) {
               const ix = idxByHandle.get(key);
-              next[ix] = { ...next[ix], ...rowObj, id: next[ix].id };
+              next[ix] = { ...next[ix], ...rowObj, id: next[ix].id, videoLog: Array.isArray(next[ix].videoLog) ? next[ix].videoLog : [] };
               updateCount++;
             } else {
               const id = `c-import-${Date.now()}-${newCount}-${Math.random().toString(36).slice(2, 7)}`;
@@ -3324,7 +3876,7 @@ export default function App() {
     () =>
       creators
         .filter((c) => c.status === "Active")
-        .reduce((sum, c) => sum + (Number(c.totalVideos) || 0), 0),
+        .reduce((sum, c) => sum + creatorDisplayVideoCount(c), 0),
     [creators]
   );
 
@@ -3351,16 +3903,19 @@ export default function App() {
     let list = creators;
     if (creatorStatusFilter !== "All") list = list.filter((c) => c.status === creatorStatusFilter);
     if (creatorQualityFilter !== "All") list = list.filter((c) => c.quality === creatorQualityFilter);
-    const q = creatorSearch.trim().toLowerCase();
+    const q = creatorSearchDebounced.trim().toLowerCase();
     if (q) {
       list = list.filter((c) => {
         const handle = (c.handle || "").toLowerCase();
         const name = (c.name || "").toLowerCase();
-        return handle.includes(q) || name.includes(q);
+        const niche = (c.niche || "").toLowerCase();
+        const notes = (c.notes || "").toLowerCase();
+        const email = (c.email || "").toLowerCase();
+        return handle.includes(q) || name.includes(q) || niche.includes(q) || notes.includes(q) || email.includes(q);
       });
     }
-    return sortCreatorsForDisplay(list);
-  }, [creators, creatorSearch, creatorStatusFilter, creatorQualityFilter]);
+    return sortCreatorsList(list, creatorSort);
+  }, [creators, creatorSearchDebounced, creatorStatusFilter, creatorQualityFilter, creatorSort]);
 
   const creatorDetailId =
     view === "creatorDetail" && typeof window !== "undefined"
@@ -4095,26 +4650,26 @@ export default function App() {
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "creators" && (
-          <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+          <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
               <div style={{ ...S.formTitle, marginBottom: 0 }}>UGC Army — Creators</div>
               <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20, background: t.green + (t.isLight ? "18" : "15"), color: t.green }}>{creators.length}</span>
             </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20, alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 8, alignItems: "center" }}>
               <input
                 type="text"
                 value={creatorSearch}
                 onChange={(e) => setCreatorSearch(e.target.value)}
-                placeholder="Search by name or handle..."
-                style={{ flex: "1 1 200px", minWidth: 180, padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+                placeholder="Search handle, name, niche, notes, email…"
+                style={{ flex: "1 1 200px", minWidth: 200, padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
               />
               <select
                 value={creatorStatusFilter}
                 onChange={(e) => setCreatorStatusFilter(e.target.value)}
                 style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
               >
-                <option value="All">All statuses</option>
+                <option value="All">All Statuses</option>
                 <option value="Active">Active</option>
                 <option value="One-time">One-time</option>
                 <option value="Off-boarded">Off-boarded</option>
@@ -4124,9 +4679,20 @@ export default function App() {
                 onChange={(e) => setCreatorQualityFilter(e.target.value)}
                 style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
               >
-                <option value="All">All quality</option>
-                <option value="High">High</option>
+                <option value="All">All Quality</option>
+                <option value="High">★ High</option>
                 <option value="Standard">Standard</option>
+              </select>
+              <select
+                value={creatorSort}
+                onChange={(e) => setCreatorSort(e.target.value)}
+                style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              >
+                <option value="videos">Sort: Most Videos</option>
+                <option value="name">Sort: Name A-Z</option>
+                <option value="handle">Sort: Handle A-Z</option>
+                <option value="recent">Sort: Recently Added</option>
+                <option value="status">Sort: Status</option>
               </select>
               <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "10px 18px", fontSize: 13 }}>+ Add Creator</button>
               <button
@@ -4147,6 +4713,9 @@ export default function App() {
                   e.target.value = "";
                 }}
               />
+            </div>
+            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 20 }}>
+              Showing {filteredCreators.length} of {creators.length} creators
             </div>
 
             {showAddCreator && (
@@ -4201,7 +4770,27 @@ export default function App() {
               {filteredCreators.map((c) => {
                 const sd = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red;
                 const niches = String(c.niche || "").split(",").map((s) => s.trim()).filter(Boolean);
-                const pillStyle = { fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: t.cardAlt, border: `1px solid ${t.border}`, color: t.textMuted, cursor: "pointer", textDecoration: "none", display: "inline-block" };
+                const vc = creatorDisplayVideoCount(c);
+                const ttHref = (c.tiktokUrl || "").trim() || tiktokUrlFromHandle(c.handle);
+                const rawCost = String(c.costPerVideo || "").trim();
+                const costLine = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
+                const tagStyle = { fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: t.cardAlt, border: `1px solid ${t.border}`, color: t.textMuted };
+                const linkPill = {
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: t.textMuted,
+                  textDecoration: "none",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: `1px solid ${t.border}`,
+                  background: t.cardAlt,
+                };
+                const stBg = c.status === "Active" ? t.green + "15" : c.status === "One-time" ? t.orange + "15" : t.red + "15";
+                const stCol = sd;
+                const stBd = c.status === "Active" ? t.green + "30" : "none";
                 return (
                   <div
                     key={c.id}
@@ -4212,41 +4801,115 @@ export default function App() {
                     style={{
                       background: t.card,
                       border: `1px solid ${t.border}`,
-                      borderRadius: 12,
-                      padding: "16px 20px",
-                      marginBottom: 8,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 16,
+                      borderRadius: 14,
+                      padding: "18px 22px",
+                      marginBottom: 10,
                       cursor: "pointer",
                       boxShadow: t.shadow,
-                      flexWrap: "wrap",
+                      transition: "all 0.2s ease",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "40"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = t.green + "40";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.boxShadow = t.isLight ? "0 8px 28px rgba(0,0,0,0.1)" : "0 10px 36px rgba(0,0,0,0.45)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = t.border;
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = t.shadow;
+                    }}
                   >
-                    <div style={{ width: 10, height: 10, borderRadius: 5, background: sd, flexShrink: 0 }} />
-                    <div style={{ fontSize: 15, fontWeight: 700, color: t.text, minWidth: 120 }}>{c.handle}</div>
-                    <div style={{ fontSize: 13, color: t.textMuted, minWidth: 100 }}>{c.name?.trim() ? c.name : "—"}</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: "1 1 140px" }}>
-                      {niches.map((n, ni) => (
-                        <span key={`${c.id}-niche-${ni}`} style={{ fontSize: 11, background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 12, padding: "2px 8px", color: t.textSecondary }}>{n}</span>
-                      ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 5, background: sd, flexShrink: 0 }} />
+                        <span style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{c.handle}</span>
+                        {c.name?.trim() ? <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>· {c.name.trim()}</span> : null}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        {c.quality === "High" ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 10, background: "#f59e0b15", color: "#f59e0b", border: "1px solid #f59e0b30" }}>★ High</span>
+                        ) : null}
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 10, background: stBg, color: stCol, border: stBd }}>
+                          {c.status}
+                        </span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{Number(c.totalVideos) || 0} videos</div>
-                    <div style={{ minWidth: 48 }}>{c.quality === "High" ? <span style={{ color: "#e6b800", fontSize: 14 }}>★</span> : null}</div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {c.email?.trim() ? (
-                        <a href={`mailto:${c.email.trim()}`} onClick={(e) => e.stopPropagation()} style={pillStyle} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}>✉ Email</a>
-                      ) : null}
-                      {c.tiktokUrl?.trim() ? (
-                        <a href={c.tiktokUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={pillStyle} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}>TT</a>
-                      ) : null}
-                      {c.instagramUrl?.trim() ? (
-                        <a href={c.instagramUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={pillStyle} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}>IG</a>
-                      ) : null}
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: "1 1 auto", minWidth: 0 }}>
+                        {niches.map((n, ni) => (
+                          <span key={`${c.id}-niche-${ni}`} style={tagStyle}>{n}</span>
+                        ))}
+                      </div>
+                      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                        <span>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: t.text }}>{vc}</span>
+                          <span style={{ fontSize: 12, color: t.textMuted }}> videos</span>
+                        </span>
+                        <span style={{ fontSize: 12, color: t.textMuted }}>{costLine}{rawCost ? "/vid" : ""}</span>
+                      </div>
                     </div>
-                    <Icon name="arrowRight" size={18} color={t.textFaint} />
+
+                    {c.notes?.trim() ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontSize: 12,
+                          color: t.textFaint,
+                          fontStyle: "italic",
+                          lineHeight: 1.5,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {c.notes.trim()}
+                      </div>
+                    ) : null}
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${t.border}80` }}>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        {c.email?.trim() ? (
+                          <a
+                            href={`mailto:${c.email.trim()}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={linkPill}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}
+                          >
+                            ✉ Email
+                          </a>
+                        ) : null}
+                        {ttHref ? (
+                          <a
+                            href={ttHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={linkPill}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}
+                          >
+                            <span style={{ fontWeight: 800 }}>TT</span> TikTok
+                          </a>
+                        ) : null}
+                        {c.instagramUrl?.trim() ? (
+                          <a
+                            href={c.instagramUrl.trim()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={linkPill}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}
+                          >
+                            <span style={{ fontWeight: 800 }}>IG</span> Instagram
+                          </a>
+                        ) : null}
+                      </div>
+                      <span style={{ color: t.textFaint, fontSize: 16, fontWeight: 300 }}>→</span>
+                    </div>
                   </div>
                 );
               })}
@@ -4255,119 +4918,23 @@ export default function App() {
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "creatorDetail" && (
-          <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-            {!detailCreator ? (
-              <div>
-                <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, marginBottom: 16 }}>← Back</button>
-                <div style={{ color: t.textMuted }}>Creator not found.</div>
-              </div>
-            ) : (
-              <>
-                <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, marginBottom: 16, fontSize: 13, padding: "9px 18px" }}>← Back</button>
-                <div style={{ fontSize: 28, fontWeight: 800, color: t.text, marginBottom: 8 }}>{detailCreator.handle}</div>
-                <div style={{ display: "inline-block", fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 20, marginBottom: 24, background: detailCreator.status === "Active" ? t.green + "22" : detailCreator.status === "One-time" ? t.orange + "22" : t.red + "22", color: detailCreator.status === "Active" ? t.green : detailCreator.status === "One-time" ? t.orange : t.red }}>
-                  {detailCreator.status}
-                </div>
-
-                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
-                  <div style={{ flex: "1.5 1 360px", minWidth: 280 }}>
-                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: t.shadow }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>Profile</div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Handle</div>
-                        <a href={detailCreator.tiktokUrl || tiktokUrlFromHandle(detailCreator.handle)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 18, fontWeight: 700, color: t.green }}>{detailCreator.handle}</a>
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Name</div>
-                        <input value={detailCreator.name || ""} onChange={(e) => updateCreator(detailCreator.id, { name: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <input value={detailCreator.email || ""} onChange={(e) => updateCreator(detailCreator.id, { email: e.target.value })} style={{ flex: 1, minWidth: 200, padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
-                          {detailCreator.email?.trim() ? (
-                            <a href={`mailto:${detailCreator.email.trim()}`} style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>Send Email</a>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche (comma separated)</div>
-                        <input value={detailCreator.niche || ""} onChange={(e) => updateCreator(detailCreator.id, { niche: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Address</div>
-                        <input value={detailCreator.address || ""} onChange={(e) => updateCreator(detailCreator.id, { address: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
-                        <select value={detailCreator.quality || "Standard"} onChange={(e) => updateCreator(detailCreator.id, { quality: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
-                          <option value="High">High</option>
-                          <option value="Standard">Standard</option>
-                        </select>
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
-                        <select value={detailCreator.status || "Active"} onChange={(e) => updateCreator(detailCreator.id, { status: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
-                          <option value="Active">Active</option>
-                          <option value="One-time">One-time</option>
-                          <option value="Off-boarded">Off-boarded</option>
-                        </select>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Cost per video</div>
-                        <input value={detailCreator.costPerVideo || ""} onChange={(e) => updateCreator(detailCreator.id, { costPerVideo: e.target.value })} placeholder="$100/video" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
-                      </div>
-                    </div>
-
-                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>Contact</div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                          <span style={{ fontSize: 14, color: t.textSecondary }}>{detailCreator.email?.trim() || "—"}</span>
-                          {detailCreator.email?.trim() ? <a href={`mailto:${detailCreator.email.trim()}`} style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>Send Email</a> : null}
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>TikTok</div>
-                        <input value={detailCreator.tiktokUrl || ""} onChange={(e) => updateCreator(detailCreator.id, { tiktokUrl: e.target.value })} placeholder="Paste profile URL..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 8 }} />
-                        {detailCreator.tiktokUrl?.trim() ? (
-                          <a href={detailCreator.tiktokUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none", display: "inline-block" }}>Open TikTok</a>
-                        ) : null}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram</div>
-                        <input value={detailCreator.instagramUrl || ""} onChange={(e) => updateCreator(detailCreator.id, { instagramUrl: e.target.value })} placeholder="Paste profile URL..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 8 }} />
-                        {detailCreator.instagramUrl?.trim() ? (
-                          <a href={detailCreator.instagramUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none", display: "inline-block" }}>Open Instagram</a>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ flex: "1 1 280px", minWidth: 260 }}>
-                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: t.shadow }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>Stats</div>
-                      <div style={{ fontSize: 36, fontWeight: 800, color: t.green, marginBottom: 8 }}>{Number(detailCreator.totalVideos) || 0}</div>
-                      <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>Total videos</div>
-                      <div style={{ fontSize: 13, marginBottom: 6 }}>Quality: <span style={{ fontWeight: 700, color: detailCreator.quality === "High" ? "#e6b800" : t.text }}>{detailCreator.quality}</span></div>
-                      <div style={{ fontSize: 13 }}>Status: <span style={{ fontWeight: 700 }}>{detailCreator.status}</span></div>
-                    </div>
-                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: t.text }}>Notes</div>
-                      <textarea
-                        value={detailCreator.notes || ""}
-                        onChange={(e) => updateCreator(detailCreator.id, { notes: e.target.value })}
-                        rows={10}
-                        style={{ width: "100%", padding: 12, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.5, resize: "vertical", minHeight: 160 }}
-                        placeholder="Performance notes, best hooks, strengths…"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          !detailCreator ? (
+            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+              <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, marginBottom: 16 }}>← Back</button>
+              <div style={{ color: t.textMuted }}>Creator not found.</div>
+            </div>
+          ) : (
+            <CreatorDetailView
+              key={detailCreator.id}
+              c={detailCreator}
+              updateCreator={updateCreator}
+              library={library}
+              navigate={navigate}
+              scrapeKey={scrapeKey}
+              t={t}
+              S={S}
+            />
+          )
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "library" && (
