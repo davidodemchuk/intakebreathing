@@ -549,7 +549,6 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
           <div><div style={{ fontSize: 12, fontWeight: 700, color: t.red, marginBottom: 8 }}>❌ Banned</div>
             <div style={S.roBox}>{BANNED_CLAIMS.map((c,i)=><div key={i} style={S.roItem()}><span style={S.roMarker(t.red)}>✗</span>{c}</div>)}</div></div>
         </div>
-        <div style={{ ...S.roBox, marginTop: 12, borderColor: t.red+"40", color: t.red, fontSize: 12 }}>⚠️ {DISCLOSURE}</div>
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>🎬 Format & Tone</div>
