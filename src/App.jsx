@@ -1,11 +1,22 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
+import SEED_CREATORS from "./seedCreators.json";
 
 // ═══ UPDATE THIS WITH EVERY PUSH ═══
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.5";
+const APP_VERSION = "2.1.0";
 const CHANGELOG = [
+  { version: "2.1.0", date: "2025-04-01", changes: [
+    "Creator Database added to UGC Army — full roster management",
+    "53 existing creators imported from Intake's spreadsheet",
+    "Creator profiles: handle, name, niche, contact info, video count, quality tier, notes",
+    "Direct contact links: email mailto, TikTok profile, Instagram profile",
+    "Filter by status (Active, One-time, Off-boarded), search by name/handle",
+    "Add new creators, edit existing, CSV import support",
+    "Creator detail view with full profile and editable fields",
+    "Stored in localStorage as intake-creators",
+  ]},
   { version: "2.0.5", date: "2025-04-01", changes: [
     "Removed 'Dashboard' subtitle from homepage",
     "Replaced all emojis with custom SVG icons throughout the app for a more professional feel",
@@ -158,7 +169,7 @@ const ThemeContext = createContext();
 
 const NAV_SECTIONS = {
   dashboard: ["home"],
-  ugcArmy: ["create", "display", "library"],
+  ugcArmy: ["create", "display", "library", "creators", "creatorDetail"],
   tools: ["tools", "videotool"],
   pipeline: ["pipeline"],
   influencer: ["influencer"],
@@ -187,6 +198,8 @@ const ROUTES = {
   "/ugc-army/new": "create",
   "/ugc-army/brief": "display",
   "/ugc-army/library": "library",
+  "/ugc-army/creators": "creators",
+  "/ugc-army/creator": "creatorDetail",
   "/channel-pipeline": "pipeline",
   "/influencer-buys": "influencer",
   "/tools": "tools",
@@ -199,6 +212,8 @@ const VIEW_TO_PATH = {
   create: "/ugc-army/new",
   display: "/ugc-army/brief",
   library: "/ugc-army/library",
+  creators: "/ugc-army/creators",
+  creatorDetail: "/ugc-army/creator",
   pipeline: "/channel-pipeline",
   influencer: "/influencer-buys",
   tools: "/tools",
@@ -208,6 +223,8 @@ const VIEW_TO_PATH = {
 
 function getViewFromPath() {
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (path === "/ugc-army/creators") return "creators";
+  if (path === "/ugc-army/creator") return "creatorDetail";
   return ROUTES[path] || "home";
 }
 
@@ -561,6 +578,46 @@ function buildRejectionsArray(d) {
 
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
 const CREATOR_ALLOWED_VIEWS = ["library", "display"];
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (line[i] === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += line[i];
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function normalizeHandleKey(h) {
+  return String(h || "").trim().toLowerCase().replace(/^@/, "");
+}
+
+function tiktokUrlFromHandle(handle) {
+  const h = String(handle || "").trim().replace(/^@/, "");
+  if (!h) return "";
+  return `https://www.tiktok.com/@${h}`;
+}
+
+function sortCreatorsForDisplay(arr) {
+  const order = { Active: 0, "One-time": 1, "Off-boarded": 2 };
+  return [...arr].sort((a, b) => {
+    const ao = order[a.status] ?? 99;
+    const bo = order[b.status] ?? 99;
+    if (ao !== bo) return ao - bo;
+    return (Number(b.totalVideos) || 0) - (Number(a.totalVideos) || 0);
+  });
+}
 
 function genShareId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -2452,9 +2509,13 @@ export default function App() {
   const [currentRole, setCurrentRole] = useState(ROLES.MANAGER);
   const [view, setView] = useState(() => getViewFromPath());
 
-  const navigate = useCallback((newView) => {
-    const path = VIEW_TO_PATH[newView] || "/";
-    window.history.pushState({ view: newView }, "", path);
+  const navigate = useCallback((newView, opts) => {
+    const o = opts && typeof opts === "object" ? opts : {};
+    let path = VIEW_TO_PATH[newView] || "/";
+    if (newView === "creatorDetail" && o.creatorId) {
+      path = `/ugc-army/creator?id=${encodeURIComponent(String(o.creatorId))}`;
+    }
+    window.history.pushState({ view: newView, creatorId: o.creatorId || null }, "", path);
     setView(newView);
   }, []);
 
@@ -2470,6 +2531,16 @@ export default function App() {
   const [storageReady, setStorageReady] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [scrapeKey, setScrapeKey] = useState("");
+  const [creators, setCreators] = useState([]);
+  const [creatorSearch, setCreatorSearch] = useState("");
+  const [creatorStatusFilter, setCreatorStatusFilter] = useState("All");
+  const [creatorQualityFilter, setCreatorQualityFilter] = useState("All");
+  const [showAddCreator, setShowAddCreator] = useState(false);
+  const [newCreatorForm, setNewCreatorForm] = useState({
+    handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard",
+  });
+  const [creatorImportToast, setCreatorImportToast] = useState(null);
+  const csvInputRef = useRef(null);
   const timerRef = useRef(null);
   const cancelledRef = useRef(false);
   const stepTimers = useRef([]);
@@ -2503,6 +2574,16 @@ export default function App() {
     const scrapeVal = storageGet("intake-scrape-key");
     if (scrapeVal) setScrapeKey(scrapeVal);
 
+    const creatorsVal = storageGet("intake-creators");
+    if (creatorsVal) {
+      try {
+        const parsed = JSON.parse(creatorsVal);
+        if (Array.isArray(parsed)) setCreators(parsed);
+      } catch {}
+    } else {
+      setCreators(JSON.parse(JSON.stringify(SEED_CREATORS)));
+    }
+
     setStorageReady(true);
   }, []);
 
@@ -2511,6 +2592,12 @@ export default function App() {
     if (!storageReady) return;
     storageSet("intake-library", JSON.stringify(library));
   }, [library, storageReady]);
+
+  // ── Save creators roster ──
+  useEffect(() => {
+    if (!storageReady) return;
+    storageSet("intake-creators", JSON.stringify(creators));
+  }, [creators, storageReady]);
 
   // ── Save theme preference ──
   useEffect(() => {
@@ -2527,7 +2614,8 @@ export default function App() {
       }
     };
     window.addEventListener("popstate", handlePopState);
-    window.history.replaceState({ view: getViewFromPath() }, "", window.location.pathname);
+    const pathAndSearch = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
+    window.history.replaceState({ view: getViewFromPath() }, "", pathAndSearch);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
@@ -2536,6 +2624,12 @@ export default function App() {
       navigate("library");
     }
   }, [currentRole, view, navigate]);
+
+  useEffect(() => {
+    if (view !== "creatorDetail" || typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) navigate("creators");
+  }, [view, navigate]);
 
   const t = isDark ? THEMES.dark : THEMES.light;
   const S = getS(t);
@@ -2567,6 +2661,140 @@ export default function App() {
   const deleteBrief = useCallback((id) => {
     setLibrary(prev => prev.filter(item => item.id !== id));
   }, []);
+
+  const updateCreator = useCallback((id, updates) => {
+    setCreators((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  }, []);
+
+  const addCreator = useCallback(() => {
+    const h = newCreatorForm.handle.trim();
+    if (!h) {
+      alert("Handle is required");
+      return;
+    }
+    const handleNorm = h.startsWith("@") ? h : `@${h}`;
+    const id = `c-${Date.now()}`;
+    const row = {
+      id,
+      status: newCreatorForm.status,
+      handle: handleNorm,
+      name: newCreatorForm.name.trim(),
+      email: newCreatorForm.email.trim(),
+      niche: newCreatorForm.niche.trim(),
+      address: "",
+      totalVideos: 0,
+      notes: "",
+      quality: newCreatorForm.quality,
+      tiktokUrl: tiktokUrlFromHandle(handleNorm),
+      instagramUrl: newCreatorForm.instagramUrl.trim(),
+      costPerVideo: "",
+      bestVideos: [],
+    };
+    setCreators((prev) => [row, ...prev]);
+    setShowAddCreator(false);
+    setNewCreatorForm({
+      handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard",
+    });
+  }, [newCreatorForm]);
+
+  const handleCsvImport = useCallback(
+    (file) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = String(ev.target?.result || "");
+        const lines = text.split(/\r?\n/).filter((l) => l.trim());
+        let col = null;
+        for (let i = 0; i < lines.length; i++) {
+          const cells = parseCSVLine(lines[i]);
+          const c0 = (cells[0] || "").trim().toLowerCase();
+          if (c0 === "status" && cells.some((c) => String(c).toLowerCase().includes("handle"))) {
+            col = {};
+            cells.forEach((h, j) => {
+              const k = String(h).trim().toLowerCase();
+              if (k === "status") col.status = j;
+              if (k === "creator handle" || k.includes("handle")) col.handle = j;
+              if (k === "niche") col.niche = j;
+              if (k === "email") col.email = j;
+              if (k === "name") col.name = j;
+              if (k === "address") col.address = j;
+              if (k === "videos") col.videos = j;
+              if (k === "views") col.views = j;
+              if (k === "notes") col.notes = j;
+              if (k === "quality") col.quality = j;
+            });
+            break;
+          }
+        }
+        if (!col || col.handle == null) {
+          setCreatorImportToast("Could not find a valid header row in CSV.");
+          setTimeout(() => setCreatorImportToast(null), 5000);
+          return;
+        }
+        let newCount = 0;
+        let updateCount = 0;
+        setCreators((prev) => {
+          const next = [...prev];
+          const idxByHandle = new Map(next.map((c, i) => [normalizeHandleKey(c.handle), i]));
+          for (let i = 0; i < lines.length; i++) {
+            const cells = parseCSVLine(lines[i]);
+            if (!cells.length) continue;
+            const c0 = (cells[0] || "").trim().toLowerCase();
+            if (c0 === "status" || c0 === "a list" || c0.includes("ugc army creators")) continue;
+            const handleRaw = (cells[col.handle] || "").trim();
+            if (!handleRaw) continue;
+            const handle = handleRaw.startsWith("@") ? handleRaw : `@${handleRaw}`;
+            const key = normalizeHandleKey(handle);
+            const status = (cells[col.status] || "").trim() || "Active";
+            const niche = (cells[col.niche] || "").trim();
+            const email = (cells[col.email] || "").trim();
+            const name = (cells[col.name] || "").trim();
+            const address = (cells[col.address] || "").trim();
+            const totalVideos = parseInt(cells[col.videos], 10);
+            const notes = (cells[col.notes] || "").trim();
+            const quality = (cells[col.quality] || "").trim() || "Standard";
+            const rowObj = {
+              status,
+              handle,
+              name,
+              email,
+              niche,
+              address,
+              totalVideos: Number.isFinite(totalVideos) ? totalVideos : 0,
+              notes,
+              quality,
+              tiktokUrl: tiktokUrlFromHandle(handle),
+              instagramUrl: "",
+              costPerVideo: "",
+              bestVideos: [],
+            };
+            if (idxByHandle.has(key)) {
+              const ix = idxByHandle.get(key);
+              next[ix] = { ...next[ix], ...rowObj, id: next[ix].id };
+              updateCount++;
+            } else {
+              const id = `c-import-${Date.now()}-${newCount}-${Math.random().toString(36).slice(2, 7)}`;
+              next.push({ id, ...rowObj });
+              idxByHandle.set(key, next.length - 1);
+              newCount++;
+            }
+          }
+          return next;
+        });
+        const msg =
+          newCount && updateCount
+            ? `Imported ${newCount} new, updated ${updateCount}`
+            : newCount
+              ? `Imported ${newCount} new creators`
+              : updateCount
+                ? `Updated ${updateCount} existing creators`
+                : "No rows imported";
+        setCreatorImportToast(msg);
+        setTimeout(() => setCreatorImportToast(null), 5000);
+      };
+      reader.readAsText(file);
+    },
+    [setCreators]
+  );
 
   // ── API Connection Test ──
   const [apiStatus, setApiStatus] = useState(null); // null | "testing" | "ok" | "fail"
@@ -2805,6 +3033,32 @@ export default function App() {
     if (currentFormData) handleGenerate({ ...currentFormData, mode: "ai" });
   }, [currentFormData, handleGenerate]);
 
+  const activeCreatorCount = useMemo(
+    () => creators.filter((c) => c.status === "Active").length,
+    [creators]
+  );
+
+  const filteredCreators = useMemo(() => {
+    let list = creators;
+    if (creatorStatusFilter !== "All") list = list.filter((c) => c.status === creatorStatusFilter);
+    if (creatorQualityFilter !== "All") list = list.filter((c) => c.quality === creatorQualityFilter);
+    const q = creatorSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((c) => {
+        const handle = (c.handle || "").toLowerCase();
+        const name = (c.name || "").toLowerCase();
+        return handle.includes(q) || name.includes(q);
+      });
+    }
+    return sortCreatorsForDisplay(list);
+  }, [creators, creatorSearch, creatorStatusFilter, creatorQualityFilter]);
+
+  const creatorDetailId =
+    view === "creatorDetail" && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("id")
+      : null;
+  const detailCreator = creatorDetailId ? creators.find((c) => c.id === creatorDetailId) : null;
+
   const isCreatorViewAllowed = currentRole !== ROLES.CREATOR || CREATOR_ALLOWED_VIEWS.includes(view);
 
   return (
@@ -2874,6 +3128,7 @@ export default function App() {
                 {section === "ugcArmy" && (
                   <>
                     <button type="button" style={S.navBtn(view === "create")} onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
+                    <button type="button" style={S.navBtn(view === "creators" || view === "creatorDetail")} onClick={() => navigate("creators")}>Creators</button>
                     <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
                     <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                   </>
@@ -3001,7 +3256,7 @@ export default function App() {
                   desc: "Create and manage UGC creator briefs",
                   badge: "Active",
                   badgeColor: t.green,
-                  sub: `${library.length} brief${library.length === 1 ? "" : "s"} created`,
+                  sub: `${activeCreatorCount} active creator${activeCreatorCount === 1 ? "" : "s"} · ${library.length} brief${library.length === 1 ? "" : "s"} created`,
                   onClick: () => { navigate("create"); setFormKey((k) => k + 1); },
                 },
                 {
@@ -3325,6 +3580,288 @@ export default function App() {
 
         {!aiLoading && isCreatorViewAllowed && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
         {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
+
+        {creatorImportToast && (
+          <div className="no-print" style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 300, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 20px", fontSize: 13, color: t.textSecondary, boxShadow: t.shadow }}>
+            {creatorImportToast}
+          </div>
+        )}
+
+        {!aiLoading && isCreatorViewAllowed && view === "creators" && (
+          <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+              <div style={{ ...S.formTitle, marginBottom: 0 }}>UGC Army — Creators</div>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20, background: t.green + (t.isLight ? "18" : "15"), color: t.green }}>{creators.length}</span>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20, alignItems: "center" }}>
+              <input
+                type="text"
+                value={creatorSearch}
+                onChange={(e) => setCreatorSearch(e.target.value)}
+                placeholder="Search by name or handle..."
+                style={{ flex: "1 1 200px", minWidth: 180, padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+              />
+              <select
+                value={creatorStatusFilter}
+                onChange={(e) => setCreatorStatusFilter(e.target.value)}
+                style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              >
+                <option value="All">All statuses</option>
+                <option value="Active">Active</option>
+                <option value="One-time">One-time</option>
+                <option value="Off-boarded">Off-boarded</option>
+              </select>
+              <select
+                value={creatorQualityFilter}
+                onChange={(e) => setCreatorQualityFilter(e.target.value)}
+                style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              >
+                <option value="All">All quality</option>
+                <option value="High">High</option>
+                <option value="Standard">Standard</option>
+              </select>
+              <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "10px 18px", fontSize: 13 }}>+ Add Creator</button>
+              <button
+                type="button"
+                onClick={() => csvInputRef.current?.click()}
+                style={{ ...S.btnS, padding: "10px 18px", fontSize: 13 }}
+              >
+                Import CSV
+              </button>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleCsvImport(f);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+
+            {showAddCreator && (
+              <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: t.shadow }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>New creator</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Handle *</div>
+                    <input value={newCreatorForm.handle} onChange={(e) => setNewCreatorForm((p) => ({ ...p, handle: e.target.value }))} placeholder="@handle" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Name</div>
+                    <input value={newCreatorForm.name} onChange={(e) => setNewCreatorForm((p) => ({ ...p, name: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
+                    <input value={newCreatorForm.email} onChange={(e) => setNewCreatorForm((p) => ({ ...p, email: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche (comma separated)</div>
+                    <input value={newCreatorForm.niche} onChange={(e) => setNewCreatorForm((p) => ({ ...p, niche: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram URL</div>
+                    <input value={newCreatorForm.instagramUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, instagramUrl: e.target.value }))} placeholder="optional" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
+                    <select value={newCreatorForm.status} onChange={(e) => setNewCreatorForm((p) => ({ ...p, status: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+                      <option value="Active">Active</option>
+                      <option value="One-time">One-time</option>
+                      <option value="Off-boarded">Off-boarded</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
+                    <select value={newCreatorForm.quality} onChange={(e) => setNewCreatorForm((p) => ({ ...p, quality: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+                      <option value="Standard">Standard</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>TikTok URL will be: {newCreatorForm.handle.trim() ? tiktokUrlFromHandle(newCreatorForm.handle) : "—"}</div>
+                <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
+                  <button type="button" onClick={addCreator} style={{ ...S.btnP, padding: "9px 18px", fontSize: 13 }}>Add Creator</button>
+                  <button type="button" onClick={() => setShowAddCreator(false)} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            <div>
+              {filteredCreators.map((c) => {
+                const sd = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red;
+                const niches = String(c.niche || "").split(",").map((s) => s.trim()).filter(Boolean);
+                const pillStyle = { fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: t.cardAlt, border: `1px solid ${t.border}`, color: t.textMuted, cursor: "pointer", textDecoration: "none", display: "inline-block" };
+                return (
+                  <div
+                    key={c.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate("creatorDetail", { creatorId: c.id })}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("creatorDetail", { creatorId: c.id }); } }}
+                    style={{
+                      background: t.card,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: 12,
+                      padding: "16px 20px",
+                      marginBottom: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      cursor: "pointer",
+                      boxShadow: t.shadow,
+                      flexWrap: "wrap",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "40"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+                  >
+                    <div style={{ width: 10, height: 10, borderRadius: 5, background: sd, flexShrink: 0 }} />
+                    <div style={{ fontSize: 15, fontWeight: 700, color: t.text, minWidth: 120 }}>{c.handle}</div>
+                    <div style={{ fontSize: 13, color: t.textMuted, minWidth: 100 }}>{c.name?.trim() ? c.name : "—"}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: "1 1 140px" }}>
+                      {niches.map((n, ni) => (
+                        <span key={`${c.id}-niche-${ni}`} style={{ fontSize: 11, background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 12, padding: "2px 8px", color: t.textSecondary }}>{n}</span>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{Number(c.totalVideos) || 0} videos</div>
+                    <div style={{ minWidth: 48 }}>{c.quality === "High" ? <span style={{ color: "#e6b800", fontSize: 14 }}>★</span> : null}</div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      {c.email?.trim() ? (
+                        <a href={`mailto:${c.email.trim()}`} onClick={(e) => e.stopPropagation()} style={pillStyle} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}>✉ Email</a>
+                      ) : null}
+                      {c.tiktokUrl?.trim() ? (
+                        <a href={c.tiktokUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={pillStyle} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}>TT</a>
+                      ) : null}
+                      {c.instagramUrl?.trim() ? (
+                        <a href={c.instagramUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={pillStyle} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}>IG</a>
+                      ) : null}
+                    </div>
+                    <Icon name="arrowRight" size={18} color={t.textFaint} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {!aiLoading && isCreatorViewAllowed && view === "creatorDetail" && (
+          <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+            {!detailCreator ? (
+              <div>
+                <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, marginBottom: 16 }}>← Back</button>
+                <div style={{ color: t.textMuted }}>Creator not found.</div>
+              </div>
+            ) : (
+              <>
+                <button type="button" onClick={() => navigate("creators")} style={{ ...S.btnS, marginBottom: 16, fontSize: 13, padding: "9px 18px" }}>← Back</button>
+                <div style={{ fontSize: 28, fontWeight: 800, color: t.text, marginBottom: 8 }}>{detailCreator.handle}</div>
+                <div style={{ display: "inline-block", fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 20, marginBottom: 24, background: detailCreator.status === "Active" ? t.green + "22" : detailCreator.status === "One-time" ? t.orange + "22" : t.red + "22", color: detailCreator.status === "Active" ? t.green : detailCreator.status === "One-time" ? t.orange : t.red }}>
+                  {detailCreator.status}
+                </div>
+
+                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+                  <div style={{ flex: "1.5 1 360px", minWidth: 280 }}>
+                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: t.shadow }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>Profile</div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Handle</div>
+                        <a href={detailCreator.tiktokUrl || tiktokUrlFromHandle(detailCreator.handle)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 18, fontWeight: 700, color: t.green }}>{detailCreator.handle}</a>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Name</div>
+                        <input value={detailCreator.name || ""} onChange={(e) => updateCreator(detailCreator.id, { name: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <input value={detailCreator.email || ""} onChange={(e) => updateCreator(detailCreator.id, { email: e.target.value })} style={{ flex: 1, minWidth: 200, padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
+                          {detailCreator.email?.trim() ? (
+                            <a href={`mailto:${detailCreator.email.trim()}`} style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>Send Email</a>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche (comma separated)</div>
+                        <input value={detailCreator.niche || ""} onChange={(e) => updateCreator(detailCreator.id, { niche: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Address</div>
+                        <input value={detailCreator.address || ""} onChange={(e) => updateCreator(detailCreator.id, { address: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
+                        <select value={detailCreator.quality || "Standard"} onChange={(e) => updateCreator(detailCreator.id, { quality: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
+                          <option value="High">High</option>
+                          <option value="Standard">Standard</option>
+                        </select>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
+                        <select value={detailCreator.status || "Active"} onChange={(e) => updateCreator(detailCreator.id, { status: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}>
+                          <option value="Active">Active</option>
+                          <option value="One-time">One-time</option>
+                          <option value="Off-boarded">Off-boarded</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Cost per video</div>
+                        <input value={detailCreator.costPerVideo || ""} onChange={(e) => updateCreator(detailCreator.id, { costPerVideo: e.target.value })} placeholder="$100/video" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }} />
+                      </div>
+                    </div>
+
+                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>Contact</div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <span style={{ fontSize: 14, color: t.textSecondary }}>{detailCreator.email?.trim() || "—"}</span>
+                          {detailCreator.email?.trim() ? <a href={`mailto:${detailCreator.email.trim()}`} style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>Send Email</a> : null}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>TikTok</div>
+                        <input value={detailCreator.tiktokUrl || ""} onChange={(e) => updateCreator(detailCreator.id, { tiktokUrl: e.target.value })} placeholder="Paste profile URL..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 8 }} />
+                        {detailCreator.tiktokUrl?.trim() ? (
+                          <a href={detailCreator.tiktokUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none", display: "inline-block" }}>Open TikTok</a>
+                        ) : null}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram</div>
+                        <input value={detailCreator.instagramUrl || ""} onChange={(e) => updateCreator(detailCreator.id, { instagramUrl: e.target.value })} placeholder="Paste profile URL..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 8 }} />
+                        {detailCreator.instagramUrl?.trim() ? (
+                          <a href={detailCreator.instagramUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btnS, fontSize: 12, padding: "6px 12px", textDecoration: "none", display: "inline-block" }}>Open Instagram</a>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ flex: "1 1 280px", minWidth: 260 }}>
+                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: t.shadow }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>Stats</div>
+                      <div style={{ fontSize: 36, fontWeight: 800, color: t.green, marginBottom: 8 }}>{Number(detailCreator.totalVideos) || 0}</div>
+                      <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>Total videos</div>
+                      <div style={{ fontSize: 13, marginBottom: 6 }}>Quality: <span style={{ fontWeight: 700, color: detailCreator.quality === "High" ? "#e6b800" : t.text }}>{detailCreator.quality}</span></div>
+                      <div style={{ fontSize: 13 }}>Status: <span style={{ fontWeight: 700 }}>{detailCreator.status}</span></div>
+                    </div>
+                    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: t.text }}>Notes</div>
+                      <textarea
+                        value={detailCreator.notes || ""}
+                        onChange={(e) => updateCreator(detailCreator.id, { notes: e.target.value })}
+                        rows={10}
+                        style={{ width: "100%", padding: 12, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.5, resize: "vertical", minHeight: 160 }}
+                        placeholder="Performance notes, best hooks, strengths…"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {!aiLoading && isCreatorViewAllowed && view === "library" && (
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
