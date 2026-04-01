@@ -6760,7 +6760,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
             {refreshing ? "Refreshing..." : "↻ Refresh"}
           </button>
           <a
-            href="https://docs.google.com/spreadsheets/d/19uhZsRjNX43_VkNfStr_PwjVMO-5kCPZ/edit"
+            href="https://docs.google.com/spreadsheets/d/1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak/edit"
             target="_blank"
             rel="noopener noreferrer"
             style={{

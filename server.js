@@ -482,7 +482,7 @@ app.post("/api/reformat-all", async (req, res) => {
 });
 
 // ── Google Sheets proxy (formatted values = formula results as shown in Sheets) ──
-const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID || "19uhZsRjNX43_VkNfStr_PwjVMO-5kCPZ";
+const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID || "1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak";
 const GOOGLE_SHEETS_API_KEY = process.env.GOOGLE_SHEETS_API_KEY || "AIzaSyBdTkuWEXGuuoxKPzyTteD7EBOQcg5wkCc";
 const sheetsCache = new Map();
 const SHEETS_CACHE_TTL = 120000;
