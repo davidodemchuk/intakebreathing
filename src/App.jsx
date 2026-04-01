@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 const CHANGELOG = [
+  { version: "1.2.3", date: "2025-03-31", changes: [
+    "Added Instant Rejection Criteria section to generated briefs — red warning section",
+    "Pre-built rejection reasons: upside down band, tabs not adhered, applicator in video",
+    "Custom rejection criteria input with Other field on the form",
+    "All rejection items are editable by managers on the generated brief via contentEditable",
+    "Removed disclosure warning box from the form",
+  ]},
   { version: "1.2.2", date: "2025-03-31", changes: [
     "Tone dropdown now includes Other option with custom text input",
     "AI prompt updated to use custom tone when Other is selected",
@@ -226,6 +233,22 @@ const BANNED_CLAIMS = [
 ];
 const DISCLOSURE = "Source: SleepScore Labs independent study · Participants with sleep tracking · Over 840 nights analyzed. Must appear as text overlay or in caption any time a SleepScore stat is referenced. Read more: intakebreathing.com/blogs/breathing-smarter/what-sleepscore-labs-discovered-about-nasal-strips-for-sleep";
 
+const DEFAULT_REJECTIONS = [
+  "Band is upside down — instant rejection",
+  "Adhesive tabs are not fully adhered to the nose — must be flat and sealed on both sides",
+  "Applicator tool visible in the video — the applicator is for personal use only, never on camera",
+];
+
+function parseCustomRejections(text) {
+  if (!text || typeof text !== "string") return [];
+  return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
+function buildRejectionsArray(d) {
+  const custom = parseCustomRejections(d?.customRejections);
+  return [...DEFAULT_REJECTIONS, ...custom];
+}
+
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
@@ -237,6 +260,7 @@ const PREFILL = {
   problem: "People assume Intake is one-size-fits-all and write it off thinking it won't fit their nose. They don't realize the Starter Kit comes with 4 different sizes — so there's a level for every nose.",
   selectedStats: ["snoring", "sleep", "sinus", "starterkit", "customers", "fda"],
   platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Funny & casual", customTone: "",
+  customRejections: "",
   notes: "Creator tries each level 1→4 on camera. Quick cuts. Reaction-driven. Each level opens the nose wider. Payoff is Level 4 where their nose opens WIDE and the genuine reaction IS the content.\n\nHook ideas: 'I don't even know if I can make it to Level 4' / 'This comes with FOUR sizes??' / 'Level 1 was easy... Level 4 broke me.'\n\nThe Level Up isn't about needing Level 4 — it's about finding YOUR level. But the entertainment value is the journey to 4. Keep it fun, not medical. Show the magnetic snap-on moment — it's satisfying and shareable.",
 };
 
@@ -245,6 +269,7 @@ const DEFAULTS = {
   ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
   platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Real & relatable", customTone: "", notes: "",
+  customRejections: "",
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -346,7 +371,8 @@ function generateBrief(d) {
   const platNotes = vibePrefix + tonePrefix + noteBlocks.join("\n\n—\n\n") + (noteBlocks.length && lg ? "\n\n" : "") + lg;
   const platLabel = (p) => p === "Other" && (d.customPlatform || "").trim() ? (d.customPlatform || "").trim() : p;
   const deliverables = `Submit for: ${platformsArr.map(platLabel).join(", ")}. (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
-  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables };
+  const rejections = buildRejectionsArray(d);
+  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: pick(APPROVED_CLAIMS, 5), notThis: BANNED_CLAIMS.slice(0, 5), disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables, rejections };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -384,6 +410,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     tone: prefill?.tone || DEFAULTS.tone,
     customTone: prefill?.customTone ?? DEFAULTS.customTone,
     notes: prefill?.notes || "",
+    customRejections: prefill?.customRejections ?? DEFAULTS.customRejections,
   });
   const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
 
@@ -457,12 +484,14 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
       productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
       selectedStats, platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, customTone: (v.customTone || "").trim(), notes: v.notes,
+      customRejections: (v.customRejections || "").trim(),
       _audience: `Ages ${ageRange} — ${gender}`,
       _problem: problemTrim,
       _stats: selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean).join(". "),
       _approved: APPROVED_CLAIMS.join(". "),
       _banned: BANNED_CLAIMS.join(". "),
       _disclosure: DISCLOSURE,
+      _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }),
     });
   }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms]);
   const mkSel = (key, label, opts) => (
@@ -551,6 +580,17 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
         </div>
       </div>
       <div style={S.section}>
+        <div style={S.secLabel}>🚫 Instant Rejection Criteria</div>
+        <div style={{ ...S.hint, marginBottom: 12, fontStyle: "normal" }}>Content will be rejected if any of these are present. Add custom rules below.</div>
+        <div style={S.roBox}>{DEFAULT_REJECTIONS.map((c, i) => (
+          <div key={i} style={S.roItem()}><span style={S.roMarker(t.red)}>✗</span>{c}</div>
+        ))}</div>
+        <div style={{ ...S.fg, marginTop: 14 }}>
+          <label style={S.label}>Additional Rejection Rules</label>
+          <textarea style={S.textarea} defaultValue={vals.current.customRejections} onChange={e => { vals.current.customRejections = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.red; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Add any campaign-specific rejection criteria — one per line" rows={4} />
+        </div>
+      </div>
+      <div style={S.section}>
         <div style={S.secLabel}>🎬 Format & Tone</div>
         <div style={S.r2}>
           {mkSel("videoLength", "Video Length", LENGTHS)}
@@ -610,15 +650,93 @@ function EditableField({ value, style, t }) {
   );
 }
 
+function EditableRejectionLine({ value, t }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && ref.current.textContent !== value) ref.current.textContent = value ?? "";
+  }, [value]);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+      <span style={{ color: t.red, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        style={{ fontSize: 14, color: t.text, lineHeight: 1.7, flex: 1, cursor: "text", outline: "none", borderBottom: "1px dashed transparent", minWidth: 0 }}
+        onFocus={(e) => { e.target.style.borderBottomColor = t.red + "50"; }}
+        onBlur={(e) => { e.target.style.borderBottomColor = "transparent"; }}
+      />
+    </div>
+  );
+}
+
+function RejectionAddRow({ t, onCommit }) {
+  const ref = useRef(null);
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+  const showHint = !focused && !draft.trim();
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${t.red}30` }}>
+      <div style={{ position: "relative" }}>
+        {showHint && (
+          <div style={{ position: "absolute", left: 0, top: 0, fontSize: 13, color: t.textFaint, fontStyle: "italic", pointerEvents: "none" }}>Click to add another rejection rule...</div>
+        )}
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          style={{ fontSize: 14, color: t.text, lineHeight: 1.7, minHeight: 22, outline: "none", borderBottom: "1px dashed transparent", cursor: "text" }}
+          onFocus={(e) => { setFocused(true); e.target.style.borderBottomColor = t.red + "50"; }}
+          onInput={(e) => { setDraft(e.currentTarget.textContent || ""); }}
+          onBlur={(e) => {
+            e.target.style.borderBottomColor = "transparent";
+            setFocused(false);
+            const text = (e.target.textContent || "").replace(/\u200b/g, "").trim();
+            setDraft("");
+            if (text) {
+              onCommit(text);
+              e.target.textContent = "";
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RejectionSection({ brief, formData, t, S }) {
+  const syncKey = `${(brief.rejections && brief.rejections.join?.("¦")) || ""}|${formData?.customRejections || ""}`;
+  const [items, setItems] = useState(() =>
+    Array.isArray(brief.rejections) && brief.rejections.length ? [...brief.rejections] : buildRejectionsArray(formData),
+  );
+  useEffect(() => {
+    const next = Array.isArray(brief.rejections) && brief.rejections.length ? [...brief.rejections] : buildRejectionsArray(formData);
+    setItems(next);
+  }, [syncKey]);
+  return (
+    <div style={S.bSec}>
+      <div style={S.bSecTitle}>🚫 INSTANT REJECTION — Content Will Be Declined If:</div>
+      <div className="brief-rejection-block" style={{ background: t.red + "08", border: `2px solid ${t.red}40`, borderRadius: 12, padding: 20 }}>
+        <div style={{ fontSize: 13, color: t.red, fontWeight: 600, marginBottom: 14 }}>The following will result in your content being immediately rejected. No exceptions.</div>
+        {items.map((line, i) => (
+          <EditableRejectionLine key={`rej-${i}-${line.slice(0, 24)}`} value={line} t={t} />
+        ))}
+        <RejectionAddRow t={t} onCommit={(text) => setItems((prev) => [...prev, text])} />
+      </div>
+    </div>
+  );
+}
+
 function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenerateAI }) {
   const { t, S } = useContext(ThemeContext);
   const wasAI = fd.mode === "ai";
   return (
-    <div style={S.bWrap}>
-      <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+    <div style={S.bWrap} className="brief-print-root">
+      <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>← Back</button>
         <button onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>✦ AI Regenerate</button>
         <button onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>⚡ Quick Regen</button>
+        <button type="button" onClick={() => window.print()} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.red + "45", color: t.red }}>Print / Save PDF</button>
       </div>
       <div style={{ marginBottom: 24 }}>
         <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11 }}>{wasAI ? "✦ AI Generated" : "⚡ Template Draft"}</span>
@@ -678,6 +796,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
           <div style={S.dontCol}><div style={S.sayH(t.red)}>🚫 Not This</div>{b.notThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
         </div>
       </div>
+      <RejectionSection brief={b} formData={fd} t={t} S={S} />
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📊 Proof Points</div>
         <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}><EditableField value={p} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5, width: "100%" }} t={t} /></div>)}</div>
@@ -717,6 +836,9 @@ function buildAIPrompt(d) {
   const plats = normalizePlatforms(d);
   const platLine = plats.map(p => p === "Other" && (d.customPlatform || "").trim() ? `Other (${(d.customPlatform || "").trim()})` : p).join(", ");
   const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
+  const rejectionsLine = Array.isArray(d._rejections) && d._rejections.length
+    ? d._rejections.join(". ")
+    : buildRejectionsArray(d).join(". ");
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
 PRODUCT: ${productResolved} by Intake Breathing
@@ -730,6 +852,10 @@ PROOF POINTS / STATS: ${d._stats || ""}
 APPROVED CLAIMS (creators CAN say): ${d._approved || ""}
 BANNED CLAIMS (NEVER say): ${d._banned || ""}
 REQUIRED DISCLOSURE: ${d._disclosure || ""}
+INSTANT REJECTION CRITERIA (content will be rejected if any of these appear): ${rejectionsLine}
+
+Include these rejection criteria in the brief and make sure the creative direction avoids all of them.
+
 PLATFORMS: ${platLine}
 VIDEO LENGTH: ${d.videoLength || ""}
 TONE: ${toneResolved}
@@ -740,7 +866,7 @@ TONE DIRECTION: The creative tone for this brief is "${toneResolved}". Match thi
 Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
 
 Return ONLY this JSON (no other text):
-{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"disclosure":"exact required citation text","proof":["4 formatted stat cards"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
+{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"rejections":["array of strings — every instant rejection rule listed above; include all criteria verbatim"],"disclosure":"exact required citation text","proof":["4 formatted stat cards"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -933,6 +1059,9 @@ export default function App() {
       try { brief = JSON.parse(match[0]); }
       catch { throw new Error("JSON parse failed — response may have been cut off. Try again."); }
 
+      const mergedRej = buildRejectionsArray(formData);
+      if (!Array.isArray(brief.rejections) || brief.rejections.length === 0) brief.rejections = mergedRej;
+
       saveBrief(brief, formData);
     } catch (err) {
       if (cancelledRef.current) return;
@@ -966,6 +1095,18 @@ export default function App() {
           ::-webkit-scrollbar { width:6px }
           ::-webkit-scrollbar-thumb { background:${t.scrollThumb}; border-radius:3px }
           select option { background:${t.card}; color:${t.text} }
+          @media print {
+            .no-print { display: none !important; }
+            body { background: #fff !important; color: #111 !important; }
+            .brief-print-root { max-width: 100% !important; padding: 0 !important; }
+            .brief-rejection-block {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              background: #ffebee !important;
+              border: 2px solid #c62828 !important;
+              page-break-inside: avoid;
+            }
+          }
         `}</style>
 
         {/* STORAGE LOADING */}
@@ -979,7 +1120,7 @@ export default function App() {
         {storageReady && <>
 
         {/* NAV */}
-        <div style={S.nav}>
+        <div className="no-print" style={S.nav}>
           <div style={S.navLogo} onClick={()=>setView("home")}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill={t.green}/><path d="M7 12h10M12 7v10" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
             <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>CREATOR PARTNERSHIPS</div></div>
