@@ -40,8 +40,13 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.20.0";
+const APP_VERSION = "5.21.0";
 const CHANGELOG = [
+  { version: "5.21.0", date: "2026-04-01", changes: [
+    "Creator profile 2.0 — quick stats, TikTok/IG galleries, bio & links, view trend",
+    "IB-Ai: partnership notes (auto-fills Notes when empty), outreach DM/email, competitor & brand safety",
+    "Platform cards: Verified / Business / Commerce badges; header shows creator since & last enriched",
+  ]},
   { version: "5.20.0", date: "2026-04-01", changes: [
     "Channel Pipeline now reads AND writes to Google Sheets",
     "Service account authentication replaces API key",
@@ -1153,6 +1158,91 @@ function formatMetricShort(n) {
   return `${(x / 1_000_000).toFixed(x >= 10_000_000 ? 1 : 2)}M`.replace(/\.0M$/, "M");
 }
 
+/** TikTok accountCreated ISO date (yyyy-mm-dd) → "Sep 2021" */
+function formatCreatorSinceLabel(isoDate) {
+  if (!isoDate) return null;
+  const d = new Date(String(isoDate).length <= 10 ? `${isoDate}T12:00:00` : isoDate);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+function formatRelativePostDate(isoOrDateStr) {
+  if (!isoOrDateStr) return null;
+  const d = new Date(isoOrDateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Posting frequency from TikTok recentVideos (date field). */
+function computePostingFrequencyLabel(videos) {
+  const vids = Array.isArray(videos) ? videos : [];
+  if (vids.length < 1) return "—";
+  const dates = vids
+    .map((x) => (x.date ? new Date(x.date) : null))
+    .filter((d) => d && !Number.isNaN(d.getTime()))
+    .sort((a, b) => a - b);
+  if (dates.length < 2) return vids.length === 1 ? "~1 in sample" : "—";
+  const days = Math.max(1, (dates[dates.length - 1] - dates[0]) / 86400000);
+  const perWeek = ((dates.length - 1) / days) * 7;
+  if (perWeek >= 1) return `${perWeek.toFixed(1)}×/wk`;
+  return `${(perWeek * 4.33).toFixed(1)}×/mo`;
+}
+
+/** At-a-glance stats for creator detail quick bar. */
+function computeCreatorQuickStats(c) {
+  const tt = c.tiktokData || {};
+  const ig = c.instagramData || {};
+  const yt = c.youtubeData || {};
+  const tw = c.twitterData || {};
+  const fb = c.facebookData || {};
+  const totalReach =
+    (Number(tt.followers) || 0) +
+    (Number(ig.followers) || 0) +
+    (Number(yt.subscribers) || 0) +
+    (Number(tw.followers) || 0) +
+    (Number(fb.followers) || 0);
+
+  const videos = Array.isArray(tt.recentVideos) ? tt.recentVideos : [];
+  const avgViews =
+    tt.avgViews != null && tt.avgViews > 0
+      ? tt.avgViews
+      : videos.length
+        ? Math.round(videos.reduce((s, v) => s + (Number(v.views) || 0), 0) / videos.length)
+        : null;
+
+  const eng =
+    c.instagramEngRate != null && c.instagramEngRate >= 0.05 && c.instagramEngRate <= 100
+      ? c.instagramEngRate
+      : c.tiktokEngRate != null && c.tiktokEngRate >= 0.05 && c.tiktokEngRate <= 100
+        ? c.tiktokEngRate
+        : c.engagementRate != null && c.engagementRate >= 0.05 && c.engagementRate <= 100
+          ? c.engagementRate
+          : null;
+
+  const cpm = c.cpmData || calculateCreatorCPM(c);
+  const estRate = cpm?.rateDisplay || null;
+  const postFreq = computePostingFrequencyLabel(videos);
+  const sorted = videos
+    .map((v) => (v.date ? new Date(v.date) : null))
+    .filter((d) => d && !Number.isNaN(d.getTime()))
+    .sort((a, b) => b - a);
+  const lastPosted = sorted[0] ? formatRelativePostDate(sorted[0].toISOString().split("T")[0]) : null;
+
+  return { totalReach, avgViews, engRate: eng, estRate, postFreq, lastPosted };
+}
+
+/** Normalize view counts for a simple sparkline (0–100 heights). */
+function buildViewsSparklinePercents(videos, max = 15) {
+  const vids = (Array.isArray(videos) ? videos : []).slice(0, max);
+  const views = vids.map((v) => Number(v.views) || 0);
+  const hi = Math.max(1, ...views);
+  return views.map((v) => Math.round((v / hi) * 100));
+}
+
 /**
  * Calculate suggested rate per video based on CPM and actual view data.
  * Returns { cpmLow, cpmHigh, cpmTier, avgViews, platform, videoCount, rateLow, rateHigh, rateDisplay, explanation }
@@ -1621,6 +1711,11 @@ function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
     out.ibScoreLabel = aiAnalysis.scoreLabel || creator.ibScoreLabel;
     out.ibScoreBreakdown = aiAnalysis.scoreBreakdown || creator.ibScoreBreakdown;
   }
+  const seedNotes =
+    aiAnalysis.partnershipNotes && String(aiAnalysis.partnershipNotes).trim() && !String(creator.notes || "").trim();
+  if (seedNotes) {
+    out.notes = String(aiAnalysis.partnershipNotes).trim();
+  }
   out.aiAutoFilled = {
     niche: !String(creator.niche || "").trim() && aiAnalysis.suggestedNiche ? true : prev.niche ?? false,
     quality:
@@ -1630,6 +1725,7 @@ function mergeAiFieldsIntoExisting(creator, aiAnalysis) {
           ? true
           : prev.quality ?? false,
     costPerVideo: prev.costPerVideo ?? false,
+    notes: seedNotes ? true : prev.notes ?? false,
   };
   return out;
 }
@@ -2076,7 +2172,12 @@ Return ONLY a JSON object:
   "runnerUpPlatform": "<the other platform or 'YouTube' etc>",
   "runnerUpReason": "<1 sentence on why the runner-up is also worth considering>",
   "suggestedNiche": "<comma-separated>",
-  "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>"
+  "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>",
+  "partnershipNotes": "<3-4 bullet points as one string; use newline between bullets: (1) value or risk, (2) best content type for partnerships, (3) rate range context, (4) outreach angle>",
+  "outreachDM": "<2-3 sentence Instagram DM personalized to this creator>",
+  "outreachEmail": "<short email for a partnership proposal>",
+  "competitorMentions": "<any competing nasal/breathing/wellness products seen in bios or themes, or 'None'>",
+  "brandSafety": "<'Safe' | 'Review' | 'Concern'> — <one short reason>"
 }
 
 Suggested creator rates are computed in-app from CPM and actual view data — do not estimate dollar rates in your response.`;
@@ -2091,7 +2192,7 @@ Suggested creator rates are computed in-app from CPM and actual view data — do
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 900,
+      max_tokens: 1400,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -5213,7 +5314,7 @@ function ExpandableInsight({ t, label, value, valueColor, valueFontSize = 14, ex
   );
 }
 
-function PlatformCard({ t, platform, brandColor, handle, url, followers, followerLabel = "followers", secondaryText, extraInfo, onHandleChange }) {
+function PlatformCard({ t, platform, brandColor, handle, url, followers, followerLabel = "followers", secondaryText, extraInfo, badges, onHandleChange }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(handle || "");
 
@@ -5281,6 +5382,9 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
 
       {/* Secondary */}
       {secondaryText ? <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.4 }}>{secondaryText}</div> : null}
+      {Array.isArray(badges) && badges.filter(Boolean).length ? (
+        <div style={{ fontSize: 10, color: t.textFaint, marginTop: 4, lineHeight: 1.35 }}>{badges.filter(Boolean).join(" · ")}</div>
+      ) : null}
       {extraInfo ? <div style={{ fontSize: 11, color: brandColor, marginTop: 4, fontWeight: 600 }}>{extraInfo}</div> : null}
     </div>
   );
@@ -5348,6 +5452,15 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     ? new Date(ttD.lastEnriched).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
     : null;
   const freshness = creatorDataFreshness(ttD.lastEnriched, t);
+  const creatorSince = formatCreatorSinceLabel(ttD.accountCreated);
+  const lastEnrichedIso = ttD.lastEnriched || igD.lastEnriched;
+  const lastEnrichedDisplay = lastEnrichedIso
+    ? new Date(lastEnrichedIso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const quickStats = useMemo(() => computeCreatorQuickStats(c), [c]);
+  const ttVideosList = Array.isArray(ttD.recentVideos) ? ttD.recentVideos : [];
+  const sparkHeights = useMemo(() => buildViewsSparklinePercents(ttVideosList), [ttVideosList]);
+  const igPostsGallery = Array.isArray(c.instagramRecentPosts) ? c.instagramRecentPosts : [];
 
   const pullInstagramOnly = async () => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
@@ -5685,6 +5798,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             </a>
             {c.name?.trim() ? <div style={{ fontSize: 13, color: t.textMuted }}>{c.name.trim()}</div> : null}
             <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: c.status === "Active" ? t.green + "18" : t.cardAlt, color: c.status === "Active" ? t.green : t.textMuted, marginTop: 4, display: "inline-block" }}>{c.status}</span>
+            {creatorSince || lastEnrichedDisplay ? (
+              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6, lineHeight: 1.45 }}>
+                {creatorSince ? <span>Creator since {creatorSince}</span> : null}
+                {creatorSince && lastEnrichedDisplay ? <span> · </span> : null}
+                {lastEnrichedDisplay ? <span>Last enriched {lastEnrichedDisplay}</span> : null}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -5712,6 +5832,38 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", marginBottom: 20 }}>{ai.oneSentence}</div>
       ) : null}
 
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
+          gap: 10,
+          marginBottom: 20,
+        }}
+      >
+        {[
+          { v: formatMetricShort(quickStats.totalReach), l: "Total reach", sub: "followers sum" },
+          { v: quickStats.avgViews != null ? formatMetricShort(quickStats.avgViews) : "—", l: "Avg views", sub: "per video" },
+          { v: quickStats.engRate != null ? `${Number(quickStats.engRate).toFixed(1)}%` : "—", l: "Eng rate", sub: "est." },
+          { v: quickStats.estRate || "—", l: "Est. rate", sub: "per video" },
+          { v: quickStats.postFreq, l: "Post freq", sub: quickStats.lastPosted ? `last ${quickStats.lastPosted}` : "TikTok sample" },
+        ].map((cell) => (
+          <div
+            key={cell.l}
+            style={{
+              background: t.card,
+              border: `1px solid ${t.border}`,
+              borderRadius: 10,
+              padding: "12px 10px",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>{cell.v}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", marginTop: 4 }}>{cell.l}</div>
+            <div style={{ fontSize: 9, color: t.textFaint + "99", marginTop: 2 }}>{cell.sub}</div>
+          </div>
+        ))}
+      </div>
+
       {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginBottom: 14 }}>{enrichMsg}</div> : null}
 
       <div id="creator-detail-content" style={{ marginBottom: 20 }}>
@@ -5732,6 +5884,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 c.instagramEngRate != null && c.instagramEngRate >= 0.1 && c.instagramEngRate <= 50 ? `${c.instagramEngRate}% eng` : null,
                 c.instagramData?.category || null,
               ].filter(Boolean).join(" · ")}
+              badges={[c.instagramData?.verified && "Verified", c.instagramData?.isBusiness && "Business"].filter(Boolean)}
               onHandleChange={(h) => updateCreator(c.id, { instagramHandle: h, instagramUrl: h ? `https://www.instagram.com/${h}/` : "" })}
             />
 
@@ -5748,6 +5901,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 c.tiktokData?.videoCount ? `${c.tiktokData.videoCount} videos` : null,
                 c.tiktokEngRate != null && c.tiktokEngRate >= 0.1 && c.tiktokEngRate <= 50 ? `${c.tiktokEngRate}% eng` : null,
               ].filter(Boolean).join(" · ")}
+              badges={[c.tiktokData?.verified && "Verified", c.tiktokData?.isCommerceUser && "Commerce"].filter(Boolean)}
               extraInfo={shop.hasShop ? `TikTok Shop (${shop.productCount ?? 0})` : null}
               onHandleChange={(h) => updateCreator(c.id, { tiktokHandle: h, tiktokUrl: h ? `https://www.tiktok.com/@${h}` : "" })}
             />
@@ -5805,7 +5959,202 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           </div>
         </div>
+
+        {(ttD.bio || igD.bio || ttD.bioLink || igD.externalUrl) ? (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Bio & links</div>
+            <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
+              {ttD.bio ? (
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, color: t.textFaint }}>TikTok:</span> {ttD.bio}
+                </div>
+              ) : null}
+              {igD.bio ? (
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, color: t.textFaint }}>Instagram:</span> {igD.bio}
+                </div>
+              ) : null}
+              {ttD.bioLink ? (
+                <div style={{ marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, color: t.textFaint }}>TT link:</span>{" "}
+                  <a href={ttD.bioLink} target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>
+                    {String(ttD.bioLink).replace(/^https?:\/\//, "")}
+                  </a>
+                </div>
+              ) : null}
+              {igD.externalUrl ? (
+                <div>
+                  <span style={{ fontWeight: 700, color: t.textFaint }}>IG link:</span>{" "}
+                  <a href={igD.externalUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>
+                    {String(igD.externalUrl).replace(/^https?:\/\//, "")}
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {ttVideosList.length > 0 ? (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent TikTok</div>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+              {ttVideosList.slice(0, 12).map((v) => (
+                <a
+                  key={v.id || v.url || v.caption}
+                  href={v.url || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ flex: "0 0 auto", width: 120, textDecoration: "none", color: t.text }}
+                >
+                  <div
+                    style={{
+                      width: 120,
+                      height: 160,
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      background: t.cardAlt,
+                      border: `1px solid ${t.border}`,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {v.cover ? (
+                      <img src={v.cover} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    ) : (
+                      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: t.textFaint, padding: 6, textAlign: "center" }}>
+                        No thumbnail
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>{formatMetricShort(v.views)} views</div>
+                  <div style={{ fontSize: 10, color: t.textFaint }}>{v.likes != null ? `${formatMetricShort(v.likes)} likes` : ""}</div>
+                  <div style={{ fontSize: 9, color: t.textFaint }}>{v.date || "—"}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {igPostsGallery.length > 0 ? (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent Instagram</div>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+              {igPostsGallery.slice(0, 12).map((p) => (
+                <a
+                  key={p.id || p.url}
+                  href={p.url || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ flex: "0 0 auto", width: 120, textDecoration: "none", color: t.text }}
+                >
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      background: t.cardAlt,
+                      border: `1px solid ${t.border}`,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    ) : (
+                      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: t.textFaint }}>—</div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>
+                    {formatMetricShort(p.likes)} likes · {formatMetricShort(p.comments)} replies
+                  </div>
+                  <div style={{ fontSize: 9, color: t.textFaint }}>{p.date || "—"}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {sparkHeights.length > 1 ? (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>View trend (TikTok sample)</div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 4,
+                height: 56,
+                padding: "8px 10px",
+                background: t.cardAlt,
+                borderRadius: 8,
+                border: `1px solid ${t.border}`,
+              }}
+            >
+              {[...sparkHeights].reverse().map((h, i) => (
+                <div
+                  key={i}
+                  title="Relative views vs. best in sample"
+                  style={{
+                    flex: 1,
+                    minWidth: 3,
+                    height: `${Math.max(4, Math.round((h / 100) * 44))}px`,
+                    background: t.green + "99",
+                    borderRadius: 2,
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: t.textFaint, marginTop: 6 }}>Older ← → Newer (relative heights)</div>
+          </div>
+        ) : null}
       </div>
+
+      {(ai.partnershipNotes || ai.outreachDM || ai.outreachEmail || ai.competitorMentions || ai.brandSafety) ? (
+        <div style={{ marginBottom: 20, padding: 14, background: t.cardAlt, borderRadius: 10, border: `1px solid ${t.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em" }}>Partnership & outreach</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 8px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
+          </div>
+          {ai.partnershipNotes ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.green, marginBottom: 4 }}>Partnership notes</div>
+              <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{ai.partnershipNotes}</div>
+            </div>
+          ) : null}
+          {ai.outreachDM ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: t.text }}>Suggested DM</span>
+                <button type="button" onClick={() => void navigator.clipboard.writeText(String(ai.outreachDM))} style={{ ...S.btnS, fontSize: 11, padding: "4px 10px" }}>
+                  Copy
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{ai.outreachDM}</div>
+            </div>
+          ) : null}
+          {ai.outreachEmail ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: t.text }}>Suggested email</span>
+                <button type="button" onClick={() => void navigator.clipboard.writeText(String(ai.outreachEmail))} style={{ ...S.btnS, fontSize: 11, padding: "4px 10px" }}>
+                  Copy
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{ai.outreachEmail}</div>
+            </div>
+          ) : null}
+          {ai.competitorMentions ? (
+            <div style={{ marginBottom: 8, fontSize: 12, color: t.textMuted }}>
+              <span style={{ fontWeight: 700, color: t.orange }}>Competitor check: </span>
+              {ai.competitorMentions}
+            </div>
+          ) : null}
+          {ai.brandSafety ? (
+            <div style={{ fontSize: 12, color: t.textMuted }}>
+              <span style={{ fontWeight: 700, color: t.blue }}>Brand safety: </span>
+              {ai.brandSafety}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {Number.isFinite(ib) ? (
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
@@ -6225,7 +6574,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
 
       <div id="creator-notes-section" style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8, color: t.text }}>Notes</div>
+        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8, color: t.text, display: "flex", alignItems: "center", gap: 8 }}>
+          Notes
+          {af.notes ? <span style={{ fontSize: 10, fontWeight: 700, color: t.green }}>✦ IB-Ai seeded</span> : null}
+        </div>
         <textarea
           value={c.notes || ""}
           onChange={(e) => updateCreator(c.id, { notes: e.target.value })}
