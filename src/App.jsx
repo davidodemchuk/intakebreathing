@@ -1,5 +1,29 @@
 import { useState, useRef, useCallback, useEffect, memo, createContext, useContext } from "react";
 
+// ═══ UPDATE THIS WITH EVERY PUSH ═══
+// Add new version at the TOP of this array
+// Bump APP_VERSION to match
+// Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
+const APP_VERSION = "1.0.0";
+const CHANGELOG = [
+  { version: "1.0.0", date: "2025-03-31", changes: [
+    "Initial release — UGC Brief Command Center",
+    "AI Generate with Claude Sonnet API",
+    "Instant Draft with template engine",
+    "Dark/Light theme with persistent storage",
+    "Brief Library with localStorage persistence",
+    "PDF download for generated briefs",
+    "Editable brief sections (contentEditable)",
+    "Products: Starter Kit Black, Starter Kit Clear, Mouth Tape, Sports Tabs, Refills, Case, Other",
+    "Campaign Vibes with custom Other option",
+    "Audience targeting by age range and gender",
+    "Free-text core problem field",
+    "Proof points from verified SleepScore Labs data",
+    "Compliance guardrails: approved claims, banned claims, required disclosure",
+    "Platform-specific guidance for TikTok, Reels, Shorts, Facebook, Multi-platform",
+  ]},
+];
+
 // ═══════════════════════════════════════════════════════════
 // THEME SYSTEM
 // ═══════════════════════════════════════════════════════════
@@ -768,7 +792,10 @@ export default function App() {
             <button style={S.navBtn(view==="home")} onClick={()=>setView("home")}>Home</button>
             <button style={S.navBtn(view==="create")} onClick={()=>{setView("create");setFormKey(k=>k+1)}}>New Brief</button>
             <button style={S.navBtn(view==="library")} onClick={()=>setView("library")}>Library{library.length>0&&` (${library.length})`}</button>
-            <button style={S.navBtn(view==="settings")} onClick={()=>setView("settings")}>⚙</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button style={S.navBtn(view==="settings")} onClick={()=>setView("settings")}>⚙</button>
+              <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 500 }}>v{APP_VERSION}</span>
+            </div>
             {apiKey && <div style={{ width: 7, height: 7, borderRadius: 4, background: apiStatus === "ok" ? t.green : t.orange, marginLeft: -8 }} title={apiStatus === "ok" ? "API connected" : "API key set"} />}
             <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
             <button onClick={()=>setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
@@ -916,6 +943,22 @@ export default function App() {
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
                 Each AI call uses roughly 3,000 output tokens (~$0.01-0.02 per brief on Claude Sonnet).
               </div>
+            </div>
+
+            {/* Version History */}
+            <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginTop: 20, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 16 }}>Version History</div>
+              {CHANGELOG.map((entry, idx) => (
+                <div key={entry.version} style={{ marginBottom: idx < CHANGELOG.length - 1 ? 24 : 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: t.green }}>{entry.version}</span>
+                    <span style={{ fontSize: 13, color: t.textFaint }}>{entry.date}</span>
+                  </div>
+                  {entry.changes.map((c, i) => (
+                    <div key={i} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.6, paddingLeft: 12, marginBottom: i < entry.changes.length - 1 ? 4 : 0 }}>· {c}</div>
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
         )}
