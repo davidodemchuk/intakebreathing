@@ -5,8 +5,15 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.2.0";
+const APP_VERSION = "2.3.0";
 const CHANGELOG = [
+  { version: "2.3.0", date: "2026-03-31", changes: [
+    "Creator list redesigned as dense spreadsheet-style table — no wasted space",
+    "Column headers with click-to-sort on every column",
+    "Filter dropdowns per column: status, niche, quality, platform",
+    "Compact rows with all key info visible — handle, name, niche, email, videos, quality, cost, contact links",
+    "Clicking a row opens the creator detail dashboard",
+  ]},
   { version: "2.2.0", date: "2025-04-01", changes: [
     "Creator Database 2.0 — completely redesigned list view with rich info at a glance",
     "Clickable TikTok and Instagram links directly on each creator card",
@@ -3356,13 +3363,13 @@ export default function App() {
   const [scrapeKey, setScrapeKey] = useState("");
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [creatorStatusFilter, setCreatorStatusFilter] = useState("All");
-  const [creatorQualityFilter, setCreatorQualityFilter] = useState("All");
-  const [creatorSort, setCreatorSort] = useState("videos");
-  const [creatorSearchDebounced, setCreatorSearchDebounced] = useState("");
+  const [sortCol, setSortCol] = useState("handle");
+  const [sortDir, setSortDir] = useState("asc");
+  const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All", platform: "All" });
+  const [openFilter, setOpenFilter] = useState(null);
   const [showAddCreator, setShowAddCreator] = useState(false);
   const [newCreatorForm, setNewCreatorForm] = useState({
-    handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard",
+    handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard", costPerVideo: "", notes: "",
   });
   const [creatorImportToast, setCreatorImportToast] = useState(null);
   const csvInputRef = useRef(null);
@@ -3451,9 +3458,13 @@ export default function App() {
   }, [currentRole, view, navigate]);
 
   useEffect(() => {
-    const tm = setTimeout(() => setCreatorSearchDebounced(creatorSearch), 300);
-    return () => clearTimeout(tm);
-  }, [creatorSearch]);
+    if (openFilter == null) return;
+    const close = (e) => {
+      if (!e.target.closest?.("[data-creator-filter-dd]")) setOpenFilter(null);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [openFilter]);
 
   useEffect(() => {
     if (view !== "creatorDetail" || typeof window === "undefined") return;
@@ -3513,11 +3524,11 @@ export default function App() {
       niche: newCreatorForm.niche.trim(),
       address: "",
       totalVideos: 0,
-      notes: "",
+      notes: newCreatorForm.notes.trim(),
       quality: newCreatorForm.quality,
       tiktokUrl: tiktokUrlFromHandle(handleNorm),
       instagramUrl: newCreatorForm.instagramUrl.trim(),
-      costPerVideo: "",
+      costPerVideo: newCreatorForm.costPerVideo.trim(),
       bestVideos: [],
       videoLog: [],
       dateAdded: new Date().toISOString().slice(0, 10),
@@ -3525,7 +3536,7 @@ export default function App() {
     setCreators((prev) => [row, ...prev]);
     setShowAddCreator(false);
     setNewCreatorForm({
-      handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard",
+      handle: "", name: "", email: "", niche: "", instagramUrl: "", status: "Active", quality: "Standard", costPerVideo: "", notes: "",
     });
   }, [newCreatorForm]);
 
@@ -3899,23 +3910,141 @@ export default function App() {
     return best;
   }, [library]);
 
-  const filteredCreators = useMemo(() => {
-    let list = creators;
-    if (creatorStatusFilter !== "All") list = list.filter((c) => c.status === creatorStatusFilter);
-    if (creatorQualityFilter !== "All") list = list.filter((c) => c.quality === creatorQualityFilter);
-    const q = creatorSearchDebounced.trim().toLowerCase();
-    if (q) {
-      list = list.filter((c) => {
-        const handle = (c.handle || "").toLowerCase();
-        const name = (c.name || "").toLowerCase();
-        const niche = (c.niche || "").toLowerCase();
-        const notes = (c.notes || "").toLowerCase();
-        const email = (c.email || "").toLowerCase();
-        return handle.includes(q) || name.includes(q) || niche.includes(q) || notes.includes(q) || email.includes(q);
-      });
+  const allNiches = useMemo(() => {
+    const set = new Set();
+    creators.forEach((c) => {
+      if (c.niche) {
+        String(c.niche)
+          .split(",")
+          .forEach((n) => {
+            const t = n.trim();
+            if (t) set.add(t);
+          });
+      }
+    });
+    return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [creators]);
+
+  const parseCostSort = (c) => {
+    const raw = String(c.costPerVideo ?? "").replace(/[$,\s]/g, "");
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : 999999;
+  };
+
+  const sortedCreators = useMemo(() => {
+    let list = [...creators];
+
+    if (filters.status !== "All") list = list.filter((c) => c.status === filters.status);
+    if (filters.quality !== "All") list = list.filter((c) => (c.quality || "Standard") === filters.quality);
+    if (filters.niche !== "All") {
+      const needle = filters.niche.toLowerCase();
+      list = list.filter((c) =>
+        String(c.niche || "")
+          .split(",")
+          .some((n) => n.trim().toLowerCase() === needle)
+      );
     }
-    return sortCreatorsList(list, creatorSort);
-  }, [creators, creatorSearchDebounced, creatorStatusFilter, creatorQualityFilter, creatorSort]);
+    if (filters.platform === "instagram") {
+      list = list.filter((c) => (c.instagramUrl || "").trim());
+    } else if (filters.platform === "both") {
+      list = list.filter(
+        (c) =>
+          (c.instagramUrl || "").trim() &&
+          ((c.tiktokUrl || "").trim() || tiktokUrlFromHandle(c.handle))
+      );
+    }
+
+    if (creatorSearch.trim()) {
+      const q = creatorSearch.trim().toLowerCase();
+      list = list.filter(
+        (c) =>
+          (c.handle || "").toLowerCase().includes(q) ||
+          (c.name || "").toLowerCase().includes(q) ||
+          (c.niche || "").toLowerCase().includes(q) ||
+          (c.email || "").toLowerCase().includes(q) ||
+          (c.notes || "").toLowerCase().includes(q)
+      );
+    }
+
+    const statusOrder = { Active: 0, "One-time": 1, "Off-boarded": 2 };
+    list.sort((a, b) => {
+      let valA;
+      let valB;
+      switch (sortCol) {
+        case "status":
+          valA = statusOrder[a.status] ?? 99;
+          valB = statusOrder[b.status] ?? 99;
+          break;
+        case "handle":
+          valA = (a.handle || "").toLowerCase();
+          valB = (b.handle || "").toLowerCase();
+          break;
+        case "name":
+          valA = (a.name || "").toLowerCase();
+          valB = (b.name || "").toLowerCase();
+          break;
+        case "niche":
+          valA = (a.niche || "").toLowerCase();
+          valB = (b.niche || "").toLowerCase();
+          break;
+        case "email":
+          valA = (a.email || "").toLowerCase();
+          valB = (b.email || "").toLowerCase();
+          break;
+        case "videos":
+          valA = Math.max(Number(a.totalVideos) || 0, (a.videoLog || []).length);
+          valB = Math.max(Number(b.totalVideos) || 0, (b.videoLog || []).length);
+          break;
+        case "quality":
+          valA = a.quality === "High" ? 0 : 1;
+          valB = b.quality === "High" ? 0 : 1;
+          break;
+        case "cost":
+          valA = parseCostSort(a);
+          valB = parseCostSort(b);
+          break;
+        case "notes":
+          valA = (a.notes || "").toLowerCase();
+          valB = (b.notes || "").toLowerCase();
+          break;
+        case "tiktok": {
+          const ttA = (a.tiktokUrl || "").trim() || tiktokUrlFromHandle(a.handle);
+          const ttB = (b.tiktokUrl || "").trim() || tiktokUrlFromHandle(b.handle);
+          valA = ttA ? 0 : 1;
+          valB = ttB ? 0 : 1;
+          break;
+        }
+        case "instagram":
+          valA = (a.instagramUrl || "").trim() ? 0 : 1;
+          valB = (b.instagramUrl || "").trim() ? 0 : 1;
+          break;
+        default:
+          valA = (a.handle || "").toLowerCase();
+          valB = (b.handle || "").toLowerCase();
+      }
+      if (valA < valB) return sortDir === "asc" ? -1 : 1;
+      if (valA > valB) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [creators, filters, creatorSearch, sortCol, sortDir]);
+
+  const handleCreatorSort = useCallback((col) => {
+    setSortCol((prev) => {
+      if (prev === col) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("asc");
+      return col;
+    });
+  }, []);
+
+  const clearCreatorFilters = useCallback(() => {
+    setFilters({ status: "All", niche: "All", quality: "All", platform: "All" });
+    setCreatorSearch("");
+  }, []);
 
   const creatorDetailId =
     view === "creatorDetail" && typeof window !== "undefined"
@@ -4649,59 +4778,222 @@ export default function App() {
           </div>
         )}
 
-        {!aiLoading && isCreatorViewAllowed && view === "creators" && (
-          <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        {!aiLoading && isCreatorViewAllowed && view === "creators" && (() => {
+          const gridCols = "70px 140px 120px 150px 180px 40px 40px 60px 70px 80px 1fr";
+          const headCell = {
+            display: "grid",
+            gridTemplateColumns: gridCols,
+            background: t.cardAlt,
+            borderBottom: `2px solid ${t.border}`,
+            padding: "8px 12px",
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
+            minWidth: 900,
+          };
+          const rowCell = {
+            display: "grid",
+            gridTemplateColumns: gridCols,
+            padding: "6px 12px",
+            borderBottom: `1px solid ${t.border}66`,
+            cursor: "pointer",
+            fontSize: 12,
+            color: t.textSecondary,
+            lineHeight: 1.4,
+            transition: "background 0.1s",
+            minWidth: 900,
+          };
+          const ellip = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+          const sortArrow = (col) => (sortCol === col ? (sortDir === "asc" ? "↑" : "↓") : "");
+          const hdr = (col, label, filterKey) => {
+            const active =
+              filterKey === "status"
+                ? filters.status !== "All"
+                : filterKey === "niche"
+                  ? filters.niche !== "All"
+                  : filterKey === "quality"
+                    ? filters.quality !== "All"
+                    : false;
+            return (
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, minWidth: 0 }} data-creator-filter-dd={filterKey || undefined}>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCreatorSort(col)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCreatorSort(col); } }}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    color: active ? t.green : t.textFaint,
+                    cursor: "pointer",
+                    userSelect: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {label}
+                  <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow(col)}</span>
+                </span>
+                {filterKey ? (
+                  <button
+                    type="button"
+                    data-creator-filter-dd
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenFilter((o) => (o === filterKey ? null : filterKey));
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: active ? t.green : t.textFaint,
+                      cursor: "pointer",
+                      fontSize: 9,
+                      padding: "0 2px",
+                      lineHeight: 1,
+                    }}
+                    aria-label={`Filter ${label}`}
+                  >
+                    ▼
+                  </button>
+                ) : null}
+                {openFilter === filterKey && filterKey === "status" ? (
+                  <div
+                    data-creator-filter-dd
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      marginTop: 4,
+                      background: t.card,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: 8,
+                      boxShadow: t.shadow,
+                      padding: "4px 0",
+                      zIndex: 20,
+                      minWidth: 140,
+                    }}
+                  >
+                    {["All", "Active", "One-time", "Off-boarded"].map((opt) => (
+                      <div
+                        key={opt}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilters((f) => ({ ...f, status: opt }));
+                          setOpenFilter(null);
+                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { setFilters((f) => ({ ...f, status: opt })); setOpenFilter(null); } }}
+                        style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {openFilter === filterKey && filterKey === "niche" ? (
+                  <div
+                    data-creator-filter-dd
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      marginTop: 4,
+                      background: t.card,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: 8,
+                      boxShadow: t.shadow,
+                      padding: "4px 0",
+                      zIndex: 20,
+                      minWidth: 160,
+                      maxHeight: 240,
+                      overflowY: "auto",
+                    }}
+                  >
+                    {allNiches.map((opt) => (
+                      <div
+                        key={opt}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilters((f) => ({ ...f, niche: opt }));
+                          setOpenFilter(null);
+                        }}
+                        style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {openFilter === filterKey && filterKey === "quality" ? (
+                  <div
+                    data-creator-filter-dd
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      marginTop: 4,
+                      background: t.card,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: 8,
+                      boxShadow: t.shadow,
+                      padding: "4px 0",
+                      zIndex: 20,
+                      minWidth: 120,
+                    }}
+                  >
+                    {["All", "High", "Standard"].map((opt) => (
+                      <div
+                        key={opt}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilters((f) => ({ ...f, quality: opt }));
+                          setOpenFilter(null);
+                        }}
+                        style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        {opt === "High" ? "★ High" : opt}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          };
+          const fmtHandle = (h) => {
+            const x = String(h || "").trim();
+            if (!x) return "—";
+            return x.startsWith("@") ? x : `@${x}`;
+          };
+          return (
+          <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
               <div style={{ ...S.formTitle, marginBottom: 0 }}>UGC Army — Creators</div>
               <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20, background: t.green + (t.isLight ? "18" : "15"), color: t.green }}>{creators.length}</span>
             </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, padding: "0 0 12px 0", borderBottom: `1px solid ${t.border}`, flexWrap: "wrap" }}>
               <input
                 type="text"
                 value={creatorSearch}
                 onChange={(e) => setCreatorSearch(e.target.value)}
-                placeholder="Search handle, name, niche, notes, email…"
-                style={{ flex: "1 1 200px", minWidth: 200, padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14 }}
+                placeholder="Search creators..."
+                style={{ flex: 1, minWidth: 200, padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
               />
-              <select
-                value={creatorStatusFilter}
-                onChange={(e) => setCreatorStatusFilter(e.target.value)}
-                style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-              >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="One-time">One-time</option>
-                <option value="Off-boarded">Off-boarded</option>
-              </select>
-              <select
-                value={creatorQualityFilter}
-                onChange={(e) => setCreatorQualityFilter(e.target.value)}
-                style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-              >
-                <option value="All">All Quality</option>
-                <option value="High">★ High</option>
-                <option value="Standard">Standard</option>
-              </select>
-              <select
-                value={creatorSort}
-                onChange={(e) => setCreatorSort(e.target.value)}
-                style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-              >
-                <option value="videos">Sort: Most Videos</option>
-                <option value="name">Sort: Name A-Z</option>
-                <option value="handle">Sort: Handle A-Z</option>
-                <option value="recent">Sort: Recently Added</option>
-                <option value="status">Sort: Status</option>
-              </select>
-              <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "10px 18px", fontSize: 13 }}>+ Add Creator</button>
-              <button
-                type="button"
-                onClick={() => csvInputRef.current?.click()}
-                style={{ ...S.btnS, padding: "10px 18px", fontSize: 13 }}
-              >
-                Import CSV
-              </button>
+              <button type="button" onClick={() => setShowAddCreator((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>+ Add Creator</button>
+              <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>Import CSV</button>
               <input
                 ref={csvInputRef}
                 type="file"
@@ -4713,209 +5005,228 @@ export default function App() {
                   e.target.value = "";
                 }}
               />
+              <span style={{ marginLeft: "auto", fontSize: 12, color: t.textFaint }}>
+                {sortedCreators.length} of {creators.length} creators
+              </span>
             </div>
-            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 20 }}>
-              Showing {filteredCreators.length} of {creators.length} creators
-            </div>
 
-            {showAddCreator && (
-              <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: t.shadow }}>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, color: t.text }}>New creator</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Handle *</div>
-                    <input value={newCreatorForm.handle} onChange={(e) => setNewCreatorForm((p) => ({ ...p, handle: e.target.value }))} placeholder="@handle" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Name</div>
-                    <input value={newCreatorForm.name} onChange={(e) => setNewCreatorForm((p) => ({ ...p, name: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
-                    <input value={newCreatorForm.email} onChange={(e) => setNewCreatorForm((p) => ({ ...p, email: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Niche (comma separated)</div>
-                    <input value={newCreatorForm.niche} onChange={(e) => setNewCreatorForm((p) => ({ ...p, niche: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram URL</div>
-                    <input value={newCreatorForm.instagramUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, instagramUrl: e.target.value }))} placeholder="optional" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Status</div>
-                    <select value={newCreatorForm.status} onChange={(e) => setNewCreatorForm((p) => ({ ...p, status: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
-                      <option value="Active">Active</option>
-                      <option value="One-time">One-time</option>
-                      <option value="Off-boarded">Off-boarded</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Quality</div>
-                    <select value={newCreatorForm.quality} onChange={(e) => setNewCreatorForm((p) => ({ ...p, quality: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
-                      <option value="Standard">Standard</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 10 }}>TikTok URL will be: {newCreatorForm.handle.trim() ? tiktokUrlFromHandle(newCreatorForm.handle) : "—"}</div>
-                <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-                  <button type="button" onClick={addCreator} style={{ ...S.btnP, padding: "9px 18px", fontSize: 13 }}>Add Creator</button>
-                  <button type="button" onClick={() => setShowAddCreator(false)} style={{ ...S.btnS, padding: "9px 18px", fontSize: 13 }}>Cancel</button>
-                </div>
-              </div>
-            )}
-
-            <div>
-              {filteredCreators.map((c) => {
-                const sd = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.red;
-                const niches = String(c.niche || "").split(",").map((s) => s.trim()).filter(Boolean);
-                const vc = creatorDisplayVideoCount(c);
-                const ttHref = (c.tiktokUrl || "").trim() || tiktokUrlFromHandle(c.handle);
-                const rawCost = String(c.costPerVideo || "").trim();
-                const costLine = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
-                const tagStyle = { fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: t.cardAlt, border: `1px solid ${t.border}`, color: t.textMuted };
-                const linkPill = {
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: t.textMuted,
-                  textDecoration: "none",
-                  padding: "4px 10px",
-                  borderRadius: 6,
-                  border: `1px solid ${t.border}`,
-                  background: t.cardAlt,
-                };
-                const stBg = c.status === "Active" ? t.green + "15" : c.status === "One-time" ? t.orange + "15" : t.red + "15";
-                const stCol = sd;
-                const stBd = c.status === "Active" ? t.green + "30" : "none";
-                return (
-                  <div
-                    key={c.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate("creatorDetail", { creatorId: c.id })}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("creatorDetail", { creatorId: c.id }); } }}
-                    style={{
-                      background: t.card,
-                      border: `1px solid ${t.border}`,
-                      borderRadius: 14,
-                      padding: "18px 22px",
-                      marginBottom: 10,
-                      cursor: "pointer",
-                      boxShadow: t.shadow,
-                      transition: "all 0.2s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = t.green + "40";
-                      e.currentTarget.style.transform = "translateY(-1px)";
-                      e.currentTarget.style.boxShadow = t.isLight ? "0 8px 28px rgba(0,0,0,0.1)" : "0 10px 36px rgba(0,0,0,0.45)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = t.border;
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.boxShadow = t.shadow;
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 5, background: sd, flexShrink: 0 }} />
-                        <span style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{c.handle}</span>
-                        {c.name?.trim() ? <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 4 }}>· {c.name.trim()}</span> : null}
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        {c.quality === "High" ? (
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 10, background: "#f59e0b15", color: "#f59e0b", border: "1px solid #f59e0b30" }}>★ High</span>
-                        ) : null}
-                        <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 10, background: stBg, color: stCol, border: stBd }}>
-                          {c.status}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: "1 1 auto", minWidth: 0 }}>
-                        {niches.map((n, ni) => (
-                          <span key={`${c.id}-niche-${ni}`} style={tagStyle}>{n}</span>
-                        ))}
-                      </div>
-                      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                        <span>
-                          <span style={{ fontWeight: 700, fontSize: 14, color: t.text }}>{vc}</span>
-                          <span style={{ fontSize: 12, color: t.textMuted }}> videos</span>
-                        </span>
-                        <span style={{ fontSize: 12, color: t.textMuted }}>{costLine}{rawCost ? "/vid" : ""}</span>
-                      </div>
-                    </div>
-
-                    {c.notes?.trim() ? (
+            <div style={{ overflowX: "auto", border: `1px solid ${t.border}`, borderRadius: 12, background: t.card }}>
+              <div style={{ position: "relative" }}>
+                <div style={headCell}>
+                  {hdr("status", "Status", "status")}
+                  {hdr("handle", "Handle", null)}
+                  {hdr("name", "Name", null)}
+                  {hdr("niche", "Niche", "niche")}
+                  {hdr("email", "Email", null)}
+                  <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, justifyContent: "center" }} data-creator-filter-dd="platform">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleCreatorSort("tiktok")}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCreatorSort("tiktok"); } }}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        color: t.textFaint,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                      }}
+                    >
+                      TT
+                      <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow("tiktok")}</span>
+                    </span>
+                    <button
+                      type="button"
+                      data-creator-filter-dd
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenFilter((o) => (o === "platform" ? null : "platform"));
+                      }}
+                      style={{ background: "none", border: "none", color: filters.platform !== "All" ? t.green : t.textFaint, cursor: "pointer", fontSize: 9, padding: 0 }}
+                      aria-label="Filter platform"
+                    >
+                      ▼
+                    </button>
+                    {openFilter === "platform" ? (
                       <div
+                        data-creator-filter-dd
                         style={{
-                          marginTop: 8,
-                          fontSize: 12,
-                          color: t.textFaint,
-                          fontStyle: "italic",
-                          lineHeight: 1.5,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          marginTop: 4,
+                          background: t.card,
+                          border: `1px solid ${t.border}`,
+                          borderRadius: 8,
+                          boxShadow: t.shadow,
+                          padding: "4px 0",
+                          zIndex: 20,
+                          minWidth: 180,
                         }}
                       >
-                        {c.notes.trim()}
+                        {[
+                          { v: "All", l: "All" },
+                          { v: "instagram", l: "Has Instagram" },
+                          { v: "both", l: "TikTok + Instagram" },
+                        ].map(({ v, l }) => (
+                          <div
+                            key={v}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              setFilters((f) => ({ ...f, platform: v }));
+                              setOpenFilter(null);
+                            }}
+                            style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                          >
+                            {l}
+                          </div>
+                        ))}
                       </div>
                     ) : null}
-
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${t.border}80` }}>
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                        {c.email?.trim() ? (
-                          <a
-                            href={`mailto:${c.email.trim()}`}
-                            onClick={(e) => e.stopPropagation()}
-                            style={linkPill}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}
-                          >
-                            ✉ Email
-                          </a>
-                        ) : null}
-                        {ttHref ? (
-                          <a
-                            href={ttHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={linkPill}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}
-                          >
-                            <span style={{ fontWeight: 800 }}>TT</span> TikTok
-                          </a>
-                        ) : null}
-                        {c.instagramUrl?.trim() ? (
-                          <a
-                            href={c.instagramUrl.trim()}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={linkPill}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.color = t.green; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textMuted; }}
-                          >
-                            <span style={{ fontWeight: 800 }}>IG</span> Instagram
-                          </a>
-                        ) : null}
-                      </div>
-                      <span style={{ color: t.textFaint, fontSize: 16, fontWeight: 300 }}>→</span>
-                    </div>
                   </div>
-                );
-              })}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0 }}>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleCreatorSort("instagram")}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCreatorSort("instagram"); } }}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        color: t.textFaint,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      IG
+                      <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow("instagram")}</span>
+                    </span>
+                  </div>
+                  {hdr("videos", "Videos", null)}
+                  {hdr("quality", "Quality", "quality")}
+                  {hdr("cost", "Cost", null)}
+                  {hdr("notes", "Notes", null)}
+                </div>
+
+                <div style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto", overflowX: "auto" }}>
+                  {showAddCreator ? (
+                    <div
+                      style={{ ...rowCell, cursor: "default", background: t.cardAlt + "80" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <select value={newCreatorForm.status} onChange={(e) => setNewCreatorForm((p) => ({ ...p, status: e.target.value }))} style={{ width: "100%", padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}>
+                          <option value="Active">Active</option>
+                          <option value="One-time">One-time</option>
+                          <option value="Off-boarded">Off-boarded</option>
+                        </select>
+                      </div>
+                      <input value={newCreatorForm.handle} onChange={(e) => setNewCreatorForm((p) => ({ ...p, handle: e.target.value }))} placeholder="@handle" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <input value={newCreatorForm.name} onChange={(e) => setNewCreatorForm((p) => ({ ...p, name: e.target.value }))} placeholder="Name" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <input value={newCreatorForm.niche} onChange={(e) => setNewCreatorForm((p) => ({ ...p, niche: e.target.value }))} placeholder="Niche" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <input value={newCreatorForm.email} onChange={(e) => setNewCreatorForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <span style={{ fontSize: 10, color: t.textFaint, ...ellip }} title={newCreatorForm.handle.trim() ? tiktokUrlFromHandle(newCreatorForm.handle) : ""}>
+                        {newCreatorForm.handle.trim() ? "TT" : ""}
+                      </span>
+                      <input value={newCreatorForm.instagramUrl} onChange={(e) => setNewCreatorForm((p) => ({ ...p, instagramUrl: e.target.value }))} placeholder="IG URL" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 10 }} />
+                      <span style={{ textAlign: "right", fontSize: 11, color: t.textFaint }}>0</span>
+                      <select value={newCreatorForm.quality} onChange={(e) => setNewCreatorForm((p) => ({ ...p, quality: e.target.value }))} style={{ width: "100%", padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }}>
+                        <option value="Standard">Standard</option>
+                        <option value="High">High</option>
+                      </select>
+                      <input value={newCreatorForm.costPerVideo} onChange={(e) => setNewCreatorForm((p) => ({ ...p, costPerVideo: e.target.value }))} placeholder="$" style={{ ...ellip, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                        <input value={newCreatorForm.notes} onChange={(e) => setNewCreatorForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" style={{ flex: 1, minWidth: 0, padding: "4px 6px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, fontSize: 11 }} />
+                        <button type="button" onClick={addCreator} style={{ ...S.btnP, padding: "4px 10px", fontSize: 11, flexShrink: 0 }}>Save</button>
+                        <button type="button" onClick={() => setShowAddCreator(false)} style={{ ...S.btnS, padding: "4px 10px", fontSize: 11, flexShrink: 0 }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {sortedCreators.length === 0 ? (
+                    <div style={{ padding: 48, textAlign: "center", color: t.textMuted, fontSize: 14 }}>
+                      <div style={{ marginBottom: 12 }}>No creators match your filters</div>
+                      <button type="button" onClick={clearCreatorFilters} style={{ ...S.btnS, padding: "8px 16px", fontSize: 13 }}>Clear filters</button>
+                    </div>
+                  ) : (
+                    sortedCreators.map((c) => {
+                      const dotBg = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.textFaint;
+                      const stLabel = c.status === "Off-boarded" ? "Off" : c.status === "One-time" ? "One-time" : "Active";
+                      const vc = creatorDisplayVideoCount(c);
+                      const ttHref = (c.tiktokUrl || "").trim() || tiktokUrlFromHandle(c.handle);
+                      const rawCost = String(c.costPerVideo || "").trim();
+                      const costShow = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
+                      const hDisp = fmtHandle(c.handle);
+                      return (
+                        <div
+                          key={c.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => navigate("creatorDetail", { creatorId: c.id })}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("creatorDetail", { creatorId: c.id }); } }}
+                          style={rowCell}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 4, background: dotBg, flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, color: dotBg, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
+                          </div>
+                          <div style={{ ...ellip, fontWeight: 600, color: t.text }} title={hDisp}>{hDisp}</div>
+                          <div style={{ ...ellip, color: t.textMuted }} title={c.name || ""}>{c.name?.trim() || "—"}</div>
+                          <div style={{ ...ellip, fontSize: 11, color: t.textMuted }} title={c.niche || ""}>{c.niche || "—"}</div>
+                          <div style={ellip}>
+                            {c.email?.trim() ? (
+                              <a href={`mailto:${c.email.trim()}`} onClick={(e) => e.stopPropagation()} style={{ color: t.blue, textDecoration: "none", fontSize: 11 }} onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }} onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }} title={c.email}>
+                                {c.email}
+                              </a>
+                            ) : (
+                              <span style={{ color: t.textFaint }}>—</span>
+                            )}
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            {ttHref ? (
+                              <a href={ttHref} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontWeight: 800, fontSize: 10, color: t.textMuted, textDecoration: "none" }} onMouseEnter={(e) => { e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.color = t.textMuted; }}>
+                                TT
+                              </a>
+                            ) : null}
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            {c.instagramUrl?.trim() ? (
+                              <a href={c.instagramUrl.trim()} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontWeight: 800, fontSize: 10, color: t.textMuted, textDecoration: "none" }} onMouseEnter={(e) => { e.currentTarget.style.color = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.color = t.textMuted; }}>
+                                IG
+                              </a>
+                            ) : null}
+                          </div>
+                          <div style={{ textAlign: "right", fontWeight: 600, color: vc ? t.text : t.textFaint, fontSize: 12 }}>{vc}</div>
+                          <div style={{ fontSize: 11 }}>
+                            {c.quality === "High" ? <span style={{ color: "#f59e0b", fontWeight: 600 }}>★ High</span> : <span style={{ color: t.textFaint }}>Standard</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: rawCost ? t.textMuted : t.textFaint }}>{costShow}</div>
+                          <div style={{ ...ellip, fontSize: 11, color: t.textFaint, whiteSpace: "nowrap" }} title={c.notes || ""}>{c.notes?.trim() ? c.notes.trim() : "—"}</div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {!aiLoading && isCreatorViewAllowed && view === "creatorDetail" && (
           !detailCreator ? (
