@@ -4,8 +4,11 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.3.1";
 const CHANGELOG = [
+  { version: "1.3.1", date: "2025-04-01", changes: [
+    "Rebranded AI Generate to IB-Ai across the entire app",
+  ]},
   { version: "1.3.0", date: "2025-04-01", changes: [
     "PDF download button on generated briefs — prints all sections including rejection criteria",
     "Foundation for role-based access: Manager vs Creator roles",
@@ -14,11 +17,11 @@ const CHANGELOG = [
     "Brief display shows Download PDF and Copy Share Link buttons",
   ]},
   { version: "1.2.4", date: "2025-03-31", changes: [
-    "Compliance section now AI-powered — auto-selects approved and banned claims based on form inputs",
+    "Compliance section now IB-Ai powered — auto-selects approved and banned claims based on form inputs",
     "Managers can remove individual approved/banned claims by clicking ✕",
     "Managers can add custom approved/banned claims via text input",
-    "AI compliance suggestions debounced at 2 seconds like proof points",
-    "Full APPROVED_CLAIMS and BANNED_CLAIMS arrays kept as the master source — AI selects from them",
+    "IB-Ai compliance suggestions debounced at 2 seconds like proof points",
+    "Full APPROVED_CLAIMS and BANNED_CLAIMS arrays kept as the master source — IB-Ai selects from them",
   ]},
   { version: "1.2.3", date: "2025-03-31", changes: [
     "Added Instant Rejection Criteria section to generated briefs — red warning section",
@@ -29,7 +32,7 @@ const CHANGELOG = [
   ]},
   { version: "1.2.2", date: "2025-03-31", changes: [
     "Tone dropdown now includes Other option with custom text input",
-    "AI prompt updated to use custom tone when Other is selected",
+    "IB-Ai prompt updated to use custom tone when Other is selected",
   ]},
   { version: "1.2.1", date: "2025-03-31", changes: [
     "Platform selection changed from dropdown to multi-select checkboxes",
@@ -40,16 +43,16 @@ const CHANGELOG = [
     "Proof points overhauled — only stats verified on intakebreathing.com",
     "Removed unverified claims: 96% easier breathing, 41% congestion, 88% expansion, 90% fit rate",
     "Added verified site claims: press features, industry stats, product specs",
-    "AI proof point suggestions now use verified data only",
+    "IB-Ai proof point suggestions now use verified data only",
   ]},
   { version: "1.1.0", date: "2025-03-31", changes: [
-    "AI-powered proof point auto-selection — stats update based on product, audience, problem, mission, and campaign fields",
+    "IB-Ai powered proof point auto-selection — stats update based on product, audience, problem, mission, and campaign fields",
     "Debounced 2-second delay to avoid excessive API calls",
-    "Visual loading indicator on proof points section during AI suggestion",
+    "Visual loading indicator on proof points section during IB-Ai suggestion",
   ]},
   { version: "1.0.0", date: "2025-03-31", changes: [
     "Initial release — UGC Brief Command Center",
-    "AI Generate with Claude Sonnet API",
+    "IB-Ai with Claude Sonnet API",
     "Instant Draft with template engine",
     "Dark/Light theme with persistent storage",
     "Brief Library with localStorage persistence",
@@ -653,7 +656,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}>📊 Proof Points {statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— AI selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by AI, tap to adjust</span>}</div>
+        <div style={S.secLabel}>📊 Proof Points {statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— IB-Ai selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by IB-Ai, tap to adjust</span>}</div>
         <div>
           {STAT_CATEGORY_ORDER.filter(c => STAT_OPTIONS.some(s => s.category === c)).map((cat, catIdx) => {
             const items = STAT_OPTIONS.filter(s => s.category === cat);
@@ -672,7 +675,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       <div style={S.section}>
         <div style={S.secLabel}>
           ⚖️ Compliance
-          {complianceLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— AI updating...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by AI, edit as needed</span>}
+          {complianceLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— IB-Ai updating...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by IB-Ai, edit as needed</span>}
         </div>
         <div style={S.cols2}>
           <div>
@@ -765,10 +768,10 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <button style={{ ...S.genBtn, flex: 1, marginTop: 0 }} onClick={() => go("ai")}>✦ AI Generate</button>
+        <button style={{ ...S.genBtn, flex: 1, marginTop: 0 }} onClick={() => go("ai")}>✦ IB-Ai</button>
         <button style={{ ...S.genBtn, flex: 1, marginTop: 0, background: t.border, color: t.text, fontWeight: 700, fontSize: 14 }} onClick={() => go("template")}>⚡ Instant Draft</button>
       </div>
-      <div style={{ ...S.hint, textAlign: "center", marginTop: 8 }}>AI Generate uses Claude to write original creative. Instant Draft uses templates — fast but generic.</div>
+      <div style={{ ...S.hint, textAlign: "center", marginTop: 8 }}>IB-Ai uses Claude to write original creative. Instant Draft uses templates — fast but generic.</div>
     </div>
   );
 });
@@ -1056,14 +1059,14 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
       <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>← Back</button>
         {isManager && <>
-          <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>✦ AI Regenerate</button>
+          <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>✦ IB-Ai Regenerate</button>
           <button type="button" onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>⚡ Quick Regen</button>
           <button type="button" onClick={downloadPDF} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.blue + "55", color: t.blue }}>Download PDF</button>
           <button type="button" onClick={copyShareLink} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.border, color: t.textMuted }}>Copy Share Link</button>
         </>}
       </div>
       <div style={{ marginBottom: 24 }}>
-        <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11 }}>{wasAI ? "✦ AI Generated" : "⚡ Template Draft"}</span>
+        <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11 }}>{wasAI ? "✦ IB-Ai" : "⚡ Template Draft"}</span>
       </div>
       <div style={S.bHeader}>
         <div style={S.bCampaign}>{fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName)}</div>
@@ -1146,7 +1149,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 }
 
 // ═══════════════════════════════════════════════════════════
-// AI PROMPT BUILDER
+// IB-Ai — prompt builder (Claude)
 // ═══════════════════════════════════════════════════════════
 
 function buildAIPrompt(d) {
@@ -1344,7 +1347,7 @@ export default function App() {
       }
       await res.json();
       setApiStatus("ok");
-      setApiMsg(`Connected in ${ms}ms — ✦ AI Generate is ready.`);
+      setApiMsg(`Connected in ${ms}ms — ✦ IB-Ai is ready.`);
     } catch (err) {
       setApiStatus("fail");
       setApiMsg(err.message === "TIMEOUT" ? "No response after 20s. Check your network or API key." : err.message);
@@ -1357,7 +1360,7 @@ export default function App() {
       return;
     }
 
-    // AI mode
+    // IB-Ai mode
     const liveKey = localStorage.getItem("intake-apikey") || "";
     if (!liveKey) {
       setAiError("No API key set. Go to ⚙ Settings and add your Anthropic API key.");
@@ -1398,7 +1401,7 @@ export default function App() {
 
       const text = data.content.map(i => i.text || "").join("");
       const match = text.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error("AI didn't return valid JSON. Try again or use Instant Draft.");
+      if (!match) throw new Error("IB-Ai didn't return valid JSON. Try again or use Instant Draft.");
 
       let brief;
       try { brief = JSON.parse(match[0]); }
@@ -1489,11 +1492,11 @@ export default function App() {
           </div>
         )}
 
-        {/* AI LOADING */}
+        {/* IB-Ai loading */}
         {aiLoading && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "120px 24px", textAlign: "center", animation: "fadeIn 0.3s ease" }}>
             <div style={{ width: 40, height: 40, border: `3px solid ${t.border}`, borderTop: `3px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", marginBottom: 20 }} />
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: t.text }}>AI is writing your brief…</div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: t.text }}>IB-Ai is writing your brief…</div>
             <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 6 }}>
               {elapsed < 15 ? "Claude is crafting original hooks, story beats, and creative direction." :
                elapsed < 30 ? "Still working — writing tailored content takes 15-25 seconds." :
@@ -1504,7 +1507,7 @@ export default function App() {
           </div>
         )}
 
-        {/* AI ERROR */}
+        {/* IB-Ai error */}
         {aiError && !aiLoading && (
           <div style={{ margin: "20px auto", maxWidth: 600, padding: "16px 18px", background: t.red+"12", border: `1px solid ${t.red}35`, borderRadius: 10 }}>
             <div style={{ fontSize: 13, color: t.red, marginBottom: 10 }}>⚠️ {aiError}</div>
@@ -1528,12 +1531,12 @@ export default function App() {
               {/* API key nudge */}
               {!apiKey && (
                 <div style={{ marginTop: 24, fontSize: 13, color: t.textFaint }}>
-                  Want AI-generated briefs? <span onClick={()=>setView("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in ⚙ Settings</span>
+                  Want IB-Ai-powered briefs? <span onClick={()=>setView("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
                 </div>
               )}
               {apiKey && apiStatus === "ok" && (
                 <div style={{ marginTop: 24, fontSize: 13, color: t.green, fontWeight: 500 }}>
-                  ✓ AI Generate connected and ready
+                  ✓ IB-Ai connected and ready
                 </div>
               )}
             </div>
@@ -1557,7 +1560,7 @@ export default function App() {
           <div style={{ maxWidth: 600, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
             <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
-            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable ✦ AI Generate.</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable ✦ IB-Ai.</div>
 
             {/* API Key Section */}
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
@@ -1620,13 +1623,13 @@ export default function App() {
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, boxShadow: t.shadow }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>How it works</div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7 }}>
-                <strong style={{ color: t.green }}>✦ AI Generate</strong> sends your brief form data to Claude Sonnet, which writes original hooks, story beats, persona descriptions, and creative direction tailored to your specific campaign. Requires an API key.
+                <strong style={{ color: t.green }}>✦ IB-Ai</strong> sends your brief form data to Claude Sonnet, which writes original hooks, story beats, persona descriptions, and creative direction tailored to your specific campaign. Requires an API key.
               </div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
                 <strong style={{ color: t.textSecondary }}>⚡ Instant Draft</strong> uses built-in templates with Intake's playbook data. No API key needed. Fast but less creative.
               </div>
               <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
-                Each AI call uses roughly 3,000 output tokens (~$0.01-0.02 per brief on Claude Sonnet).
+                Each IB-Ai call uses roughly 3,000 output tokens (~$0.01-0.02 per brief on Claude Sonnet).
               </div>
             </div>
 
