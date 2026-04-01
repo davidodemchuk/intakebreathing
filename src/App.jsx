@@ -1249,13 +1249,9 @@ export default function App() {
             <button style={S.navBtn(view==="home")} onClick={()=>setView("home")}>Home</button>
             <button style={S.navBtn(view==="create")} onClick={()=>{setView("create");setFormKey(k=>k+1)}}>New Brief</button>
             <button style={S.navBtn(view==="library")} onClick={()=>setView("library")}>Library{library.length>0&&` (${library.length})`}</button>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button style={S.navBtn(view==="settings")} onClick={()=>setView("settings")}>⚙</button>
-              <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 500 }}>v{APP_VERSION}</span>
-            </div>
-            {apiKey && <div style={{ width: 7, height: 7, borderRadius: 4, background: apiStatus === "ok" ? t.green : t.orange, marginLeft: -8 }} title={apiStatus === "ok" ? "API connected" : "API key set"} />}
+            <button style={S.navBtn(view==="settings")} onClick={()=>setView("settings")}>Settings</button>
             <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
-            <button onClick={()=>setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
+            <button type="button" onClick={()=>setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
               <div style={S.themeKnob(isDark)} />
             </button>
           </div>
@@ -1328,6 +1324,7 @@ export default function App() {
         {!aiLoading && view === "settings" && (
           <div style={{ maxWidth: 600, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
+            <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure your API key to enable ✦ AI Generate.</div>
 
             {/* API Key Section */}
