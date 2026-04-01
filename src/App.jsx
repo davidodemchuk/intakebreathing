@@ -6730,15 +6730,34 @@ function ChannelPipeline({ navigate, creators, t, S }) {
 
   useEffect(() => {
     (async () => {
-      const [{ data: monthly }, { data: spend }] = await Promise.all([
+      const [{ data: monthly, error: e1 }, { data: spend, error: e2 }] = await Promise.all([
         supabase.from("monthly_metrics").select("*").order("month", { ascending: false }),
         supabase.from("partnership_spend").select("*").order("month", { ascending: false }).order("section", { ascending: true }),
       ]);
+
+      // DEBUG — log what we got
+      console.log("[Pipeline] monthly_metrics:", monthly?.length || 0, "rows", e1 ? "ERROR: " + e1.message : "ok");
+      console.log("[Pipeline] partnership_spend:", spend?.length || 0, "rows", e2 ? "ERROR: " + e2.message : "ok");
+      if (monthly?.length > 0) console.log("[Pipeline] First monthly row:", JSON.stringify(monthly[0]).substring(0, 200));
+      if (spend?.length > 0) console.log("[Pipeline] First spend row:", JSON.stringify(spend[0]).substring(0, 200));
+
       setMonthlyData(monthly || []);
       setSpendData(spend || []);
-      if (monthly?.length > 0) {
-        const months = [...new Set(monthly.map((m) => m.month))].sort().reverse();
-        setSelectedMonth(months[0]);
+
+      // Derive months from BOTH tables, not just monthly
+      const allMonths = new Set();
+      (monthly || []).forEach((m) => {
+        if (m.month) allMonths.add(String(m.month).substring(0, 10));
+      });
+      (spend || []).forEach((s) => {
+        if (s.month) allMonths.add(String(s.month).substring(0, 10));
+      });
+      const sortedMonths = [...allMonths].sort().reverse();
+
+      console.log("[Pipeline] Available months:", sortedMonths);
+
+      if (sortedMonths.length > 0) {
+        setSelectedMonth(sortedMonths[0]);
       }
       setLoading(false);
     })();
@@ -6755,9 +6774,17 @@ function ChannelPipeline({ navigate, creators, t, S }) {
     { id: "kpis", label: "Team KPIs" },
   ];
 
-  const months = [...new Set(monthlyData.map((m) => m.month))].sort().reverse();
-  const currentMonthData = monthlyData.filter((m) => m.month === selectedMonth);
-  const currentSpend = spendData.filter((s) => s.month === selectedMonth);
+  const normDate = (d) => (d ? String(d).substring(0, 10) : "");
+  const allMonthSet = new Set();
+  monthlyData.forEach((m) => {
+    if (m.month) allMonthSet.add(normDate(m.month));
+  });
+  spendData.forEach((s) => {
+    if (s.month) allMonthSet.add(normDate(s.month));
+  });
+  const months = [...allMonthSet].sort().reverse();
+  const currentMonthData = monthlyData.filter((m) => normDate(m.month) === selectedMonth);
+  const currentSpend = spendData.filter((s) => normDate(s.month) === selectedMonth);
 
   const fmt = (n) => {
     if (n == null || n === 0) return "—";
