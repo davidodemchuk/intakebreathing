@@ -27,8 +27,16 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.6.0";
+const APP_VERSION = "3.6.1";
 const CHANGELOG = [
+  { version: "3.6.1", date: "2026-04-01", changes: [
+    "Creator detail auto-detects primary platform — links to Instagram or TikTok based on where they're biggest",
+    "Platform cards are now clickable — opens the creator's profile on that platform",
+    "Platform URLs are editable inline on the detail view",
+    "Avatar pulls from the platform with the most followers",
+    "Contact section redesigned — clean editable fields with open buttons",
+    "Fixed engagement rate still showing 100% and 0.01%",
+  ]},
   { version: "3.6.0", date: "2026-04-01", changes: [
     "IB Score section completely redesigned — cleaner layout, expandable AI reasoning",
     "Why Intake text is now prominent, not grey",
@@ -1451,9 +1459,10 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       ttAvgLikes = Math.round(totalL / count);
       ttAvgComments = Math.round(totalC / count);
       ttAvgShares = Math.round(totalS / count);
-      const ttFollowerCount = Number(tiktokData?.followers);
-      if (Number.isFinite(ttFollowerCount) && ttFollowerCount > 0 && recent.length > 0) {
-        const rawRate = ((ttAvgLikes + ttAvgComments + ttAvgShares) / ttFollowerCount) * 100;
+      const ttFollowerCount = tiktokData?.followers;
+      if (ttFollowerCount && ttFollowerCount > 0 && recent.length > 0) {
+        const avgEng = ttAvgLikes + ttAvgComments + ttAvgShares;
+        const rawRate = (avgEng / ttFollowerCount) * 100;
         ttEngRate = parseFloat(Math.min(rawRate, 100).toFixed(2));
       } else {
         ttEngRate = null;
@@ -1545,6 +1554,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
   let igEngRate = null;
 
   if (igPosts) {
+    console.log("[enrichment] IG Posts raw sample:", JSON.stringify(igPosts)?.substring(0, 500));
     const pr = igPosts?.data ?? igPosts;
     const posts = pr.items || pr.edge_owner_to_timeline_media?.edges?.map((e) => e.node) || [];
     const recent = posts.slice(0, 12);
@@ -1571,8 +1581,8 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       const count = recent.length;
       igAvgLikes = Math.round(totalL / count);
       igAvgComments = Math.round(totalC / count);
-      const igFollowerCount = Number(instagramData?.followers);
-      if (Number.isFinite(igFollowerCount) && igFollowerCount > 0 && recent.length > 0) {
+      const igFollowerCount = instagramData?.followers;
+      if (igFollowerCount && igFollowerCount > 0 && recent.length > 0) {
         const rawRate = ((igAvgLikes + igAvgComments) / igFollowerCount) * 100;
         igEngRate = parseFloat(Math.min(rawRate, 100).toFixed(2));
       } else {
@@ -4365,6 +4375,26 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const videoCount = creatorDisplayVideoCount(c);
   const ttD = c.tiktokData || {};
   const igD = c.instagramData || {};
+  const igFollowers = Number(c.instagramData?.followers) || 0;
+  const ttFollowers = Number(c.tiktokData?.followers) || 0;
+  const primaryPlatform = igFollowers >= ttFollowers ? "instagram" : "tiktok";
+  const primaryUrl = primaryPlatform === "instagram"
+    ? (c.instagramUrl || `https://www.instagram.com/${(c.instagramHandle || c.handle || "").replace("@", "")}/`)
+    : (c.tiktokUrl || `https://www.tiktok.com/@${(c.handle || "").replace("@", "")}`);
+  const primaryLabel = primaryPlatform === "instagram" ? "IG" : "TT";
+  const avatarUrl = primaryPlatform === "instagram"
+    ? (c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl || "")
+    : (c.tiktokData?.avatarUrl || c.instagramData?.avatarUrl || "");
+  const platformLinks = {
+    instagram: c.instagramUrl || (c.instagramHandle || c.handle ? `https://www.instagram.com/${(c.instagramHandle || c.handle || "").replace("@", "")}/` : ""),
+    tiktok: c.tiktokUrl || `https://www.tiktok.com/@${(c.handle || "").replace("@", "")}`,
+    youtube: c.youtubeData?.channelUrl || "",
+    twitter: c.twitterData?.handle ? `https://x.com/${c.twitterData.handle}` : "",
+    facebook: c.facebookData?.profileUrl || "",
+    linkedin: c.linkedinData?.profileUrl || "",
+    snapchat: "",
+  };
+  const showEngRate = (rate) => rate != null && rate >= 0.1 && rate <= 50;
   const lastEnriched = ttD.lastEnriched || igD.lastEnriched;
   const handleLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
   const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
@@ -4600,10 +4630,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px", minWidth: 0 }}>
-          {igD.avatarUrl || ttD.avatarUrl ? (
+          {avatarUrl ? (
             <div style={{ width: 48, height: 48, flexShrink: 0, position: "relative" }}>
               <img
-                src={igD.avatarUrl || ttD.avatarUrl || ""}
+                src={avatarUrl}
                 alt=""
                 style={{ width: 48, height: 48, borderRadius: 24, objectFit: "cover", background: t.cardAlt, border: `1px solid ${t.border}`, display: "block" }}
                 onError={(e) => {
@@ -4654,7 +4684,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             </div>
           )}
           <div style={{ minWidth: 0 }}>
-            <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "block" }}>{c.handle}</a>
+            <a href={primaryUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
+              {c.handle}
+              <span style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, padding: "2px 6px", borderRadius: 4, background: t.cardAlt }}>{primaryLabel}</span>
+            </a>
             {c.name?.trim() ? <div style={{ fontSize: 13, color: t.textMuted }}>{c.name.trim()}</div> : null}
             <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: c.status === "Active" ? t.green + "18" : t.cardAlt, color: c.status === "Active" ? t.green : t.textMuted, marginTop: 4, display: "inline-block" }}>{c.status}</span>
           </div>
@@ -4691,52 +4724,104 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Platforms</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
           {(igD.followers != null || igD.lastEnriched) && !igD.enrichError ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#E1306C", marginBottom: 6 }}>Instagram</div>
+            <div
+              onClick={() => platformLinks.instagram && window.open(platformLinks.instagram, "_blank")}
+              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.instagram ? "pointer" : "default", transition: "border-color 0.15s" }}
+              onMouseEnter={(e) => { if (platformLinks.instagram) e.currentTarget.style.borderColor = "#E1306C50"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#E1306C", marginBottom: 6 }}>Instagram</span>
+                {platformLinks.instagram ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(igD.followers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{igD.posts != null ? `${igD.posts} posts` : "—"} · {Number.isFinite(Number(c.instagramEngRate)) ? `${Number(c.instagramEngRate).toFixed(2)}%` : "—"} eng</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>
+                {igD.posts != null ? `${igD.posts} posts` : "—"}{showEngRate(Number(c.instagramEngRate)) ? ` · ${Number(c.instagramEngRate).toFixed(2)}% eng` : ""}
+              </div>
               {igD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>Category: {igD.category}</div> : null}
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{igD.verified ? "✓ Verified " : ""}{igD.isBusiness ? "· Business" : ""}</div>
             </div>
           ) : null}
           {ttD.lastEnriched || ttD.followers != null ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>TikTok</div>
+            <div
+              onClick={() => platformLinks.tiktok && window.open(platformLinks.tiktok, "_blank")}
+              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.tiktok ? "pointer" : "default", transition: "border-color 0.15s" }}
+              onMouseEnter={(e) => { if (platformLinks.tiktok) e.currentTarget.style.borderColor = `${t.green}50`; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>TikTok</span>
+                {platformLinks.tiktok ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ttD.followers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{formatMetricShort(ttD.hearts)} hearts · {ttD.videoCount ?? "—"} videos</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{ttD.avgViews != null ? `${formatMetricShort(ttD.avgViews)} avg views` : "—"} · {Number.isFinite(Number(c.tiktokEngRate)) ? `${Number(c.tiktokEngRate).toFixed(2)}%` : "—"} eng</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>
+                {ttD.avgViews != null ? `${formatMetricShort(ttD.avgViews)} avg views` : "—"}{showEngRate(Number(c.tiktokEngRate)) ? ` · ${Number(c.tiktokEngRate).toFixed(2)}% eng` : ""}
+              </div>
               {shop.hasShop ? <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>TikTok Shop ({shop.productCount || 0})</div> : null}
             </div>
           ) : null}
           {ytD.subscribers != null || ytD.lastEnriched ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>YouTube</div>
+            <div
+              onClick={() => platformLinks.youtube && window.open(platformLinks.youtube, "_blank")}
+              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.youtube ? "pointer" : "default", transition: "border-color 0.15s" }}
+              onMouseEnter={(e) => { if (platformLinks.youtube) e.currentTarget.style.borderColor = "#FF000050"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>YouTube</span>
+                {platformLinks.youtube ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ytD.subscribers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>subscribers</div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{ytD.totalViews != null ? `${formatMetricShort(ytD.totalViews)} views` : "—"} · {ytD.videoCount ?? "—"} videos</div>
             </div>
           ) : null}
           {twD.followers != null || twD.lastEnriched ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>X / Twitter</div>
+            <div
+              onClick={() => platformLinks.twitter && window.open(platformLinks.twitter, "_blank")}
+              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.twitter ? "pointer" : "default", transition: "border-color 0.15s" }}
+              onMouseEnter={(e) => { if (platformLinks.twitter) e.currentTarget.style.borderColor = `${t.blue}50`; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>X / Twitter</span>
+                {platformLinks.twitter ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(twD.followers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{twD.tweets != null ? `${twD.tweets} tweets` : "—"}</div>
             </div>
           ) : null}
           {fbD.followers != null || fbD.lastEnriched ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>Facebook</div>
+            <div
+              onClick={() => platformLinks.facebook && window.open(platformLinks.facebook, "_blank")}
+              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.facebook ? "pointer" : "default", transition: "border-color 0.15s" }}
+              onMouseEnter={(e) => { if (platformLinks.facebook) e.currentTarget.style.borderColor = "#1877F250"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>Facebook</span>
+                {platformLinks.facebook ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(fbD.followers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
               {fbD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>Category: {fbD.category}</div> : null}
             </div>
           ) : null}
           {liD.lastEnriched ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>LinkedIn</div>
+            <div
+              onClick={() => platformLinks.linkedin && window.open(platformLinks.linkedin, "_blank")}
+              style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, cursor: platformLinks.linkedin ? "pointer" : "default", transition: "border-color 0.15s" }}
+              onMouseEnter={(e) => { if (platformLinks.linkedin) e.currentTarget.style.borderColor = `${t.blue}50`; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, marginBottom: 6 }}>LinkedIn</span>
+                {platformLinks.linkedin ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
+              </div>
               <div style={{ fontSize: 12, color: t.text, lineHeight: 1.4 }}>{liD.headline || "—"}</div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{liD.location || ""} {liD.connections != null ? `· ${liD.connections} conn.` : ""}</div>
             </div>
@@ -4972,24 +5057,133 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           ) : null}
         </div>
         <div style={{ flex: "1 1 280px", minWidth: 240 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Contact & links</div>
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Contact & Links</div>
+          <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
-            <input value={c.email || ""} onChange={(e) => updateCreator(c.id, { email: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={c.email || ""}
+                onChange={(e) => updateCreator(c.id, { email: e.target.value })}
+                placeholder="creator@email.com"
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              />
+              {c.email ? (
+                <a href={`mailto:${c.email}`} style={{ padding: "8px 12px", borderRadius: 8, background: t.cardAlt, border: `1px solid ${t.border}`, fontSize: 11, fontWeight: 600, color: t.textMuted, textDecoration: "none", whiteSpace: "nowrap" }}>
+                  Send ↗
+                </a>
+              ) : null}
+            </div>
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram handle</div>
-            <input value={c.instagramHandle || cleanHandle} onChange={(e) => updateCreator(c.id, { instagramHandle: e.target.value.replace(/^@/, "").trim() })} onBlur={onInstagramHandleBlur} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Instagram</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={c.instagramHandle || (c.handle || "").replace("@", "")}
+                onChange={(e) => {
+                  const clean = e.target.value.replace("@", "").trim();
+                  updateCreator(c.id, {
+                    instagramHandle: clean,
+                    instagramUrl: clean ? `https://www.instagram.com/${clean}/` : "",
+                  });
+                }}
+                placeholder="instagram handle"
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              />
+              {(c.instagramUrl || c.instagramHandle) ? (
+                <a
+                  href={c.instagramUrl || `https://www.instagram.com/${(c.instagramHandle || "").replace("@", "")}/`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: "8px 12px", borderRadius: 8, background: "#E1306C12", border: "1px solid #E1306C25", fontSize: 11, fontWeight: 600, color: "#E1306C", textDecoration: "none", whiteSpace: "nowrap" }}
+                >
+                  Open ↗
+                </a>
+              ) : null}
+            </div>
+            {c.instagramData?.followers ? (
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{formatMetricShort(c.instagramData.followers)} followers</div>
+            ) : null}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
-            {ttUrl ? <a href={ttUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.green }}>TikTok</a> : null}
-            {(c.instagramUrl || "").trim() ? <a href={c.instagramUrl.trim()} target="_blank" rel="noopener noreferrer" style={{ color: "#E1306C" }}>Instagram</a> : null}
-            {ytD.channelUrl ? <a href={ytD.channelUrl.startsWith("http") ? ytD.channelUrl : `https://${ytD.channelUrl}`} target="_blank" rel="noopener noreferrer" style={{ color: t.text }}>YouTube</a> : null}
-            {twD.followers != null ? <span style={{ color: t.textMuted }}>X/Twitter (enriched)</span> : null}
-            {liD.profileUrl ? <a href={liD.profileUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>LinkedIn</a> : null}
-            {fbD.profileUrl ? <a href={fbD.profileUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.text }}>Facebook</a> : null}
-            {snD.displayName ? <span style={{ color: t.textMuted }}>Snapchat: {snD.displayName}</span> : null}
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>TikTok</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={(c.handle || "").replace("@", "")}
+                onChange={(e) => {
+                  const clean = e.target.value.replace("@", "").trim();
+                  updateCreator(c.id, {
+                    handle: `@${clean}`,
+                    tiktokUrl: clean ? `https://www.tiktok.com/@${clean}` : "",
+                  });
+                }}
+                placeholder="tiktok handle"
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              />
+              {c.tiktokUrl ? (
+                <a
+                  href={c.tiktokUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: "8px 12px", borderRadius: 8, background: t.green + "12", border: `1px solid ${t.green}25`, fontSize: 11, fontWeight: 600, color: t.green, textDecoration: "none", whiteSpace: "nowrap" }}
+                >
+                  Open ↗
+                </a>
+              ) : null}
+            </div>
+            {c.tiktokData?.followers ? (
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{formatMetricShort(c.tiktokData.followers)} followers</div>
+            ) : null}
           </div>
+
+          {c.youtubeData?.channelUrl ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>YouTube</div>
+              <a
+                href={c.youtubeData.channelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "inline-flex", padding: "8px 12px", borderRadius: 8, background: "#FF000012", border: "1px solid #FF000025", fontSize: 12, fontWeight: 600, color: "#FF0000", textDecoration: "none", gap: 4 }}
+              >
+                YouTube ↗
+              </a>
+              {c.youtubeData.subscribers ? (
+                <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 8 }}>{formatMetricShort(c.youtubeData.subscribers)} subscribers</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {c.twitterData?.followers ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>X / Twitter</div>
+              <a
+                href={c.twitterData.handle ? `https://x.com/${c.twitterData.handle}` : `https://x.com/${(c.handle || "").replace("@", "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "inline-flex", padding: "8px 12px", borderRadius: 8, background: t.cardAlt, border: `1px solid ${t.border}`, fontSize: 12, fontWeight: 600, color: t.text, textDecoration: "none", gap: 4 }}
+              >
+                X ↗
+              </a>
+              <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 8 }}>{formatMetricShort(c.twitterData.followers)} followers</span>
+            </div>
+          ) : null}
+
+          {(c.tiktokData?.bioLink || c.instagramData?.externalUrl) ? (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Bio Links</div>
+              {c.tiktokData?.bioLink ? (
+                <a href={c.tiktokData.bioLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.blue, textDecoration: "none", display: "block", marginBottom: 2 }}>
+                  {c.tiktokData.bioLink.replace(/^https?:\/\/(www\.)?/, "").substring(0, 40)}... ↗
+                </a>
+              ) : null}
+              {c.instagramData?.externalUrl ? (
+                <a href={c.instagramData.externalUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.blue, textDecoration: "none", display: "block" }}>
+                  {c.instagramData.externalUrl.replace(/^https?:\/\/(www\.)?/, "").substring(0, 40)}... ↗
+                </a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
