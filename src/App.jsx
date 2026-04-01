@@ -4,8 +4,13 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.3";
+const APP_VERSION = "1.3.4";
 const CHANGELOG = [
+  { version: "1.3.4", date: "2025-04-01", changes: [
+    "Complete PDF redesign — clean, professional, highly legible layout",
+    "Proper page breaks between major sections",
+    "Improved typography, spacing, and color contrast for print",
+  ]},
   { version: "1.3.3", date: "2025-04-01", changes: [
     "IB-Ai loading screen now shows live step-by-step progress as the brief is being written",
     "Animated progress steps with checkmarks as each phase completes",
@@ -1012,137 +1017,248 @@ function RejectionAddRow({ t, onCommit, editable = true }) {
   );
 }
 
-function buildBriefPrintHtml(b, fd) {
-  const title = escapeHtml(fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName) || "Brief");
-  const plats = normalizePlatforms(fd).map(p => (p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p));
+function buildBriefPrintHtml(b, fd, esc) {
+  const escSafe = esc || ((str) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"));
+
+  const plats = normalizePlatforms(fd).map((p) => (p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p));
   const toneDisp = fd.tone === "Other" && fd.customTone?.trim() ? fd.customTone.trim() : fd.tone;
   const vibeDisp = fd.vibe === "Other" && fd.customVibe?.trim() ? fd.customVibe.trim() : fd.vibe;
   const prodDisp = fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName;
-  const badges = [prodDisp, vibeDisp, ...plats, fd.videoLength, toneDisp].map(escapeHtml).map((x) => `<span class="badge">${x}</span>`).join("");
-  const theyAreHtml = (b.theyAre || []).map((x) => `<div class="item"><span class="marker" style="color:#008c56">✓</span>${escapeHtml(x)}</div>`).join("");
-  const theyNotHtml = (b.theyAreNot || []).map((x) => `<div class="item"><span class="marker" style="color:#c62828">✗</span>${escapeHtml(x)}</div>`).join("");
+  const docTitle = escSafe(fd.campaignName || prodDisp || "Brief");
+  const productTag = escSafe(prodDisp);
+  const vibeTag = escSafe(vibeDisp);
+  const platformTagsHtml = plats.map((p) => `<span class="doc-tag">${escSafe(p)}</span>`).join("");
+  const theyAreHtml = (b.theyAre || []).map((x) => `<div class="col-item"><span class="dot green">✓</span>${escSafe(x)}</div>`).join("");
+  const theyNotHtml = (b.theyAreNot || []).map((x) => `<div class="col-item"><span class="dot red">✗</span>${escSafe(x)}</div>`).join("");
   const beatDefs = [
     { label: "PROBLEM", cls: "problem", inst: b.probInst, lines: b.probLines || [], overlays: b.probOverlays || [] },
     { label: "AGITATE", cls: "agitate", inst: b.agInst, lines: b.agLines || [], overlays: b.agOverlays || [] },
     { label: "SOLUTION", cls: "solution", inst: b.solInst, lines: b.solLines || [], overlays: b.solOverlays || [] },
   ];
-  const beatsHtml = beatDefs.map((bt) => {
-    const lines = (bt.lines || []).map((l) => `<div class="riff">"${escapeHtml(l)}"</div>`).join("");
-    const ovs = (bt.overlays || []).map((o) => `<div class="riff">${escapeHtml(o)}</div>`).join("");
-    return `<div class="beat ${bt.cls}"><div class="beat-label">${bt.label}</div><p>${escapeHtml(bt.inst)}</p><div class="sub">Lines to riff on</div>${lines}<div class="sub" style="margin-top:8px">Overlay ideas</div>${ovs}</div>`;
-  }).join("");
-  const hooksHtml = (b.hooks || []).map((h, i) => `<div class="hook-item"><div class="hook-num">${i + 1}</div><div class="hook-text">${escapeHtml(h)}</div></div>`).join("");
-  const sayHtml = (b.sayThis || []).map((s) => `<div class="item"><span class="marker">✓</span>${escapeHtml(s)}</div>`).join("");
-  const notHtml = (b.notThis || []).map((s) => `<div class="item"><span class="marker">✗</span>${escapeHtml(s)}</div>`).join("");
+  const beatsHtml = beatDefs
+    .map((bt) => {
+      const lines = (bt.lines || []).map((l) => `<div class="riff">"${escSafe(l)}"</div>`).join("");
+      const ovs = (bt.overlays || []).map((o) => `<div class="riff">${escSafe(o)}</div>`).join("");
+      return (
+        `<div class="beat ${bt.cls}">` +
+        `<div class="beat-label">${bt.label}</div>` +
+        `<div class="beat-inst">${escSafe(bt.inst)}</div>` +
+        `<div class="beat-sub">Lines to riff on</div>` +
+        lines +
+        `<div class="beat-sub">Overlay ideas</div>` +
+        ovs +
+        `</div>`
+      );
+    })
+    .join("");
+  const hooksHtml = (b.hooks || [])
+    .map((h, i) => `<div class="hook"><div class="hook-num">${i + 1}</div><div class="hook-text">${escSafe(h)}</div></div>`)
+    .join("");
+  const sayHtml = (b.sayThis || []).map((s) => `<div class="compliance-item"><span class="mark">✓</span>${escSafe(s)}</div>`).join("");
+  const notHtml = (b.notThis || []).map((s) => `<div class="compliance-item"><span class="mark">✗</span>${escSafe(s)}</div>`).join("");
   const rejList = Array.isArray(b.rejections) && b.rejections.length ? b.rejections : buildRejectionsArray(fd);
-  const rejHtml = rejList.map((r) => `<div class="rejection-item"><span class="rx">✕</span>${escapeHtml(r)}</div>`).join("");
-  const proofHtml = (b.proof || []).map((p) => `<div class="proof-card">${escapeHtml(p)}</div>`).join("");
-  const platNotes = escapeHtml(b.platNotes || "").replace(/\n/g, "<br>");
+  const rejHtml = rejList.map((r) => `<div class="rejection-item"><span class="rx">✕</span>${escSafe(r)}</div>`).join("");
+  const proofHtml = (b.proof || []).map((p) => `<div class="proof-card">${escSafe(p)}</div>`).join("");
+  const platNotesHtml = escSafe(b.platNotes || "").replace(/\n/g, "<br>");
+  const deliverablesHtml = escSafe(b.deliverables || "").replace(/\n/g, "<br>");
+  const disclosureHtml = escSafe(b.disclosure || "").replace(/\n/g, "<br>");
+  const mgrLine = escSafe(managerDisplayName(fd));
+  const qtyLine = escSafe(String(fd.contentQuantity ?? "—"));
+  const genDate = escSafe(new Date().toLocaleDateString());
+
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+  @page { margin: 0.6in; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', sans-serif; color: #111; padding: 40px; max-width: 800px; margin: 0 auto; }
-  h1 { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
-  h2 { font-size: 18px; font-weight: 700; margin-top: 28px; margin-bottom: 10px; color: #333; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
-  h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-  p, li { font-size: 13px; line-height: 1.7; color: #333; }
-  .header { text-align: center; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 24px; }
-  .header .brand { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #888; text-transform: uppercase; margin-bottom: 8px; }
-  .header .mission { font-size: 15px; color: #666; font-style: italic; margin-top: 6px; }
-  .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
-  .badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: #f0f0f0; color: #555; }
-  .beat { border-left: 4px solid #ccc; padding: 14px 16px; margin-bottom: 12px; background: #fafafa; border-radius: 0 8px 8px 0; }
+  body {
+    font-family: 'Inter', Helvetica, Arial, sans-serif;
+    color: #222;
+    font-size: 13px;
+    line-height: 1.7;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 48px 24px;
+    background: #fff;
+  }
+
+  /* Header */
+  .doc-header { text-align: center; padding-bottom: 24px; margin-bottom: 8px; border-bottom: 2px solid #111; }
+  .doc-brand { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; color: #999; text-transform: uppercase; margin-bottom: 12px; }
+  .doc-title { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: #111; margin-bottom: 4px; }
+  .doc-mission { font-size: 14px; color: #555; font-style: italic; margin-bottom: 16px; }
+  .doc-meta { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .doc-tag { padding: 3px 10px; border-radius: 4px; font-size: 10px; font-weight: 600; background: #f0f0f0; color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
+  .doc-manager { font-size: 11px; color: #888; margin-top: 12px; }
+
+  /* Section headers */
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #888; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px;
+    margin-top: 36px; margin-bottom: 16px;
+  }
+
+  /* Persona card */
+  .persona-card { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; }
+  .persona-name { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 2px; }
+  .persona-age { font-size: 12px; font-weight: 600; color: #4a9a9d; margin-bottom: 10px; }
+  .persona-psycho { font-size: 13px; color: #444; line-height: 1.7; margin-bottom: 16px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .col-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .col-title.green { color: #1a7a4e; }
+  .col-title.red { color: #b71c1c; }
+  .col-item { font-size: 12px; color: #333; line-height: 1.8; }
+  .col-item .dot { font-weight: 700; margin-right: 6px; }
+  .col-item .dot.green { color: #1a7a4e; }
+  .col-item .dot.red { color: #b71c1c; }
+
+  /* Story beats */
+  .beat { padding: 16px 20px; margin-bottom: 12px; background: #fafafa; border: 1px solid #e5e5e5; border-left: 4px solid #ccc; border-radius: 0 8px 8px 0; }
   .beat.problem { border-left-color: #c62828; }
-  .beat.agitate { border-left-color: #b86e00; }
-  .beat.solution { border-left-color: #008c56; }
-  .beat-label { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .beat.agitate { border-left-color: #e67e00; }
+  .beat.solution { border-left-color: #1a7a4e; }
+  .beat-label { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px; }
   .beat.problem .beat-label { color: #c62828; }
-  .beat.agitate .beat-label { color: #b86e00; }
-  .beat.solution .beat-label { color: #008c56; }
-  .riff { padding-left: 12px; border-left: 2px solid #ddd; margin: 4px 0; font-size: 13px; color: #444; }
-  .sub { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 10px; margin-bottom: 4px; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .col-green { border: 1px solid #008c5630; border-radius: 8px; padding: 12px; }
-  .col-red { border: 1px solid #c6282830; border-radius: 8px; padding: 12px; }
-  .col-header { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; }
-  .col-green .col-header { color: #008c56; }
-  .col-red .col-header { color: #c62828; }
-  .item { font-size: 12px; color: #333; line-height: 1.7; margin-bottom: 4px; }
-  .item .marker { font-weight: 700; margin-right: 6px; }
-  .col-green .marker { color: #008c56; }
-  .col-red .marker { color: #c62828; }
-  .rejection-box { background: #fef2f2; border: 2px solid #c6282850; border-radius: 8px; padding: 16px; margin-top: 8px; }
-  .rejection-title { font-size: 12px; font-weight: 800; color: #c62828; text-transform: uppercase; margin-bottom: 8px; }
-  .rejection-sub { font-size: 12px; color: #c62828; font-weight: 600; margin-bottom: 10px; }
-  .rejection-item { font-size: 13px; color: #333; line-height: 1.7; margin-bottom: 6px; }
-  .rejection-item .rx { color: #c62828; font-weight: 700; margin-right: 6px; }
-  .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .proof-card { border: 1px solid #4a9a9d30; border-left: 3px solid #4a9a9d; border-radius: 6px; padding: 10px; font-size: 12px; color: #333; }
-  .disclosure { background: #fef2f2; border: 2px solid #c6282850; border-radius: 8px; padding: 16px; margin-top: 8px; }
-  .disclosure-label { font-size: 11px; font-weight: 800; color: #c62828; text-transform: uppercase; margin-bottom: 6px; }
-  .disclosure-text { font-size: 12px; font-family: monospace; color: #333; }
-  .hook-item { display: flex; gap: 8px; margin-bottom: 8px; }
-  .hook-num { min-width: 22px; height: 22px; border-radius: 6px; background: #b86e0020; color: #b86e00; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
-  .hook-text { font-size: 13px; color: #333; }
-  .footer { text-align: center; margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
-  @media print { body { padding: 20px; } }
+  .beat.agitate .beat-label { color: #e67e00; }
+  .beat.solution .beat-label { color: #1a7a4e; }
+  .beat-inst { font-size: 13px; color: #333; line-height: 1.7; margin-bottom: 12px; }
+  .beat-sub { font-size: 9px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; margin-top: 10px; }
+  .riff { font-size: 12px; color: #444; line-height: 1.7; padding-left: 12px; border-left: 2px solid #ddd; margin-bottom: 3px; }
+
+  /* Hooks */
+  .hook { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .hook-num { min-width: 22px; height: 22px; border-radius: 6px; background: #fff3e0; color: #e67e00; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; border: 1px solid #ffe0b2; }
+  .hook-text { font-size: 13px; color: #333; line-height: 1.6; padding-top: 2px; }
+  .hook-hint { font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 12px; }
+
+  /* Say / Don't columns */
+  .compliance-col { border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; }
+  .compliance-col.approve { border-left: 3px solid #1a7a4e; }
+  .compliance-col.ban { border-left: 3px solid #c62828; }
+  .compliance-header { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .compliance-col.approve .compliance-header { color: #1a7a4e; }
+  .compliance-col.ban .compliance-header { color: #c62828; }
+  .compliance-item { font-size: 12px; color: #333; line-height: 1.8; }
+  .compliance-item .mark { font-weight: 700; margin-right: 6px; }
+  .compliance-col.approve .mark { color: #1a7a4e; }
+  .compliance-col.ban .mark { color: #c62828; }
+
+  /* Rejection box */
+  .rejection-box { border: 1.5px solid #c62828; border-radius: 8px; padding: 20px; margin-top: 8px; }
+  .rejection-header { font-size: 11px; font-weight: 800; color: #c62828; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .rejection-warning { font-size: 12px; color: #c62828; font-weight: 500; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f5c6c6; }
+  .rejection-item { font-size: 13px; color: #333; line-height: 1.8; margin-bottom: 4px; }
+  .rejection-item .rx { color: #c62828; font-weight: 700; margin-right: 8px; }
+
+  /* Proof grid */
+  .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .proof-card { background: #f8f8f8; border: 1px solid #e5e5e5; border-left: 3px solid #4a9a9d; border-radius: 6px; padding: 12px 14px; font-size: 12px; color: #333; line-height: 1.6; }
+
+  /* Platform & Deliverables */
+  .info-box { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px 20px; font-size: 13px; color: #333; line-height: 1.7; white-space: pre-line; }
+
+  /* Footer */
+  .doc-footer { text-align: center; margin-top: 48px; padding-top: 16px; border-top: 1px solid #e0e0e0; font-size: 9px; color: #bbb; text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* Page breaks */
+  .page-break { page-break-before: always; }
+
+  @media print {
+    body { padding: 24px 0; }
+    .no-print { display: none; }
+  }
 </style>
 </head><body>
-  <div class="header">
-    <div class="brand">Intake Breathing — Creator Partnerships</div>
-    <h1>${title}</h1>
-    <div class="mission">"${escapeHtml(b.mission)}"</div>
-    <div class="badges">${badges}</div>
-    <div style="margin-top:12px;font-size:13px;color:#555;line-height:1.65;text-align:center">
-      <div>Submitted by: ${escapeHtml(managerDisplayName(fd))}</div>
-      <div>Videos requested: ${escapeHtml(String(fd.contentQuantity ?? "1"))}</div>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="doc-brand">Intake Breathing — Creator Partnerships</div>
+  <div class="doc-title">${docTitle}</div>
+  <div class="doc-mission">"${escSafe(b.mission)}"</div>
+  <div class="doc-meta">
+    <span class="doc-tag">${productTag}</span>
+    <span class="doc-tag">${vibeTag}</span>
+    ${platformTagsHtml}
+    <span class="doc-tag">${escSafe(fd.videoLength)}</span>
+    <span class="doc-tag">${escSafe(toneDisp)}</span>
+  </div>
+  <div class="doc-manager">
+    Submitted by: ${mgrLine} ·
+    Videos requested: ${qtyLine} ·
+    Generated: ${genDate}
+  </div>
+</div>
+
+<!-- PERSONA -->
+<div class="section-title">Who You're Talking To</div>
+<div class="persona-card">
+  <div class="persona-name">${escSafe(b.persona)}</div>
+  <div class="persona-age">${escSafe(b.age)}</div>
+  <div class="persona-psycho">${escSafe(b.psycho)}</div>
+  <div class="two-col">
+    <div>
+      <div class="col-title green">They Are</div>
+      ${theyAreHtml}
+    </div>
+    <div>
+      <div class="col-title red">They Are Not</div>
+      ${theyNotHtml}
     </div>
   </div>
+</div>
 
-  <h2>👤 Who You're Talking To</h2>
-  <h3>${escapeHtml(b.persona)}</h3>
-  <p style="color:#4a9a9d;font-weight:600;font-size:12px;margin-bottom:6px">${escapeHtml(b.age)}</p>
-  <p>${escapeHtml(b.psycho)}</p>
-  <div class="two-col" style="margin-top:12px">
-    <div><div class="col-header" style="color:#008c56">They Are ✓</div>${theyAreHtml}</div>
-    <div><div class="col-header" style="color:#c62828">They Are Not ✗</div>${theyNotHtml}</div>
+<!-- STORY ARC — new page -->
+<div class="section-title page-break">Story Arc — Problem · Agitate · Solution</div>
+${beatsHtml}
+
+<!-- HOOKS -->
+<div class="section-title">Hook Options — First 3 Seconds</div>
+<div class="hook-hint">If they don't feel it here, they scroll.</div>
+${hooksHtml}
+
+<!-- SAY / DON'T — new page -->
+<div class="section-title page-break">Say This / Not This</div>
+<div class="two-col">
+  <div class="compliance-col approve">
+    <div class="compliance-header">✓ Say This</div>
+    ${sayHtml}
   </div>
-
-  <h2>🎬 Story Arc — Problem · Agitate · Solution</h2>
-  ${beatsHtml}
-
-  <h2>🪝 Hook Options — First 3 Seconds</h2>
-  <p style="font-size:11px;color:#888;font-style:italic;margin-bottom:10px">If they don't feel it here, they scroll.</p>
-  ${hooksHtml}
-
-  <h2>✅ Say This / 🚫 Not This</h2>
-  <div class="two-col">
-    <div class="col-green"><div class="col-header">✅ Say This</div>${sayHtml}</div>
-    <div class="col-red"><div class="col-header">🚫 Not This</div>${notHtml}</div>
+  <div class="compliance-col ban">
+    <div class="compliance-header">✗ Not This</div>
+    ${notHtml}
   </div>
+</div>
 
-  <h2>🚫 Instant Rejection — Content Will Be Declined If:</h2>
-  <div class="rejection-box">
-    <div class="rejection-sub">The following will result in your content being immediately rejected. No exceptions.</div>
-    ${rejHtml}
-  </div>
+<!-- REJECTION -->
+<div class="section-title">Instant Rejection — Content Will Be Declined</div>
+<div class="rejection-box">
+  <div class="rejection-warning">The following will result in your content being immediately rejected. No exceptions.</div>
+  ${rejHtml}
+</div>
 
-  <h2>📊 Proof Points</h2>
-  <div class="proof-grid">${proofHtml}</div>
+<!-- PROOF POINTS -->
+<div class="section-title">Proof Points</div>
+<div class="proof-grid">
+  ${proofHtml}
+</div>
 
-  <h2>⚠️ Required Disclosure</h2>
-  <div class="disclosure"><div class="disclosure-label">Must appear when any stat is referenced</div><div class="disclosure-text">${escapeHtml(b.disclosure)}</div></div>
+<!-- REQUIRED DISCLOSURE -->
+<div class="section-title">Required Disclosure</div>
+<div class="info-box">${disclosureHtml}</div>
 
-  <h2>📱 Platform Notes</h2>
-  <p>${platNotes}</p>
+<!-- PLATFORM NOTES -->
+<div class="section-title">Platform Notes</div>
+<div class="info-box">${platNotesHtml}</div>
 
-  <h2>📦 Deliverables</h2>
-  <p>${escapeHtml(b.deliverables)}</p>
+<!-- DELIVERABLES -->
+<div class="section-title">Deliverables</div>
+<div class="info-box">${deliverablesHtml}</div>
 
-  <div class="footer">Confidential — For Creator Use Only · Intake Breathing Technology LLC</div>
+<!-- FOOTER -->
+<div class="doc-footer">Confidential — For Creator Use Only · Intake Breathing Technology LLC · ${genDate}</div>
+
 </body></html>`;
 }
 
@@ -1176,6 +1292,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
   const [shareToast, setShareToast] = useState(null);
 
   const downloadPDF = () => {
+    const esc = (str) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
     iframe.style.right = "0";
@@ -1186,7 +1303,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
     document.body.appendChild(iframe);
     const doc = iframe.contentWindow.document;
     doc.open();
-    doc.write(buildBriefPrintHtml(b, fd));
+    doc.write(buildBriefPrintHtml(b, fd, esc));
     doc.close();
     setTimeout(() => {
       iframe.contentWindow.print();
