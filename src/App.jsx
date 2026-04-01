@@ -40,8 +40,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.15.0";
+const APP_VERSION = "5.16.0";
 const CHANGELOG = [
+  { version: "5.16.0", date: "2026-04-01", changes: [
+    "Instagram Weekly tab — full spreadsheet replica with all columns, editable, monthly totals",
+  ]},
   { version: "5.15.0", date: "2026-04-01", changes: [
     "TTS Weekly tab rebuilt — exact match of Google Sheet with all 20+ columns",
     "Monthly and quarterly auto-totals",
@@ -6500,7 +6503,107 @@ function ttsSumNormalizedWeeks(weekRows) {
   return ttsCalc(sum);
 }
 
-function TTSWeeklyTab({ t }) {
+function igPrevCalendarMonthKey(monthKey) {
+  const [ys, ms] = monthKey.split("-").map(Number);
+  const d = new Date(ys, ms - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function igNormalizeData(raw) {
+  const d = raw && typeof raw === "object" ? raw : {};
+  const n = (x) => (x === "" || x == null ? null : Number(x));
+  return {
+    follower_count: n(d.follower_count),
+    content_team: n(d.content_team),
+    partner_repost: n(d.partner_repost),
+    collabs: n(d.collabs),
+    ugc_army: n(d.ugc_army),
+    samples: n(d.samples),
+    sample_cost: n(d.sample_cost),
+    paid: n(d.paid),
+    views: n(d.views),
+    organic_v: n(d.organic_v),
+    from_ads: n(d.from_ads),
+    sf_revenue: n(d.sf_revenue),
+    sf_signups: n(d.sf_signups),
+    affiliate_inbox: n(d.affiliate_inbox),
+    conv_inbox: n(d.conv_inbox),
+    cs_inbox: n(d.cs_inbox),
+    sm_team: n(d.sm_team),
+  };
+}
+
+function igCalc(d) {
+  const out = { ...d };
+  const ct = d.content_team || 0;
+  const pr = d.partner_repost || 0;
+  const co = d.collabs || 0;
+  const ug = d.ugc_army || 0;
+  out.total_ig_posts = ct + pr + co + ug;
+  const totalPosts = out.total_ig_posts || 0;
+  const videoCount = co + ug;
+  const samples = d.samples;
+  out.sv_ratio = videoCount > 0 && samples != null ? samples / videoCount : null;
+  const costSum = (d.sample_cost || 0) + (d.paid || 0);
+  const hasCost = d.sample_cost != null || d.paid != null;
+  out.cp_video = totalPosts > 0 && hasCost ? costSum / totalPosts : null;
+  out.total_cpv = out.cp_video;
+  const v = d.views;
+  const sfr = d.sf_revenue;
+  out.ecpm = v != null && v > 0 && sfr != null ? (sfr / v) * 1000 : null;
+  return out;
+}
+
+function igBuildMonthEndFollowers(sortedWeeksAsc) {
+  const byMonth = {};
+  for (const w of sortedWeeksAsc) {
+    if (ttsIsMilestoneRow(w) || !w.week_start) continue;
+    const mk = String(w.week_start).substring(0, 7);
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(w);
+  }
+  const map = new Map();
+  for (const mk of Object.keys(byMonth)) {
+    const last = byMonth[mk].slice().sort((a, b) => String(a.week_start).localeCompare(String(b.week_start))).at(-1);
+    const fc = igNormalizeData(last.data).follower_count;
+    map.set(mk, fc);
+  }
+  return map;
+}
+
+function igAggregateMonth(weekRows) {
+  const dataWeeks = weekRows.filter((w) => !ttsIsMilestoneRow(w));
+  const sum = {
+    content_team: 0,
+    partner_repost: 0,
+    collabs: 0,
+    ugc_army: 0,
+    samples: 0,
+    sample_cost: 0,
+    paid: 0,
+    views: 0,
+    organic_v: 0,
+    from_ads: 0,
+    sf_revenue: 0,
+    sf_signups: 0,
+    affiliate_inbox: 0,
+    conv_inbox: 0,
+    cs_inbox: 0,
+    sm_team: 0,
+  };
+  for (const w of dataWeeks) {
+    const n = igNormalizeData(w.data);
+    for (const k of Object.keys(sum)) {
+      if (n[k] != null && Number.isFinite(n[k])) sum[k] += n[k];
+    }
+  }
+  const sorted = dataWeeks.slice().sort((a, b) => String(a.week_start).localeCompare(String(b.week_start)));
+  const last = sorted.at(-1);
+  const follower_count = last ? igNormalizeData(last.data).follower_count : null;
+  return igCalc({ ...sum, follower_count });
+}
+
+function TTSWeeklyTab({ t, S }) {
   const TTS_COLUMNS = [
     { key: "sf_invites", label: "SF 📬", type: "number", editable: true, width: 80 },
     { key: "sf_change_pct", label: "%", type: "pct", editable: false, width: 55 },
@@ -6994,6 +7097,410 @@ function TTSWeeklyTab({ t }) {
 
       <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10 }}>
         Double-click any editable cell to edit · Enter to save, Esc to cancel · Calculated fields update automatically · {weeks.length} rows loaded
+      </div>
+    </div>
+  );
+}
+
+const IG_WEEKLY_ACCENT = "#E1306C";
+
+function IGWeeklyTab({ t, S }) {
+  const IG_COLUMNS = [
+    { key: "follower_count", label: "Followers", type: "number", editable: true, width: 85 },
+    { key: "f_pct_change", label: "F % Change", type: "pct", editable: false, width: 64 },
+    { key: "content_team", label: "Content Team", type: "number", editable: true, width: 78 },
+    { key: "partner_repost", label: "Partner Repost", type: "number", editable: true, width: 78 },
+    { key: "collabs", label: "Collabs", type: "number", editable: true, width: 65 },
+    { key: "ugc_army", label: "UGC Army", type: "number", editable: true, width: 65 },
+    { key: "total_ig_posts", label: "Total Posts", type: "number", editable: false, width: 72 },
+    { key: "samples", label: "Samples", type: "number", editable: true, width: 65 },
+    { key: "sample_cost", label: "Sample Cost", type: "currency", editable: true, width: 82 },
+    { key: "paid", label: "Paid", type: "currency", editable: true, width: 72 },
+    { key: "sv_ratio", label: "S/V Ratio", type: "decimal", editable: false, width: 65 },
+    { key: "views", label: "Views", type: "number", editable: true, width: 85 },
+    { key: "organic_v", label: "Organic V", type: "number", editable: true, width: 78 },
+    { key: "from_ads", label: "From Ads", type: "number", editable: true, width: 78 },
+    { key: "cp_video", label: "CPVideo", type: "currency", editable: false, width: 72 },
+    { key: "total_cpv", label: "Total CPV", type: "currency", editable: false, width: 72 },
+    { key: "sf_revenue", label: "SF Revenue", type: "currency", editable: true, width: 85 },
+    { key: "sf_signups", label: "SF SignUps", type: "number", editable: true, width: 72 },
+    { key: "affiliate_inbox", label: "Affiliate 📥", type: "number", editable: true, width: 72 },
+    { key: "conv_inbox", label: "Conv 📥", type: "number", editable: true, width: 65 },
+    { key: "cs_inbox", label: "CS 📥", type: "number", editable: true, width: 55 },
+    { key: "ecpm", label: "eCPM", type: "currency", editable: false, width: 62 },
+    { key: "sm_team", label: "SM Team", type: "number", editable: true, width: 62 },
+  ];
+
+  const [weeks, setWeeks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const [editVal, setEditVal] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newWeek, setNewWeek] = useState({});
+  const skipSaveBlurRef = useRef(false);
+
+  const editableKeys = useMemo(() => IG_COLUMNS.filter((c) => c.editable).map((c) => c.key), []);
+
+  useEffect(() => {
+    setLoading(true);
+    (async () => {
+      const { data, error } = await supabase.from("weekly_metrics").select("*").eq("channel", "instagram").order("week_start", { ascending: false });
+      if (error) console.error("[IG] Load error:", error);
+      setWeeks(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  const fmtVal = (val, type) => {
+    if (val == null || val === "") return "—";
+    const n = Number(val);
+    if (!Number.isFinite(n)) return "—";
+    if (type === "currency") {
+      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(2) + "M";
+      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
+      return "$" + n.toFixed(n % 1 === 0 ? 0 : 2);
+    }
+    if (type === "pct") return (n * 100).toFixed(1) + "%";
+    if (type === "decimal") return n.toFixed(2);
+    if (type === "number") {
+      if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + "M";
+      if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + "K";
+      return n.toLocaleString();
+    }
+    return String(val);
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return "";
+    const dt = new Date(String(d).substring(0, 10) + "T00:00:00");
+    return dt.getMonth() + 1 + "/" + String(dt.getDate()).padStart(2, "0");
+  };
+
+  const sortedAsc = useMemo(() => [...weeks].sort((a, b) => String(a.week_start).localeCompare(String(b.week_start))), [weeks]);
+
+  const monthEndFollowers = useMemo(() => igBuildMonthEndFollowers(sortedAsc), [sortedAsc]);
+
+  const monthGroups = useMemo(() => {
+    const groups = [];
+    let currentMonth = null;
+    let currentGroup = null;
+    for (const w of sortedAsc) {
+      if (!w.week_start) continue;
+      const monthKey = String(w.week_start).substring(0, 7);
+      if (monthKey !== currentMonth) {
+        if (currentGroup) groups.push(currentGroup);
+        currentMonth = monthKey;
+        currentGroup = { month: monthKey, weeks: [] };
+      }
+      currentGroup.weeks.push(w);
+    }
+    if (currentGroup) groups.push(currentGroup);
+    return groups;
+  }, [sortedAsc]);
+
+  const monthTotalsMap = useMemo(() => {
+    const endF = igBuildMonthEndFollowers(sortedAsc);
+    const map = {};
+    for (const g of monthGroups) {
+      let total = { ...igAggregateMonth(g.weeks) };
+      const pm = igPrevCalendarMonthKey(g.month);
+      const endThis = endF.get(g.month);
+      const endPrev = endF.get(pm);
+      if (endPrev != null && endPrev > 0 && endThis != null) total.f_pct_change = (endThis - endPrev) / endPrev;
+      map[g.month] = total;
+    }
+    return map;
+  }, [monthGroups, sortedAsc]);
+
+  const weekWithMom = (w) => {
+    const base = igCalc(igNormalizeData(w.data || {}));
+    const mk = String(w.week_start || "").substring(0, 7);
+    const pm = igPrevCalendarMonthKey(mk);
+    const endPrev = monthEndFollowers.get(pm);
+    const cur = igNormalizeData(w.data).follower_count;
+    if (endPrev != null && endPrev > 0 && cur != null) base.f_pct_change = (cur - endPrev) / endPrev;
+    return base;
+  };
+
+  const saveEdit = async (weekId, field, value) => {
+    const week = weeks.find((w) => w.id === weekId);
+    if (!week) return;
+    const prevData = week.data && typeof week.data === "object" ? { ...week.data } : {};
+    const numVal = value === "" ? null : Number(value);
+    const newData = { ...prevData, [field]: numVal };
+    const { error } = await supabase.from("weekly_metrics").update({ data: newData }).eq("id", weekId);
+    if (error) {
+      alert("Save failed: " + error.message);
+      return;
+    }
+    setWeeks((prev) => prev.map((w) => (w.id === weekId ? { ...w, data: newData } : w)));
+    setEditing(null);
+  };
+
+  const addWeek = async () => {
+    if (!newWeek.week_start || !newWeek.week_end) {
+      alert("Enter start and end dates.");
+      return;
+    }
+    const data = {};
+    for (const k of editableKeys) {
+      const v = newWeek[k];
+      if (v !== undefined && v !== "" && v != null) data[k] = Number(v);
+    }
+    const { error } = await supabase.from("weekly_metrics").insert({
+      channel: "instagram",
+      week_start: newWeek.week_start,
+      week_end: newWeek.week_end,
+      data,
+    });
+    if (error) {
+      alert("Add failed: " + error.message);
+      return;
+    }
+    const { data: fresh } = await supabase.from("weekly_metrics").select("*").eq("channel", "instagram").order("week_start", { ascending: false });
+    setWeeks(fresh || []);
+    setShowAddForm(false);
+    setNewWeek({});
+  };
+
+  const fmtMonthLabel = (m) => {
+    const d = new Date(m + "-01T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading Instagram data...</div>;
+
+  const stickyWeekBg = t.card;
+  const monthRowBg = t.cardAlt;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Instagram — Weekly</div>
+        <button
+          type="button"
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: IG_WEEKLY_ACCENT, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+        >
+          {showAddForm ? "Cancel" : "+ Add Week"}
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div style={{ background: t.card, border: `1px solid ${IG_WEEKLY_ACCENT}30`, borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 12 }}>New Week Entry</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Start Date</div>
+              <input
+                type="date"
+                value={newWeek.week_start || ""}
+                onChange={(e) => setNewWeek((p) => ({ ...p, week_start: e.target.value }))}
+                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>End Date</div>
+              <input
+                type="date"
+                value={newWeek.week_end || ""}
+                onChange={(e) => setNewWeek((p) => ({ ...p, week_end: e.target.value }))}
+                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
+              />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {IG_COLUMNS.filter((c) => c.editable).map((col) => (
+              <div key={col.key} style={{ width: col.width + 24 }}>
+                <div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>{col.label}</div>
+                <input
+                  type="number"
+                  step="any"
+                  value={newWeek[col.key] ?? ""}
+                  onChange={(e) => setNewWeek((p) => ({ ...p, [col.key]: e.target.value }))}
+                  style={{ width: "100%", padding: "5px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }}
+                />
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addWeek} style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: IG_WEEKLY_ACCENT, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Save Week
+          </button>
+        </div>
+      )}
+
+      <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 2000 }}>
+          <thead>
+            <tr style={{ background: t.cardAlt }}>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  textAlign: "left",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: t.textFaint,
+                  textTransform: "uppercase",
+                  position: "sticky",
+                  left: 0,
+                  background: t.cardAlt,
+                  zIndex: 2,
+                  minWidth: 130,
+                }}
+              >
+                Week
+              </th>
+              {IG_COLUMNS.map((col) => (
+                <th key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: col.width }}>
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...monthGroups].reverse().map((group) => (
+              <Fragment key={group.month}>
+                {group.weeks
+                  .slice()
+                  .reverse()
+                  .map((w) => {
+                    if (ttsIsMilestoneRow(w)) {
+                      return (
+                        <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
+                          <td
+                            colSpan={1 + IG_COLUMNS.length}
+                            style={{
+                              padding: "8px 12px",
+                              fontSize: 12,
+                              fontStyle: "italic",
+                              color: t.textFaint,
+                              background: t.card,
+                              position: "sticky",
+                              left: 0,
+                            }}
+                          >
+                            {w.data[TTS_WEEKLY_MILESTONE_KEY]}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const d = weekWithMom(w);
+                    return (
+                      <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
+                        <td
+                          style={{
+                            padding: "7px 10px",
+                            fontSize: 12,
+                            color: t.text,
+                            fontWeight: 500,
+                            whiteSpace: "nowrap",
+                            position: "sticky",
+                            left: 0,
+                            background: stickyWeekBg,
+                            zIndex: 1,
+                          }}
+                        >
+                          {fmtDate(w.week_start)} – {fmtDate(w.week_end)}
+                        </td>
+                        {IG_COLUMNS.map((col) => {
+                          const val = d[col.key];
+                          const isEdit = editing?.rowId === w.id && editing?.field === col.key;
+                          const rawForEdit = w.data?.[col.key];
+                          return (
+                            <td
+                              key={col.key}
+                              onDoubleClick={() => {
+                                if (col.editable) {
+                                  setEditing({ rowId: w.id, field: col.key });
+                                  setEditVal(rawForEdit != null && rawForEdit !== "" ? String(rawForEdit) : "");
+                                }
+                              }}
+                              style={{
+                                padding: "6px 8px",
+                                textAlign: "right",
+                                color: col.editable ? t.text : t.textMuted,
+                                fontVariantNumeric: "tabular-nums",
+                                fontSize: 11,
+                                cursor: col.editable ? "pointer" : "default",
+                              }}
+                            >
+                              {isEdit ? (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  autoFocus
+                                  value={editVal}
+                                  onChange={(e) => setEditVal(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      saveEdit(w.id, col.key, editVal);
+                                    }
+                                    if (e.key === "Escape") {
+                                      skipSaveBlurRef.current = true;
+                                      setEditing(null);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (skipSaveBlurRef.current) {
+                                      skipSaveBlurRef.current = false;
+                                      return;
+                                    }
+                                    saveEdit(w.id, col.key, editVal);
+                                  }}
+                                  style={{
+                                    width: col.width - 8,
+                                    padding: "2px 4px",
+                                    borderRadius: 3,
+                                    border: `1px solid ${IG_WEEKLY_ACCENT}`,
+                                    background: t.inputBg,
+                                    color: t.inputText,
+                                    fontSize: 11,
+                                    textAlign: "right",
+                                  }}
+                                />
+                              ) : (
+                                fmtVal(val, col.type)
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                <tr style={{ background: monthRowBg, borderTop: `2px solid ${t.border}`, borderBottom: `2px solid ${t.border}` }}>
+                  <td
+                    style={{
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: t.text,
+                      position: "sticky",
+                      left: 0,
+                      background: monthRowBg,
+                      zIndex: 1,
+                    }}
+                  >
+                    {fmtMonthLabel(group.month)}
+                  </td>
+                  {IG_COLUMNS.map((col) => {
+                    const total = monthTotalsMap[group.month];
+                    const v = total?.[col.key];
+                    return (
+                      <td key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: t.text, fontSize: 11 }}>
+                        {v != null && v !== "" ? fmtVal(v, col.type) : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10 }}>
+        Double-click any editable cell to edit · Enter to save, Esc to cancel · Calculated fields update automatically · {weeks.length} weeks loaded
       </div>
     </div>
   );
@@ -7848,8 +8355,9 @@ function ChannelPipeline({ navigate, creators, t, S }) {
         </div>
       )}
 
-      {tab === "tts" && <TTSWeeklyTab t={t} />}
-      {["instagram", "ugc", "youtube"].includes(tab) && <WeeklyMetricsTab channel={tab} t={t} S={S} />}
+      {tab === "tts" && <TTSWeeklyTab t={t} S={S} />}
+      {tab === "instagram" && <IGWeeklyTab t={t} S={S} />}
+      {["ugc", "youtube"].includes(tab) && <WeeklyMetricsTab channel={tab} t={t} S={S} />}
 
       {tab === "sops" && <SOPsTab t={t} S={S} />}
       {tab === "kpis" && <TeamKPIsTab t={t} S={S} />}
