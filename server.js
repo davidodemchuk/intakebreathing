@@ -7,6 +7,7 @@ import http from "http";
 import { fileURLToPath } from "url";
 import { execFile } from "child_process";
 import archiver from "archiver";
+import { google } from "googleapis";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -481,66 +482,175 @@ app.post("/api/reformat-all", async (req, res) => {
   }
 });
 
-// ── Google Sheets proxy (formatted values = formula results as shown in Sheets) ──
+// ── Google Sheets (Service Account — read + write; API key fallback for read) ──
 const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID || "1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak";
-const GOOGLE_SHEETS_API_KEY = process.env.GOOGLE_SHEETS_API_KEY || "AIzaSyBdTkuWEXGuuoxKPzyTteD7EBOQcg5wkCc";
 const sheetsCache = new Map();
-const SHEETS_CACHE_TTL = 120000;
+const CACHE_TTL = 120000;
 
-function sheetsEncodeRange(tabName) {
-  const safe = String(tabName).replace(/'/g, "''");
-  return encodeURIComponent(`'${safe}'`);
+let sheetsClient = null;
+
+function sheetsQuoteTitle(name) {
+  return `'${String(name).replace(/'/g, "''")}'`;
+}
+
+function getSheetsClient() {
+  if (sheetsClient) return sheetsClient;
+
+  const saJson = process.env.GOOGLE_SERVICE_ACCOUNT;
+  if (!saJson) {
+    console.warn("[sheets] No GOOGLE_SERVICE_ACCOUNT env var — using API key for reads only");
+    return null;
+  }
+
+  try {
+    const creds = JSON.parse(saJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: creds,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+    sheetsClient = google.sheets({ version: "v4", auth });
+    console.log("[sheets] Service account authenticated:", creds.client_email);
+    return sheetsClient;
+  } catch (e) {
+    console.error("[sheets] Service account auth failed:", e.message);
+    return null;
+  }
+}
+
+function readSheetWithApiKey(tab) {
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_SHEETS_API_KEY;
+  if (!apiKey) throw new Error("No GOOGLE_SERVICE_ACCOUNT and no GOOGLE_API_KEY / GOOGLE_SHEETS_API_KEY for reads");
+  const range = encodeURIComponent(`${sheetsQuoteTitle(tab)}`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}/values/${range}?key=${apiKey}&valueRenderOption=FORMATTED_VALUE`;
+  return fetch(url).then(async (resp) => {
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    }
+    return resp.json();
+  });
 }
 
 app.get("/api/sheets/:tab", async (req, res) => {
   const tab = decodeURIComponent(req.params.tab);
+
   const cached = sheetsCache.get(tab);
-  if (cached && Date.now() - cached.fetchedAt < SHEETS_CACHE_TTL) {
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
     return res.json(cached.data);
   }
 
   try {
-    const range = sheetsEncodeRange(tab);
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}&valueRenderOption=FORMATTED_VALUE`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      console.error("[sheets] API error:", err.error?.message || resp.status);
-      return res.status(resp.status).json({ error: err.error?.message || `HTTP ${resp.status}` });
+    const client = getSheetsClient();
+    let rows;
+
+    if (client) {
+      const response = await client.spreadsheets.values.get({
+        spreadsheetId: GOOGLE_SHEETS_ID,
+        range: sheetsQuoteTitle(tab),
+        valueRenderOption: "FORMATTED_VALUE",
+      });
+      rows = response.data.values || [];
+    } else {
+      const data = await readSheetWithApiKey(tab);
+      rows = data.values || [];
     }
 
-    const data = await resp.json();
-    const result = {
-      tab,
-      rows: data.values || [],
-      rowCount: (data.values || []).length,
-      fetchedAt: new Date().toISOString(),
-    };
-
+    const result = { tab, rows, rowCount: rows.length, fetchedAt: new Date().toISOString() };
     sheetsCache.set(tab, { data: result, fetchedAt: Date.now() });
-    console.log(`[sheets] Fetched "${tab}": ${result.rowCount} rows`);
+    console.log(`[sheets] Read "${tab}": ${rows.length} rows`);
     res.json(result);
   } catch (e) {
-    console.error("[sheets] Fetch error:", e.message);
+    console.error("[sheets] Read error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/sheets/update", async (req, res) => {
+  const { tab, cell, value } = req.body || {};
+  if (!tab || !cell) return res.status(400).json({ error: "Missing tab or cell" });
+
+  const client = getSheetsClient();
+  if (!client) return res.status(500).json({ error: "Service account not configured — write not available" });
+
+  try {
+    const range = `${sheetsQuoteTitle(tab)}!${cell}`;
+    await client.spreadsheets.values.update({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [[value ?? ""]] },
+    });
+
+    sheetsCache.delete(tab);
+    console.log(`[sheets] Wrote "${tab}"!${cell}`);
+    res.json({ status: "ok", tab, cell, value });
+  } catch (e) {
+    console.error("[sheets] Write error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/sheets/batch-update", async (req, res) => {
+  const { tab, updates } = req.body || {};
+  if (!tab || !Array.isArray(updates) || !updates.length) {
+    return res.status(400).json({ error: "Missing tab or updates" });
+  }
+
+  const client = getSheetsClient();
+  if (!client) return res.status(500).json({ error: "Service account not configured" });
+
+  try {
+    const data = updates.map((u) => ({
+      range: `${sheetsQuoteTitle(tab)}!${u.cell}`,
+      values: [[u.value ?? ""]],
+    }));
+
+    await client.spreadsheets.values.batchUpdate({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      requestBody: {
+        valueInputOption: "USER_ENTERED",
+        data,
+      },
+    });
+
+    sheetsCache.delete(tab);
+    console.log(`[sheets] Batch wrote ${updates.length} cells to "${tab}"`);
+    res.json({ status: "ok", count: updates.length });
+  } catch (e) {
+    console.error("[sheets] Batch write error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
 app.get("/api/sheets-tabs", async (req, res) => {
   const cached = sheetsCache.get("__tabs__");
-  if (cached && Date.now() - cached.fetchedAt < SHEETS_CACHE_TTL) {
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
     return res.json(cached.data);
   }
 
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}?key=${GOOGLE_SHEETS_API_KEY}&fields=sheets.properties.title`;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const tabs = (data.sheets || []).map((s) => s.properties.title);
-    const payload = { tabs };
-    sheetsCache.set("__tabs__", { data: payload, fetchedAt: Date.now() });
-    res.json(payload);
+    const client = getSheetsClient();
+    if (client) {
+      const response = await client.spreadsheets.get({
+        spreadsheetId: GOOGLE_SHEETS_ID,
+        fields: "sheets.properties.title",
+      });
+      const tabs = (response.data.sheets || []).map((s) => s.properties.title);
+      const payload = { tabs };
+      sheetsCache.set("__tabs__", { data: payload, fetchedAt: Date.now() });
+      res.json(payload);
+    } else {
+      const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_SHEETS_API_KEY;
+      if (!apiKey) throw new Error("No service account and no API key for sheet metadata");
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}?key=${apiKey}&fields=sheets.properties.title`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const tabs = (data.sheets || []).map((s) => s.properties.title);
+      const payload = { tabs };
+      sheetsCache.set("__tabs__", { data: payload, fetchedAt: Date.now() });
+      res.json(payload);
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

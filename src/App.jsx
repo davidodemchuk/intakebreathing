@@ -40,8 +40,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.19.0";
+const APP_VERSION = "5.20.0";
 const CHANGELOG = [
+  { version: "5.20.0", date: "2026-04-01", changes: [
+    "Channel Pipeline now reads AND writes to Google Sheets",
+    "Service account authentication replaces API key",
+    "Inline cell editing — click a cell, type, press Enter to save to Google Sheet",
+    "Refresh button clears cache and fetches live data",
+  ]},
   { version: "5.19.0", date: "2026-04-01", changes: [
     "Notes textarea on creator detail is smaller (2 rows instead of large box)",
     "Notes column in table is more compact",
@@ -6505,12 +6511,28 @@ const PIPELINE_SOP_TABS = [
   "Influencer Buys SOP",
 ];
 
+/** 0-based column index → A1 letters (A, B, … Z, AA, …). */
+function pipelineColIndexToA1(colIndex) {
+  let n = colIndex + 1;
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
 function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
   const [tab, setTab] = useState("overview");
   const [sheetData, setSheetData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [editingCell, setEditingCell] = useState(null);
+  const [editCellVal, setEditCellVal] = useState("");
+  const [saving, setSaving] = useState(false);
+  const skipBlurSaveRef = useRef(false);
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -6593,6 +6615,42 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
       setError(e.message || String(e));
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const saveCell = async (tabName, rowIdxInRows, colIndex, value) => {
+    const colLetter = pipelineColIndexToA1(colIndex);
+    const sheetRow = rowIdxInRows + 1;
+    const cell = `${colLetter}${sheetRow}`;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sheets/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tab: tabName, cell, value }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        window.alert("Save failed: " + (err.error || `HTTP ${res.status}`));
+      } else {
+        setSheetData((prev) => {
+          const updated = { ...prev };
+          if (updated[tabName]?.rows) {
+            const newRows = updated[tabName].rows.map((r) => [...(r || [])]);
+            if (newRows[rowIdxInRows]) {
+              newRows[rowIdxInRows] = [...newRows[rowIdxInRows]];
+              newRows[rowIdxInRows][colIndex] = value;
+            }
+            updated[tabName] = { ...updated[tabName], rows: newRows, fetchedAt: new Date().toISOString() };
+          }
+          return updated;
+        });
+      }
+    } catch (e) {
+      window.alert("Save failed: " + (e.message || String(e)));
+    } finally {
+      setSaving(false);
+      setEditingCell(null);
     }
   };
 
@@ -6687,10 +6745,22 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                     }
 
                     const display = s === "#REF!" || s === "#DIV/0!" ? "—" : val;
+                    const rowIdxInRows = (opts.headerRowIndex || 0) + 1 + ri;
+                    const isEditing =
+                      editingCell?.tabName === tabName &&
+                      editingCell?.rowIdxInRows === rowIdxInRows &&
+                      editingCell?.col === ci;
+                    const canEdit = ci > 0 && !isTotal && !isMilestone && !isMonthHeader && !isSectionHeader;
 
                     return (
                       <td
                         key={ci}
+                        onClick={() => {
+                          if (canEdit) {
+                            setEditingCell({ tabName, rowIdxInRows, col: ci });
+                            setEditCellVal(val === null || val === undefined ? "" : String(val));
+                          }
+                        }}
                         style={{
                           padding: "7px 10px",
                           textAlign: isFirst ? "left" : "right",
@@ -6706,9 +6776,55 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                           background: isFirst ? (isTotal || isMonthHeader ? t.cardAlt : t.card) : "transparent",
                           zIndex: isFirst ? 1 : 0,
                           fontVariantNumeric: "tabular-nums",
+                          cursor: canEdit ? "pointer" : "default",
+                          outline: isEditing ? `2px solid ${t.green}` : "none",
                         }}
                       >
-                        {display}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editCellVal}
+                            onChange={(e) => setEditCellVal(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                skipBlurSaveRef.current = true;
+                                void saveCell(tabName, rowIdxInRows, ci, editCellVal);
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                skipBlurSaveRef.current = true;
+                                setEditingCell(null);
+                              }
+                            }}
+                            onBlur={() => {
+                              if (skipBlurSaveRef.current) {
+                                skipBlurSaveRef.current = false;
+                                return;
+                              }
+                              void saveCell(tabName, rowIdxInRows, ci, editCellVal);
+                            }}
+                            style={{
+                              width: "100%",
+                              minWidth: 0,
+                              padding: "2px 4px",
+                              border: `1px solid ${t.green}`,
+                              borderRadius: 3,
+                              background: t.inputBg,
+                              color: t.inputText,
+                              fontSize: 11,
+                              textAlign: isFirst ? "left" : "right",
+                              outline: "none",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                        ) : s === "#REF!" || s === "#DIV/0!" ? (
+                          "—"
+                        ) : (
+                          display
+                        )}
                       </td>
                     );
                   })}
@@ -6738,9 +6854,12 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
           <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Channel Pipeline</div>
-          <div style={{ fontSize: 13, color: t.textMuted }}>Live from Google Sheets — server cache ~2 minutes</div>
+          <div style={{ fontSize: 13, color: t.textMuted }}>Live from Google Sheets — click a cell to edit (saves on Enter); cache ~2 min</div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {saving ? (
+            <span style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>Saving...</span>
+          ) : null}
           <button
             type="button"
             onClick={refresh}
