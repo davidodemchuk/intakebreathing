@@ -40,8 +40,11 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.12.0";
+const APP_VERSION = "5.13.0";
 const CHANGELOG = [
+  { version: "5.13.0", date: "2026-04-01", changes: [
+    "Removed Proof Points and Required Disclosure sections from briefs",
+  ]},
   { version: "5.12.0", date: "2026-04-01", changes: [
     "Fixed enrichment data not persisting — visible error banner when saves fail",
     "Creator table shows avatars instead of letters",
@@ -760,11 +763,6 @@ function getS(t) {
     sayH: (c) => ({ fontSize: 12, fontWeight: 800, color: c, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }),
     li: { fontSize: 13, color: t.textSecondary, lineHeight: 1.7, marginBottom: 6, paddingLeft: 2 },
     mk: (c) => ({ color: c, fontWeight: 700, marginRight: 6 }),
-    proofGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
-    proofCard: { background: t.card, borderRadius: 10, border: `1px solid ${t.blue}25`, borderLeft: `3px solid ${t.blue}`, padding: "12px 14px", fontSize: 13, color: t.textSecondary, lineHeight: 1.5, transition: "background 0.3s", boxShadow: t.shadow },
-    discBox: { background: t.isLight ? "#fef2f2" : t.red+"0d", borderRadius: 12, border: `2px solid ${t.red}${t.isLight ? "50" : "40"}`, padding: 20 },
-    discLabel: { fontSize: 12, fontWeight: 800, color: t.red, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 },
-    discText: { fontSize: 14, color: t.text, fontFamily: "'SF Mono','Fira Code',monospace", lineHeight: 1.6, background: t.discBg, padding: 12, borderRadius: 8 },
     listItem: { background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: "16px 20px", marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.3s", boxShadow: t.shadow },
     empty: { textAlign: "center", padding: "80px 24px", color: t.textFaint },
   };
@@ -780,35 +778,6 @@ const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge"
 
 const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"];
 const GENDERS = ["Men & Women", "Men", "Women"];
-
-const STAT_OPTIONS = [
-  // SleepScore Labs verified (840+ nights analyzed)
-  { id: "snoring", label: "88% reduced snoring", full: "88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", category: "sleep" },
-  { id: "sleep", label: "87% deeper sleep", full: "87% of users reported deeper & more restful sleep (SleepScore Labs independent study, 840+ nights analyzed)", category: "sleep" },
-  { id: "sinus", label: "92% sinus pressure relief", full: "92% of users reported relief from sinus pressure (SleepScore Labs independent study, 840+ nights analyzed)", category: "health" },
-  // Verified product facts
-  { id: "customers", label: "1,000,000+ customers", full: "Over 1,000,000 customers · 4.5 star rating", category: "trust" },
-  { id: "fda", label: "FDA registered, made in USA", full: "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", category: "trust" },
-  { id: "starterkit", label: "4 band sizes (S/M/L/XL)", full: "Starter Kit includes 4 magnetic bands (S, M, L, XL) and 15 adhesive tab sets", category: "product" },
-  { id: "sweatproof", label: "Sweat-proof, designed for motocross", full: "Originally designed for motocross and high-intensity sports — sweat-proof adhesive stays on through workouts and sleep", category: "product" },
-  { id: "trial", label: "90-day risk-free trial", full: "90-day risk-free trial included", category: "trust" },
-  { id: "reusable", label: "Reusable band, replace tabs only", full: "Reusable magnetic band — only replace the adhesive tabs, reducing waste and cost vs single-use strips", category: "product" },
-  // Industry stats from intakebreathing.com/pages/science
-  { id: "airflow", label: "4 out of 5 people are airflow limited", full: "4 out of 5 people are airflow limited — most don't even know it", category: "awareness" },
-  { id: "mouthbreath", label: "67% have trouble nose breathing", full: "Over two thirds (67%) of people report trouble breathing through their nose, even while at rest", category: "awareness" },
-  { id: "snoring_pop", label: "90M Americans snore nightly", full: "90 million American adults suffer from snoring — 56% suffer nightly", category: "awareness" },
-  // Press
-  { id: "press", label: "Featured in Yahoo, CNN, FOX, Men's Health", full: "As featured in Yahoo, Mashable, Men's Health, CNN, and FOX", category: "trust" },
-];
-
-const STAT_CATEGORY_ORDER = ["sleep", "health", "product", "trust", "awareness"];
-const STAT_CATEGORY_LABELS = {
-  sleep: "Sleep & Snoring",
-  health: "Health",
-  product: "Product Features",
-  trust: "Trust & Social Proof",
-  awareness: "Industry Stats",
-};
 
 const APPROVED_CLAIMS = [
   "Opens wider, holds stronger, and never collapses",
@@ -827,14 +796,13 @@ const BANNED_CLAIMS = [
   '"Cures" or "treats" any medical condition',
   '"Clears congestion" or "decongestant"',
   '"Replaces medication" or "alternative to medication"',
-  '"Clinically proven" without the SleepScore Labs citation',
+  '"Clinically proven" without substantiation or proper citation',
   '"FDA approved" or "FDA cleared" — it is FDA registered, not approved',
   '"Guarantees" fit or results',
   '"Medical device" — it is an external nasal dilator',
   'Any diagnosis language like "you have sleep apnea"',
   '"Permanently" changes anything — effects are while wearing only',
 ];
-const DISCLOSURE = "Source: SleepScore Labs independent study · Participants with sleep tracking · Over 840 nights analyzed. Must appear as text overlay or in caption any time a SleepScore stat is referenced. Read more: intakebreathing.com/blogs/breathing-smarter/what-sleepscore-labs-discovered-about-nasal-strips-for-sleep";
 
 const DEFAULT_REJECTIONS = [
   "Band is worn upside down — revisions will be required",
@@ -2397,7 +2365,6 @@ const AI_STEPS = [
   { id: "story", label: "Building Problem → Agitate → Solution arc", duration: 6000 },
   { id: "compliance", label: "Checking compliance guardrails", duration: 3000 },
   { id: "overlays", label: "Generating overlay & visual ideas", duration: 3000 },
-  { id: "proof", label: "Selecting proof points", duration: 2000 },
   { id: "polish", label: "Polishing final brief", duration: 3000 },
 ];
 
@@ -2473,7 +2440,6 @@ const DEFAULTS = {
   supervisionLevel: "full",
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
-  selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
   platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Real & relatable", customTone: "", notes: "",
   customRejections: "",
   approvedClaims: [...APPROVED_CLAIMS.slice(0, 5)],
@@ -2558,10 +2524,9 @@ function generateBrief(d) {
   const probInst = problemSentences.length > 0 ? `Open with the core misconception: ${problemSentences[0]}` : "Start with the viewer's doubt — why haven't they tried this yet?";
   const probLines = problemSentences.length >= 2 ? pick(problemSentences, 3) : ["I always assumed this was one-size-fits-all", "I saw this online and thought no way", "Everyone's talking about it but I figured it was hype"];
   const probOverlays = ["Text: the misconception in big bold quotes", "Reenact the 'scroll past' moment", "Split screen: skeptical face vs. product"];
-  const hasM = d.selectedStats.includes("customers");
   const agInst = "Twist the knife — make them feel the cost of NOT trying.";
-  const agLines = ["You're literally leaving better sleep on the table", "Every night without this is a night you're not breathing fully", hasM ? "Over a million people already figured this out" : "Thousands already know"];
-  const agOverlays = [hasM ? "Counter: '1,000,000+ customers'" : "'Thousands already know'", "'Still scrolling past?' with raised eyebrow", "Quick montage of real reactions"];
+  const agLines = ["You're literally leaving better sleep on the table", "Every night without this is a night you're not breathing fully", "Over a million people already figured this out"];
+  const agOverlays = ["Counter: '1,000,000+ customers'", "'Still scrolling past?' with raised eyebrow", "Quick montage of real reactions"];
   const solInst = solutionSentences.length > 0 ? `Deliver the payoff: ${solutionSentences[0]}` : "Show the product in action.";
   const solLines = solutionSentences.length >= 2 ? pick(solutionSentences, 3) : ["This changed everything", "I can't believe the difference", "I'm never going back"];
   const solOverlays = ["Before/after or progression reveal", "Product in action — the key moment", "End card: product + CTA + 90-day trial"];
@@ -2569,7 +2534,6 @@ function generateBrief(d) {
   const hookKey = d.tone === "Other" ? "Real & relatable" : d.tone;
   const hooks = TONE_HOOKS[hookKey] || TONE_HOOKS["Real & relatable"];
   const vibeLabel = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
-  const proof = d.selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean);
   const vibePrefix = d.vibe === "Other" && vibeLabel ? `Campaign vibe: ${vibeLabel}\n\n` : "";
   const tonePrefix = toneResolved ? `Tone / voice: ${toneResolved}\n\n` : "";
   const platformsArr = normalizePlatforms(d);
@@ -2605,7 +2569,7 @@ function generateBrief(d) {
   const rejections = buildRejectionsArray(d);
   const approvedForBrief = Array.isArray(d.approvedClaims) && d.approvedClaims.length ? [...d.approvedClaims] : [...APPROVED_CLAIMS.slice(0, 5)];
   const bannedForBrief = Array.isArray(d.bannedClaims) && d.bannedClaims.length ? [...d.bannedClaims] : [...BANNED_CLAIMS.slice(0, 5)];
-  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: approvedForBrief, notThis: bannedForBrief, disclosure: DISCLOSURE, proof: proof.length > 0 ? proof.slice(0, 4) : ["88% of users reported a reduction in snoring (SleepScore Labs independent study, 840+ nights analyzed)", "Over 1,000,000 customers · 4.5 star rating", "FDA registered, medical grade, hypoallergenic, latex-free, made in USA", "90-day risk-free trial included"], platNotes, deliverables, rejections };
+  return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: approvedForBrief, notThis: bannedForBrief, platNotes, deliverables, rejections };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2617,7 +2581,6 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const pf = prefill || DEFAULTS;
   const [ageRange, setAgeRange] = useState(pf.ageRange ?? DEFAULTS.ageRange);
   const [gender, setGender] = useState(pf.gender ?? DEFAULTS.gender);
-  const [selectedStats, setSelectedStats] = useState([...(pf.selectedStats ?? DEFAULTS.selectedStats)]);
   const [showCustomProduct, setShowCustomProduct] = useState((pf.productName || DEFAULTS.productName) === "Other");
   const [showCustomVibe, setShowCustomVibe] = useState((pf.vibe || DEFAULTS.vibe) === "Other");
   const [showCustomTone, setShowCustomTone] = useState((pf.tone || DEFAULTS.tone) === "Other");
@@ -2640,8 +2603,6 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const complianceTimer = useRef(null);
   const [addApprovedDraft, setAddApprovedDraft] = useState("");
   const [addBannedDraft, setAddBannedDraft] = useState("");
-  const [statsLoading, setStatsLoading] = useState(false);
-  const debounceTimer = useRef(null);
   const vals = useRef({
     manager: pf.manager ?? DEFAULTS.manager,
     customManager: pf.customManager ?? DEFAULTS.customManager,
@@ -2664,51 +2625,6 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
     budgetPerVideo: pf.budgetPerVideo ?? DEFAULTS.budgetPerVideo,
     supervisionLevel: pf.supervisionLevel ?? DEFAULTS.supervisionLevel,
   });
-  const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
-
-  const suggestStats = useCallback(async () => {
-    const key = localStorage.getItem("intake-apikey");
-    if (!key) return;
-
-    const v = vals.current;
-    const context = [v.productName, v.campaignName, v.mission, v.vibe, v.problem, v.ageRange, v.gender, selectedPlatforms.join(", ")].filter(Boolean).join(", ");
-    if (context.length < 10) return;
-
-    setStatsLoading(true);
-    try {
-      const statIds = STAT_OPTIONS.map(s => s.id).join(", ");
-      const res = await Promise.race([
-        fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true",
-            "x-api-key": key,
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 100,
-            messages: [{ role: "user", content: `You are helping select proof points for a UGC creator brief. Given this campaign context: "${context}". Available stat IDs: ${statIds}. The stats are: ${STAT_OPTIONS.map(s => s.id + "=" + s.label).join(", ")}. Return ONLY a JSON array of the most relevant stat IDs for this campaign, e.g. ["snoring","sleep","starterkit"]. Pick 3-5 most relevant. Use only verified stat IDs from the list. Return ONLY the JSON array, nothing else.` }],
-          }),
-        }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000)),
-      ]);
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
-      const text = data.content.map(i => i.text || "").join("");
-      const match = text.match(/\[[\s\S]*\]/);
-      if (match) {
-        try {
-          const ids = JSON.parse(match[0]);
-          if (!Array.isArray(ids)) return;
-          const validIds = ids.filter(id => STAT_OPTIONS.some(s => s.id === id));
-          if (validIds.length > 0) setSelectedStats(validIds);
-        } catch { /* ignore malformed JSON */ }
-      }
-    } catch { /* ignore */ }
-    finally { setStatsLoading(false); }
-  }, [selectedPlatforms]);
 
   const suggestCompliance = useCallback(async () => {
     const key = localStorage.getItem("intake-apikey");
@@ -2769,24 +2685,17 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
     finally { setComplianceLoading(false); }
   }, []);
 
-  const triggerStatsSuggest = useCallback(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => suggestStats(), 2000);
-  }, [suggestStats]);
-
   const triggerComplianceSuggest = useCallback(() => {
     if (complianceTimer.current) clearTimeout(complianceTimer.current);
     complianceTimer.current = setTimeout(() => suggestCompliance(), 2500);
   }, [suggestCompliance]);
 
   const fireFormSuggest = useCallback(() => {
-    triggerStatsSuggest();
     triggerComplianceSuggest();
-  }, [triggerStatsSuggest, triggerComplianceSuggest]);
+  }, [triggerComplianceSuggest]);
 
   useEffect(() => {
     return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
       if (complianceTimer.current) clearTimeout(complianceTimer.current);
     };
   }, []);
@@ -2843,19 +2752,17 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       supervisionLevel,
       productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
-      selectedStats, platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, customTone: (v.customTone || "").trim(), notes: v.notes,
+      platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, customTone: (v.customTone || "").trim(), notes: v.notes,
       customRejections: (v.customRejections || "").trim(),
       _audience: `Ages ${ageRange} — ${gender}`,
       _problem: problemTrim,
-      _stats: selectedStats.map(id => { const s = STAT_OPTIONS.find(o => o.id === id); return s ? s.full : ""; }).filter(Boolean).join(". "),
       approvedClaims: [...selectedApproved],
       bannedClaims: [...selectedBanned],
       _approved: selectedApproved.join(". "),
       _banned: selectedBanned.join(". "),
-      _disclosure: DISCLOSURE,
       _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }),
     });
-  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty, supervisionLevel]);
+  }, [onGenerate, ageRange, gender, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty, supervisionLevel]);
   const mkSel = (key, label, opts) => (
     <div style={S.fg}><label style={S.label}>{label}</label>
       <select style={S.select} defaultValue={vals.current[key]} onChange={e=>{vals.current[key]=e.target.value}}>
@@ -3174,23 +3081,6 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
       </div>
       <div style={S.section}>
-        <div style={S.secLabel}><Icon name="barChart" size={16} color={t.green} /><span>Proof Points</span>{statsLoading ? <span style={{ fontSize: 11, color: t.orange, fontWeight: 500, marginLeft: 4 }}>— IB-Ai selecting...</span> : <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 500, marginLeft: 4 }}>— auto-selected by IB-Ai, tap to adjust</span>}</div>
-        <div>
-          {STAT_CATEGORY_ORDER.filter(c => STAT_OPTIONS.some(s => s.category === c)).map((cat, catIdx) => {
-            const items = STAT_OPTIONS.filter(s => s.category === cat);
-            return (
-              <div key={cat}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.05em", marginTop: catIdx === 0 ? 0 : 12, marginBottom: 6 }}>{STAT_CATEGORY_LABELS[cat]}</div>
-                <div style={S.chipGrid}>
-                  {items.map(st => <div key={st.id} style={{ ...S.chip(selectedStats.includes(st.id)), display: "inline-flex", alignItems: "center", gap: 6 }} onClick={()=>toggleStat(st.id)}>{selectedStats.includes(st.id) ? <Icon name="checkSm" size={12} color={t.green} /> : null}{st.label}</div>)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ ...S.hint, marginTop: 10 }}>Selected stats become proof point cards. Use disclosure when citing SleepScore stats.</div>
-      </div>
-      <div style={S.section}>
         <div style={S.secLabel}>
           <Icon name="shield" size={16} color={t.green} />
           <span>Compliance</span>
@@ -3415,10 +3305,8 @@ function buildBriefPrintHtml(b, fd, esc) {
   const notHtml = (b.notThis || []).map((s) => `<div class="compliance-item"><span class="mark">–</span>${escSafe(s)}</div>`).join("");
   const rejList = Array.isArray(b.rejections) && b.rejections.length ? b.rejections : buildRejectionsArray(fd);
   const rejHtml = rejList.map((r) => `<div class="revision-item"><span class="rx">•</span>${escSafe(r)}</div>`).join("");
-  const proofHtml = (b.proof || []).map((p) => `<div class="proof-card">${escSafe(p)}</div>`).join("");
   const platNotesHtml = escSafe(b.platNotes || "").replace(/\n/g, "<br>");
   const deliverablesHtml = escSafe(b.deliverables || "").replace(/\n/g, "<br>");
-  const disclosureHtml = escSafe(b.disclosure || "").replace(/\n/g, "<br>");
   const mgrLine = escSafe(managerDisplayName(fd));
   const qtyLine = escSafe(String(fd.contentQuantity ?? "—"));
   const rawBudgetPdf = String(fd.budgetPerVideo ?? "").trim().replace(/^\$/, "");
@@ -3558,13 +3446,6 @@ body {
 .revision-item { font-size: 10px; color: #333; line-height: 1.6; margin-bottom: 2px; }
 .revision-item .rx { color: #e67e00; font-weight: 700; margin-right: 6px; }
 
-/* ── Proof grid ── */
-.proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.proof-card {
-  background: #f8f8f8; border: 1px solid #e5e5e5; border-left: 3px solid #4a9a9d;
-  border-radius: 4px; padding: 8px 10px; font-size: 10px; color: #333; line-height: 1.5;
-}
-
 /* ── Info boxes ── */
 .info-box {
   background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 6px;
@@ -3651,11 +3532,6 @@ ${beatsHtml}
   <div class="revision-header">Revisions will be needed if</div>
   <div class="revision-warning">If any of the following are present in your submission, revisions will be required before approval.</div>
   ${rejHtml}
-</div>
-
-<div class="section-title">Proof Points</div>
-<div class="proof-grid">
-  ${proofHtml}
 </div>
 
 <div class="section-title">Platform Notes</div>
@@ -3846,14 +3722,6 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         </div>
       </div>
       <RejectionSection brief={b} formData={fd} t={t} S={S} editable={isManager} />
-      <div style={S.bSec}>
-        <div style={S.bSecTitle}><Icon name="barChart" size={16} color={t.textFaint} /><span>Proof Points</span></div>
-        <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}><EditableField editable={isManager} value={p} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5, width: "100%" }} t={t} /></div>)}</div>
-      </div>
-      <div style={S.bSec}>
-        <div style={S.bSecTitle}><Icon name="alertTriangle" size={16} color={t.orange} /><span>Required Disclosure — Non-Negotiable</span></div>
-        <div style={S.discBox}><div style={S.discLabel}>Must appear when any stat is referenced</div><EditableField editable={isManager} value={b.disclosure} style={S.discText} t={t} /></div>
-      </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}><Icon name="smartphone" size={16} color={t.textFaint} /><span>Platform Notes</span></div>
         <div style={S.card}><EditableField editable={isManager} value={b.platNotes} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }} t={t} /></div>
@@ -4507,10 +4375,8 @@ ${supervisionToneNote}
 TARGET AUDIENCE: ${audienceCompact}
 AUDIENCE (form selection, ageRange + gender): ${audienceForm}
 CORE PROBLEM: ${prob}
-PROOF POINTS / STATS: ${d._stats || ""}
 APPROVED CLAIMS (creators CAN say): ${d._approved || ""}
 BANNED CLAIMS (NEVER say): ${d._banned || ""}
-REQUIRED DISCLOSURE: ${d._disclosure || ""}
 REVISION REQUIRED CRITERIA (revisions will be needed if any of these appear): ${rejectionsLine}
 
 Include these revision criteria in the brief and make sure the creative direction avoids all of them.
@@ -4527,7 +4393,7 @@ The deliverables JSON field must clearly state that ${qtyVideos} video(s) are re
 Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
 
 Return ONLY this JSON (no other text):
-{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"rejections":["array of strings — every revision-required rule listed above; include all criteria verbatim"],"disclosure":"exact required citation text","proof":["4 formatted stat cards"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
+{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"rejections":["array of strings — every revision-required rule listed above; include all criteria verbatim"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7569,6 +7435,9 @@ export default function App() {
       let brief;
       try { brief = JSON.parse(match[0]); }
       catch { throw new Error("JSON parse failed — response may have been cut off. Try again."); }
+
+      delete brief.proof;
+      delete brief.disclosure;
 
       const mergedRej = buildRejectionsArray(formData);
       if (!Array.isArray(brief.rejections) || brief.rejections.length === 0) brief.rejections = mergedRej;
