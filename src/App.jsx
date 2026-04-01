@@ -30,8 +30,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.5.0";
+const APP_VERSION = "3.5.1";
 const CHANGELOG = [
+  { version: "3.5.1", date: "2026-04-01", changes: [
+    "Fixed enrichment data extraction — handles all ScrapeCreators response structures",
+    "Added raw API response logging to console for debugging",
+    "Fixed engagement rate showing 29400% and 140% — caps at 100%, guards against null followers",
+    "Fixed Instagram, YouTube, Twitter data not populating",
+  ]},
   { version: "3.5.0", date: "2026-04-01", changes: [
     "Fixed favicon — now uses real Intake hex logo (black bg, white logo)",
     "FFmpeg bundled via npm — video reformatter downloads now work on Railway",
@@ -1159,7 +1165,8 @@ function buildTikTokRecentVideosAndMetrics(vidRaw, cleanHandle, followerCount) {
     avgComments = Math.round(totalComments / n);
     avgShares = Math.round(totalShares / n);
     const avgEngagementActionsPerVideo = (totalLikes + totalComments + totalShares) / n;
-    engagementRate = ((avgEngagementActionsPerVideo / followers) * 100).toFixed(2);
+    const rawRate = (avgEngagementActionsPerVideo / followers) * 100;
+    engagementRate = parseFloat(Math.min(rawRate, 100).toFixed(2));
   }
 
   const mapOne = (v) => {
@@ -1439,8 +1446,13 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       ttAvgLikes = Math.round(totalL / count);
       ttAvgComments = Math.round(totalC / count);
       ttAvgShares = Math.round(totalS / count);
-      const followers = tiktokData?.followers || 1;
-      ttEngRate = parseFloat((((ttAvgLikes + ttAvgComments + ttAvgShares) / followers) * 100).toFixed(2));
+      const ttFollowerCount = Number(tiktokData?.followers);
+      if (Number.isFinite(ttFollowerCount) && ttFollowerCount > 0 && recent.length > 0) {
+        const rawRate = ((ttAvgLikes + ttAvgComments + ttAvgShares) / ttFollowerCount) * 100;
+        ttEngRate = parseFloat(Math.min(rawRate, 100).toFixed(2));
+      } else {
+        ttEngRate = null;
+      }
     }
   }
 
@@ -1481,20 +1493,37 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       }
     : null;
 
-  const igP = igProfile ? igProfile.data ?? igProfile : null;
+  const igP = igProfile
+    ? (igProfile.data?.user || igProfile.data || igProfile.user || igProfile.graphql?.user || igProfile)
+    : null;
   let instagramData = igP
     ? {
-        followers: igP.follower_count || igP.edge_followed_by?.count || null,
-        following: igP.following_count || igP.edge_follow?.count || null,
-        posts: igP.media_count || igP.edge_owner_to_timeline_media?.count || null,
-        bio: igP.biography || "",
-        avatarUrl: igP.profile_pic_url_hd || igP.profile_pic_url || "",
-        verified: igP.is_verified || false,
-        fullName: igP.full_name || "",
-        externalUrl: igP.external_url || "",
-        category: igP.category_name || igP.category || "",
-        isBusiness: igP.is_business_account || false,
-        isPrivate: igP.is_private || false,
+        followers:
+          igP.follower_count ??
+          igP.followers_count ??
+          igP.edge_followed_by?.count ??
+          igP.followers ??
+          (typeof igP.followerCount === "number" ? igP.followerCount : null),
+        following:
+          igP.following_count ??
+          igP.followings_count ??
+          igP.edge_follow?.count ??
+          igP.following ??
+          null,
+        posts:
+          igP.media_count ??
+          igP.edge_owner_to_timeline_media?.count ??
+          igP.total_media_count ??
+          igP.postsCount ??
+          null,
+        bio: igP.biography || igP.bio || "",
+        avatarUrl: igP.profile_pic_url_hd || igP.profile_pic_url || igP.profilePicUrl || igP.avatar || "",
+        verified: igP.is_verified ?? igP.verified ?? false,
+        fullName: igP.full_name || igP.fullName || igP.name || "",
+        externalUrl: igP.external_url || igP.externalUrl || igP.bio_link?.url || "",
+        category: igP.category_name || igP.category || igP.business_category_name || "",
+        isBusiness: igP.is_business_account ?? igP.is_business ?? false,
+        isPrivate: igP.is_private ?? false,
         lastEnriched: new Date().toISOString(),
         enrichError: null,
       }
@@ -1537,8 +1566,13 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       const count = recent.length;
       igAvgLikes = Math.round(totalL / count);
       igAvgComments = Math.round(totalC / count);
-      const igFollowers = instagramData?.followers || 1;
-      igEngRate = parseFloat((((igAvgLikes + igAvgComments) / igFollowers) * 100).toFixed(2));
+      const igFollowerCount = Number(instagramData?.followers);
+      if (Number.isFinite(igFollowerCount) && igFollowerCount > 0 && recent.length > 0) {
+        const rawRate = ((igAvgLikes + igAvgComments) / igFollowerCount) * 100;
+        igEngRate = parseFloat(Math.min(rawRate, 100).toFixed(2));
+      } else {
+        igEngRate = null;
+      }
     }
   }
 
@@ -1559,26 +1593,40 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
     }));
   }
 
-  const youtubeData = ytData
+  const ytP = ytData ? (ytData.data || ytData.snippet || ytData.channel || ytData) : null;
+  const ytStats = ytData?.statistics || ytData?.stats || ytP?.statistics || ytP?.stats || {};
+  const youtubeData = ytP
     ? {
-        subscribers: ytData.stats?.subscriberCount || ytData.statistics?.subscriberCount || ytData.data?.subscriberCount || null,
-        totalViews: ytData.stats?.viewCount || ytData.statistics?.viewCount || null,
-        videoCount: ytData.stats?.videoCount || ytData.statistics?.videoCount || null,
-        description: ytData.description || ytData.snippet?.description || "",
-        avatarUrl: ytData.avatar || ytData.snippet?.thumbnails?.default?.url || "",
-        channelUrl: ytData.customUrl ? `https://youtube.com/${ytData.customUrl}` : "",
+        subscribers:
+          ytStats.subscriberCount ?? ytStats.subscriber_count ?? ytP.subscriberCount ?? ytP.subscriber_count ?? ytP.subscribers ?? null,
+        totalViews:
+          ytStats.viewCount ?? ytStats.view_count ?? ytP.viewCount ?? ytP.view_count ?? ytP.totalViews ?? null,
+        videoCount:
+          ytStats.videoCount ?? ytStats.video_count ?? ytP.videoCount ?? ytP.video_count ?? null,
+        description: ytP.description || ytP.snippet?.description || "",
+        avatarUrl: ytP.avatar || ytP.thumbnail || ytP.snippet?.thumbnails?.default?.url || "",
+        channelUrl: ytP.customUrl
+          ? `https://youtube.com/${ytP.customUrl}`
+          : ytP.url || ytP.channel_url || "",
+        title: ytP.title || ytP.snippet?.title || "",
         lastEnriched: new Date().toISOString(),
       }
     : null;
 
-  const twitterData = twData
+  const twP = twData ? (twData.data || twData.user || twData) : null;
+  const twMetrics = twP?.public_metrics || {};
+  const twitterData = twP
     ? {
-        followers: twData.followers_count || twData.public_metrics?.followers_count || null,
-        following: twData.following_count || twData.friends_count || null,
-        tweets: twData.statuses_count || twData.public_metrics?.tweet_count || null,
-        bio: twData.description || "",
-        verified: twData.verified || twData.is_blue_verified || false,
-        avatarUrl: twData.profile_image_url_https || twData.profile_image_url || "",
+        followers:
+          twP.followers_count ?? twMetrics.followers_count ?? twP.followersCount ?? twP.followers ?? null,
+        following:
+          twP.following_count ?? twP.friends_count ?? twMetrics.following_count ?? twP.followingCount ?? null,
+        tweets:
+          twP.statuses_count ?? twMetrics.tweet_count ?? twP.tweetsCount ?? twP.tweets_count ?? null,
+        bio: twP.description || twP.bio || "",
+        verified: twP.verified ?? twP.is_blue_verified ?? false,
+        avatarUrl: twP.profile_image_url_https || twP.profile_image_url || twP.avatar || "",
+        handle: twP.screen_name || twP.username || "",
         lastEnriched: new Date().toISOString(),
       }
     : null;
@@ -1621,7 +1669,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
     .map((v) => v.caption)
     .filter(Boolean)
     .join("\n");
-  const engagementRate = igEngRate || ttEngRate || null;
+  const engagementRate = igEngRate ?? ttEngRate ?? null;
 
   return {
     tiktokData,
@@ -1674,6 +1722,8 @@ async function runIbScoreClaude(ctx) {
     facebookData,
     snapchatData,
   } = ctx;
+  const safeNum = (val) => (val != null && Number(val) > 0 ? String(val) : "unknown");
+  const safeRate = (val) => (val != null && Number(val) >= 0 && Number(val) <= 100 ? `${val}%` : "unknown");
 
   const prompt = `You are the IB Score calculator for Intake Breathing, a magnetic nasal dilator company for better breathing, sleep, and athletic performance.
 
@@ -1681,11 +1731,11 @@ CREATOR: @${cleanHandle}
 NAME: ${tiktokData?.displayName || instagramData?.fullName || "Unknown"}
 
 INSTAGRAM (primary platform — weight 45%):
-  Followers: ${instagramData?.followers ?? "unknown"}
-  Posts: ${instagramData?.posts ?? "unknown"}
-  IG Engagement Rate: ${igEngRate ?? "unknown"}%
-  Avg Likes per post: ${igAvgLikes || "unknown"}
-  Avg Comments per post: ${igAvgComments || "unknown"}
+  Followers: ${safeNum(instagramData?.followers)}
+  Posts: ${safeNum(instagramData?.posts)}
+  IG Engagement Rate: ${safeRate(igEngRate)}
+  Avg Likes per post: ${safeNum(igAvgLikes)}
+  Avg Comments per post: ${safeNum(igAvgComments)}
   Bio: ${instagramData?.bio || "none"}
   Category: ${instagramData?.category || "unknown"}
   Verified: ${instagramData?.verified || false}
@@ -1694,21 +1744,21 @@ INSTAGRAM (primary platform — weight 45%):
   Reels count pulled: ${Array.isArray(igRecentReels) ? igRecentReels.length : 0}
 
 TIKTOK (weight 30%):
-  Followers: ${tiktokData?.followers ?? "unknown"}
-  Total Hearts: ${tiktokData?.hearts ?? "unknown"}
-  TT Videos: ${tiktokData?.videoCount ?? "unknown"}
-  TT Engagement Rate: ${ttEngRate ?? "unknown"}%
-  Avg Views per video: ${tiktokData?.avgViews ?? "unknown"}
+  Followers: ${safeNum(tiktokData?.followers)}
+  Total Hearts: ${safeNum(tiktokData?.hearts)}
+  TT Videos: ${safeNum(tiktokData?.videoCount)}
+  TT Engagement Rate: ${safeRate(ttEngRate)}
+  Avg Views per video: ${safeNum(tiktokData?.avgViews)}
   Bio: ${tiktokData?.bio || "none"}
   Verified: ${tiktokData?.verified || false}
   Has TikTok Shop: ${tiktokShopData?.hasShop || false} (${tiktokShopData?.productCount || 0} products)
   Recent video captions: ${ttCaptions || "none"}
 
 CROSS-PLATFORM PRESENCE (weight 10%):
-  YouTube: ${youtubeData ? `${youtubeData.subscribers} subscribers` : "not found"}
-  Twitter/X: ${twitterData ? `${twitterData.followers} followers` : "not found"}
+  YouTube: ${youtubeData ? `${safeNum(youtubeData.subscribers)} subscribers` : "not found"}
+  Twitter/X: ${twitterData ? `${safeNum(twitterData.followers)} followers` : "not found"}
   LinkedIn: ${linkedinData ? "present" : "not found"}
-  Facebook: ${facebookData ? `${facebookData.followers || "unknown"} followers` : "not found"}
+  Facebook: ${facebookData ? `${safeNum(facebookData.followers)} followers` : "not found"}
   Snapchat: ${snapchatData ? "present" : "not found"}
 
 Return ONLY a JSON object:
@@ -1814,6 +1864,20 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     fetchOne(`${base}/v1/snapchat/profile?handle=${h}`, "snapchat"),
     fetchOne(`${base}/v1/facebook/profile?handle=${h}`, "facebook"),
   ]);
+  // Debug logging — shows actual API response structures
+  if (typeof window !== "undefined" && window.console) {
+    console.group("[Enrich] Raw API responses for @" + cleanHandle);
+    console.log("TT Profile:", JSON.stringify(ttProfileRaw)?.substring(0, 500));
+    console.log("TT Videos:", JSON.stringify(ttVideosRaw)?.substring(0, 500));
+    console.log("IG Profile:", JSON.stringify(igProfileRaw)?.substring(0, 500));
+    console.log("IG Posts:", JSON.stringify(igPostsRaw)?.substring(0, 500));
+    console.log("YouTube:", JSON.stringify(ytRaw)?.substring(0, 500));
+    console.log("Twitter:", JSON.stringify(twRaw)?.substring(0, 500));
+    console.log("LinkedIn:", JSON.stringify(liRaw)?.substring(0, 500));
+    console.log("Snapchat:", JSON.stringify(snapRaw)?.substring(0, 500));
+    console.log("Facebook:", JSON.stringify(fbRaw)?.substring(0, 500));
+    console.groupEnd();
+  }
 
   if (opts?.requireTikTokProfile && !ttProfileRaw) {
     const e = new Error("NOT_FOUND");
@@ -4587,7 +4651,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#E1306C", marginBottom: 6 }}>Instagram</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(igD.followers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{igD.posts != null ? `${igD.posts} posts` : "—"} · {c.instagramEngRate != null ? `${Number(c.instagramEngRate).toFixed(2)}%` : "—"} eng</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{igD.posts != null ? `${igD.posts} posts` : "—"} · {Number.isFinite(Number(c.instagramEngRate)) ? `${Number(c.instagramEngRate).toFixed(2)}%` : "—"} eng</div>
               {igD.category ? <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>Category: {igD.category}</div> : null}
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{igD.verified ? "✓ Verified " : ""}{igD.isBusiness ? "· Business" : ""}</div>
             </div>
@@ -4598,7 +4662,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{formatMetricShort(ttD.followers)}</div>
               <div style={{ fontSize: 11, color: t.textFaint }}>followers</div>
               <div style={{ fontSize: 11, color: t.textMuted, marginTop: 6 }}>{formatMetricShort(ttD.hearts)} hearts · {ttD.videoCount ?? "—"} videos</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{ttD.avgViews != null ? `${formatMetricShort(ttD.avgViews)} avg views` : "—"} · {c.tiktokEngRate != null ? `${Number(c.tiktokEngRate).toFixed(2)}%` : "—"} eng</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 4 }}>{ttD.avgViews != null ? `${formatMetricShort(ttD.avgViews)} avg views` : "—"} · {Number.isFinite(Number(c.tiktokEngRate)) ? `${Number(c.tiktokEngRate).toFixed(2)}%` : "—"} eng</div>
               {shop.hasShop ? <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>TikTok Shop ({shop.productCount || 0})</div> : null}
             </div>
           ) : null}
