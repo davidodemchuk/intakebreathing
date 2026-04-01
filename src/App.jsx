@@ -9,9 +9,10 @@ const CHANGELOG = [
   { version: "2.0.0", date: "2025-04-01", changes: [
     "Homepage reworked into multi-section dashboard with card navigation",
     "New sections: UGC Army, Channel Pipeline, Influencer Buys, Tools",
-    "Video Reformatter tool built under Tools — paste TikTok/Instagram URL to reformat",
-    "All Meta and YouTube ad aspect ratios researched and built in",
-    "Channel Pipeline, Influencer Buys sections are placeholder cards for future build",
+    "Video Reformatter tool — paste TikTok/Instagram URL to fetch and preview video",
+    "ScrapeCreators API integrated for video fetching",
+    "All Meta and YouTube ad aspect ratios built in as reformat presets",
+    "Channel Pipeline and Influencer Buys are placeholder cards for future",
   ]},
   { version: "1.3.6", date: "2025-04-01", changes: [
     "Platform selection changed to compact multi-select dropdown — reduces dead space in Brief Details",
@@ -333,19 +334,19 @@ const VIDEO_REFORMAT_GROUPS = [
     title: "META ADS",
     items: [
       { id: "meta-feed-sq", name: "Feed Square", ratio: "1:1", dimensions: "1080×1080", placement: "Facebook & Instagram Feed", recommended: true },
-      { id: "meta-feed-v", name: "Feed Vertical", ratio: "4:5", dimensions: "1080×1350", placement: "Facebook & Instagram Feed (mobile)", recommended: true },
+      { id: "meta-feed-v", name: "Feed Vertical", ratio: "4:5", dimensions: "1080×1350", placement: "FB & IG Feed (mobile optimized)", recommended: true },
       { id: "meta-stories", name: "Stories & Reels", ratio: "9:16", dimensions: "1080×1920", placement: "FB/IG Stories, Reels", recommended: true },
-      { id: "meta-instream", name: "In-Stream Horizontal", ratio: "16:9", dimensions: "1920×1080", placement: "Facebook In-Stream, Video Feed" },
-      { id: "meta-carousel", name: "Carousel", ratio: "1:1", dimensions: "1080×1080", placement: "Facebook & Instagram Carousel" },
+      { id: "meta-instream", name: "In-Stream", ratio: "16:9", dimensions: "1920×1080", placement: "Facebook In-Stream, Video Feed" },
+      { id: "meta-carousel", name: "Carousel", ratio: "1:1", dimensions: "1080×1080", placement: "FB & IG Carousel" },
     ],
   },
   {
     title: "YOUTUBE ADS",
     items: [
-      { id: "yt-instream", name: "In-Stream / Pre-Roll", ratio: "16:9", dimensions: "1920×1080", placement: "Skippable & Non-Skippable In-Stream", recommended: true },
+      { id: "yt-instream", name: "In-Stream / Pre-Roll", ratio: "16:9", dimensions: "1920×1080", placement: "Skippable & Non-Skippable", recommended: true },
       { id: "yt-shorts", name: "Shorts", ratio: "9:16", dimensions: "1080×1920", placement: "YouTube Shorts", recommended: true },
-      { id: "yt-discovery", name: "Discovery Square", ratio: "1:1", dimensions: "1080×1080", placement: "YouTube Home, Search Results" },
-      { id: "yt-bumper", name: "Bumper Ad", ratio: "16:9", dimensions: "1920×1080", placement: "6-second Bumper Ads" },
+      { id: "yt-discovery", name: "Discovery", ratio: "1:1", dimensions: "1080×1080", placement: "YouTube Home & Search" },
+      { id: "yt-bumper", name: "Bumper", ratio: "16:9", dimensions: "1920×1080", placement: "6-second Bumper Ads" },
     ],
   },
   {
@@ -354,15 +355,97 @@ const VIDEO_REFORMAT_GROUPS = [
       { id: "tt-native", name: "TikTok Native", ratio: "9:16", dimensions: "1080×1920", placement: "TikTok Feed", recommended: true },
     ],
   },
-  {
-    title: "GENERAL",
-    items: [
-      { id: "gen-landscape", name: "Landscape HD", ratio: "16:9", dimensions: "1920×1080", placement: "General widescreen" },
-      { id: "gen-portrait", name: "Portrait HD", ratio: "9:16", dimensions: "1080×1920", placement: "General vertical" },
-      { id: "gen-square", name: "Square HD", ratio: "1:1", dimensions: "1080×1080", placement: "General square" },
-    ],
-  },
 ];
+
+/** Read at call time so Settings saves apply without reload */
+function getScrapeCreatorsKey() {
+  try {
+    return localStorage.getItem("intake-scrape-key") || "";
+  } catch {
+    return "";
+  }
+}
+
+function extractTikTokVideo(data) {
+  const ad = data?.aweme_detail;
+  if (!ad) return null;
+  const v = ad.video;
+  const w = v?.width;
+  const h = v?.height;
+  let playUrl = v?.play_addr?.url_list?.[0] || null;
+  if (!playUrl && Array.isArray(v?.bit_rate) && v.bit_rate[0]?.play_addr?.url_list?.[0]) {
+    playUrl = v.bit_rate[0].play_addr.url_list[0];
+  }
+  const thumb =
+    v?.cover?.url_list?.[0] ||
+    v?.origin_cover?.url_list?.[0] ||
+    v?.dynamic_cover?.url_list?.[0] ||
+    null;
+  const desc = ad.desc || "";
+  const author = ad.author?.nickname || ad.author?.unique_id || "—";
+  const st = ad.statistics || {};
+  return {
+    source: "tiktok",
+    videoUrl: playUrl,
+    thumbUrl: thumb,
+    caption: desc,
+    author,
+    width: w,
+    height: h,
+    stats: {
+      play: st.play_count,
+      like: st.digg_count,
+      share: st.share_count,
+      comment: st.comment_count,
+    },
+  };
+}
+
+function extractInstagramVideo(data) {
+  const media = data?.graphql?.shortcode_media || data?.items?.[0] || data;
+  let videoUrl =
+    data?.video_url ||
+    media?.video_url ||
+    media?.video_versions?.[0]?.url ||
+    data?.graphql?.shortcode_media?.video_url;
+  if (!videoUrl && Array.isArray(media?.video_versions)) {
+    const sorted = [...media.video_versions].sort((a, b) => (b.width || 0) - (a.width || 0));
+    videoUrl = sorted[0]?.url;
+  }
+  const thumb =
+    data?.thumbnail_url ||
+    data?.display_url ||
+    media?.display_url ||
+    media?.image_versions2?.candidates?.[0]?.url ||
+    data?.graphql?.shortcode_media?.display_url;
+  const caption =
+    (typeof data?.caption === "string" ? data.caption : data?.caption?.text) ||
+    media?.edge_media_to_caption?.edges?.[0]?.node?.text ||
+    "";
+  const author =
+    data?.owner?.username ||
+    media?.owner?.username ||
+    data?.user?.username ||
+    data?.graphql?.shortcode_media?.owner?.username ||
+    "—";
+  const w = data?.dimensions?.width || media?.dimensions?.width || data?.graphql?.shortcode_media?.dimensions?.width;
+  const h = data?.dimensions?.height || media?.dimensions?.height || data?.graphql?.shortcode_media?.dimensions?.height;
+  return {
+    source: "instagram",
+    videoUrl: videoUrl || null,
+    thumbUrl: thumb || null,
+    caption,
+    author,
+    width: w,
+    height: h,
+    stats: {
+      play: data?.video_view_count ?? media?.video_view_count,
+      like: data?.like_count ?? media?.edge_media_preview_like?.count,
+      comment: data?.comment_count ?? media?.edge_media_to_comment?.count,
+      share: data?.share_count,
+    },
+  };
+}
 
 function gcd(a, b) {
   return b === 0 ? a : gcd(b, a % b);
@@ -1673,8 +1756,21 @@ function ComingSoonPage({ title, message, onBack }) {
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
       <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
-      <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 12 }}>{title}</div>
-      <div style={{ fontSize: 15, color: t.textMuted, lineHeight: 1.65 }}>{message}</div>
+      <div
+        style={{
+          background: t.card,
+          border: `1px solid ${t.border}`,
+          borderRadius: 16,
+          padding: 36,
+          boxShadow: t.shadow,
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🚧</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Coming Soon</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 14 }}>{title}</div>
+        <div style={{ fontSize: 15, color: t.textMuted, lineHeight: 1.65 }}>{message}</div>
+      </div>
     </div>
   );
 }
@@ -1703,7 +1799,7 @@ function ToolsPage({ onBack, onOpenVideo }) {
         <div style={{ fontSize: 32, marginBottom: 12 }}>🎥</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-          Paste a TikTok or Instagram video URL — download reformatted versions for Meta ads, YouTube ads, and more
+          Paste a TikTok or Instagram URL — fetch the video and see reformat options for Meta, YouTube, and TikTok ads
         </div>
       </div>
     </div>
@@ -1713,9 +1809,12 @@ function ToolsPage({ onBack, onOpenVideo }) {
 function VideoReformatter({ onBack }) {
   const { t, S } = useContext(ThemeContext);
   const [urlInput, setUrlInput] = useState("");
-  const [apiNotice, setApiNotice] = useState(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const [fetched, setFetched] = useState(null);
   const [objectUrl, setObjectUrl] = useState(null);
-  const [dims, setDims] = useState(null);
+  const [fileDims, setFileDims] = useState(null);
+  const [remoteDims, setRemoteDims] = useState(null);
   const [selected, setSelected] = useState(() => new Set());
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
@@ -1730,6 +1829,9 @@ function VideoReformatter({ onBack }) {
     };
   }, []);
 
+  /** Prefer uploaded file dimensions when both URL and file exist */
+  const displayDims = fileDims || remoteDims;
+
   const loadFile = (file) => {
     if (!file) return;
     const ok = /\.(mp4|mov|webm)$/i.test(file.name) || /video\/(mp4|quicktime|webm)/i.test(file.type);
@@ -1741,8 +1843,10 @@ function VideoReformatter({ onBack }) {
     const u = URL.createObjectURL(file);
     objectUrlRef.current = u;
     setObjectUrl(u);
-    setDims(null);
-    setApiNotice(null);
+    setFileDims(null);
+    setFetched(null);
+    setRemoteDims(null);
+    setFetchError(null);
   };
 
   const toggleFormat = (id) => {
@@ -1754,19 +1858,139 @@ function VideoReformatter({ onBack }) {
     });
   };
 
-  const handleFetch = () => {
-    setApiNotice("API connection needed — CreatorScraper API integration coming soon. For now, upload your video file directly.");
+  const handleFetch = async () => {
+    const key = getScrapeCreatorsKey();
+    if (!key) {
+      setFetchError("Add your ScrapeCreators API key in Settings");
+      setFetched(null);
+      return;
+    }
+    const url = urlInput.trim();
+    if (!url) {
+      setFetchError("Paste a video URL first.");
+      return;
+    }
+    const isTikTok = /tiktok\.com/i.test(url);
+    const isIg = /instagram\.com/i.test(url);
+    if (!isTikTok && !isIg) {
+      setFetchError("URL must be a TikTok or Instagram link.");
+      return;
+    }
+    setFetchError(null);
+    setFetched(null);
+    setRemoteDims(null);
+    setFetchLoading(true);
+    try {
+      const endpoint = isTikTok
+        ? `https://api.scrapecreators.com/v2/tiktok/video?url=${encodeURIComponent(url)}`
+        : `https://api.scrapecreators.com/v1/instagram/post?url=${encodeURIComponent(url)}`;
+      const res = await fetch(endpoint, { headers: { "x-api-key": key } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFetchError(data?.message || data?.error || `Request failed (${res.status})`);
+        return;
+      }
+      const parsed = isTikTok ? extractTikTokVideo(data) : extractInstagramVideo(data);
+      if (!parsed || (!parsed.videoUrl && !parsed.thumbUrl)) {
+        setFetchError("Could not read video from API response. The post may be private or the response format changed.");
+        return;
+      }
+      setFetched(parsed);
+      if (parsed.width && parsed.height) {
+        setRemoteDims({ w: parsed.width, h: parsed.height, ar: aspectRatioLabel(parsed.width, parsed.height) });
+      }
+    } catch (e) {
+      setFetchError(e.message || "Network error — if this persists, the API may block browser requests (CORS).");
+    } finally {
+      setFetchLoading(false);
+    }
   };
+
+  const renderFormatGrid = () => (
+    <>
+      <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12, marginTop: 8 }}>
+        Reformat options
+      </div>
+      {VIDEO_REFORMAT_GROUPS.map((group) => (
+        <div key={group.title} style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>{group.title}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+            {group.items.map((item) => {
+              const on = selected.has(item.id);
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => toggleFormat(item.id)}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "45"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = on ? t.green + "50" : t.border; }}
+                  style={{
+                    background: t.card,
+                    border: `1px solid ${on ? t.green + "50" : t.border}`,
+                    borderRadius: 12,
+                    padding: 14,
+                    cursor: "pointer",
+                    boxShadow: t.shadow,
+                    transition: "border-color 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <span
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 4,
+                        border: `1px solid ${on ? t.green : t.border}`,
+                        background: on ? t.green : "transparent",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginTop: 2,
+                      }}
+                    >
+                      {on ? <span style={{ fontSize: 11, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span> : null}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.name}</div>
+                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>
+                        {item.dimensions} · {item.ratio}
+                      </div>
+                      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, lineHeight: 1.4 }}>{item.placement}</div>
+                      {item.recommended && (
+                        <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: t.green }}>★ Recommended</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() =>
+          alert(
+            "Server-side video processing (FFmpeg) coming soon. Use the format specs above as a guide for your editor, or download the original and resize manually.",
+          )
+        }
+        style={{ ...S.genBtn, marginTop: 8 }}
+      >
+        Reformat & Download
+      </button>
+    </>
+  );
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
       <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 20 }}>← Back to Tools</button>
       <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginBottom: 8 }}>Video Reformatter</div>
-      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28, lineHeight: 1.5 }}>
-        Paste a TikTok or Instagram Reels URL, or upload a file. Select output formats for Meta, YouTube, TikTok, and general use.
+      <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 24, lineHeight: 1.5 }}>
+        Fetch a TikTok or Instagram video by URL, or upload a file. Pick target formats for ads and placements.
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch", marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: t.green, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Paste URL</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch", marginBottom: 12 }}>
         <input
           type="url"
           value={urlInput}
@@ -1776,18 +2000,95 @@ function VideoReformatter({ onBack }) {
         />
         <button
           type="button"
+          disabled={fetchLoading}
           onClick={handleFetch}
-          style={{ padding: "11px 20px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+          style={{
+            padding: "11px 20px",
+            borderRadius: 8,
+            border: "none",
+            background: t.green,
+            color: t.isLight ? "#fff" : "#000",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: fetchLoading ? "not-allowed" : "pointer",
+            flexShrink: 0,
+            opacity: fetchLoading ? 0.75 : 1,
+          }}
         >
-          Fetch Video
+          {fetchLoading ? "Fetching…" : "Fetch Video"}
         </button>
       </div>
-      {apiNotice && (
-        <div style={{ fontSize: 13, color: t.orange, marginBottom: 16, padding: "12px 14px", background: t.orange + "12", borderRadius: 8, border: `1px solid ${t.orange}35` }}>
-          {apiNotice}
+      {fetchLoading && (
+        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Fetching video data…</div>
+      )}
+      {fetchError && (
+        <div style={{ fontSize: 13, color: t.red, marginBottom: 14, padding: "12px 14px", background: t.red + "10", borderRadius: 8, border: `1px solid ${t.red}35` }}>
+          {fetchError}
         </div>
       )}
 
+      {fetched && (
+        <div
+          style={{
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 24,
+            boxShadow: t.shadow,
+          }}
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, 200px) 1fr", gap: 16, alignItems: "start" }}>
+            {fetched.thumbUrl ? (
+              <img src={fetched.thumbUrl} alt="" style={{ width: "100%", borderRadius: 10, objectFit: "cover", aspectRatio: "9/16", background: t.cardAlt }} />
+            ) : (
+              <div style={{ aspectRatio: "9/16", background: t.cardAlt, borderRadius: 10 }} />
+            )}
+            <div>
+              <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>@{fetched.author}</div>
+              <div style={{ fontSize: 14, color: t.text, lineHeight: 1.5, marginBottom: 12 }}>{fetched.caption || "—"}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
+                {fetched.stats?.play != null && <span>▶ {Number(fetched.stats.play).toLocaleString()} plays</span>}
+                {fetched.stats?.like != null && <span>♥ {Number(fetched.stats.like).toLocaleString()}</span>}
+                {fetched.stats?.share != null && <span>↗ {Number(fetched.stats.share).toLocaleString()}</span>}
+                {fetched.stats?.comment != null && <span>💬 {Number(fetched.stats.comment).toLocaleString()}</span>}
+              </div>
+              {displayDims && (
+                <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12 }}>
+                  <strong style={{ color: t.text }}>Original:</strong> {displayDims.w}×{displayDims.h}px · aspect {displayDims.ar}
+                </div>
+              )}
+              {fetched.videoUrl && (
+                <>
+                  <div style={{ marginBottom: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
+                    <video
+                      src={fetched.videoUrl}
+                      controls
+                      playsInline
+                      style={{ width: "100%", maxHeight: 360, display: "block" }}
+                      onLoadedMetadata={(e) => {
+                        const el = e.target;
+                        if (el.videoWidth && el.videoHeight) {
+                          setRemoteDims({ w: el.videoWidth, h: el.videoHeight, ar: aspectRatioLabel(el.videoWidth, el.videoHeight) });
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => window.open(fetched.videoUrl, "_blank", "noopener,noreferrer")}
+                    style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: t.blue, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Download Original
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 13, fontWeight: 600, color: t.textSecondary, marginBottom: 10 }}>Or upload a video file directly</div>
       <input ref={fileInputRef} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" style={{ display: "none" }} onChange={(e) => loadFile(e.target.files?.[0])} />
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -1801,7 +2102,7 @@ function VideoReformatter({ onBack }) {
         style={{
           border: `2px dashed ${dragOver ? t.green : t.border}`,
           borderRadius: 12,
-          padding: "28px 20px",
+          padding: "24px 20px",
           textAlign: "center",
           cursor: "pointer",
           background: dragOver ? t.green + "08" : t.cardAlt,
@@ -1809,98 +2110,32 @@ function VideoReformatter({ onBack }) {
           transition: "border-color 0.15s, background 0.15s",
         }}
       >
-        <div style={{ fontSize: 14, color: t.textSecondary, fontWeight: 600 }}>Or drag & drop / click to upload a video file</div>
+        <div style={{ fontSize: 14, color: t.textSecondary, fontWeight: 600 }}>Drag & drop or click to upload</div>
         <div style={{ fontSize: 12, color: t.textFaint, marginTop: 6 }}>.mp4, .mov, .webm</div>
       </div>
 
       {objectUrl && (
-        <>
-          <div style={{ marginBottom: 16, borderRadius: 12, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
             <video
               src={objectUrl}
               controls
               style={{ width: "100%", maxHeight: 420, display: "block" }}
               onLoadedMetadata={(e) => {
                 const el = e.target;
-                setDims({ w: el.videoWidth, h: el.videoHeight, ar: aspectRatioLabel(el.videoWidth, el.videoHeight) });
+                setFileDims({ w: el.videoWidth, h: el.videoHeight, ar: aspectRatioLabel(el.videoWidth, el.videoHeight) });
               }}
             />
           </div>
-          {dims && (
-            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 24 }}>
-              <strong style={{ color: t.text }}>Original:</strong> {dims.w}×{dims.h}px · aspect {dims.ar}
+          {fileDims && (
+            <div style={{ fontSize: 14, color: t.textMuted }}>
+              <strong style={{ color: t.text }}>Uploaded file:</strong> {fileDims.w}×{fileDims.h}px · aspect {fileDims.ar}
             </div>
           )}
-
-          <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12 }}>Reformatting options</div>
-          {VIDEO_REFORMAT_GROUPS.map((group) => (
-            <div key={group.title} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: t.green, marginBottom: 10 }}>{group.title}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
-                {group.items.map((item) => {
-                  const on = selected.has(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => toggleFormat(item.id)}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "45"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = on ? t.green + "50" : t.border; }}
-                      style={{
-                        background: t.card,
-                        border: `1px solid ${on ? t.green + "50" : t.border}`,
-                        borderRadius: 12,
-                        padding: 14,
-                        cursor: "pointer",
-                        boxShadow: t.shadow,
-                        transition: "border-color 0.15s",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                        <span
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 4,
-                            border: `1px solid ${on ? t.green : t.border}`,
-                            background: on ? t.green : "transparent",
-                            flexShrink: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginTop: 2,
-                          }}
-                        >
-                          {on ? <span style={{ fontSize: 11, fontWeight: 800, color: t.isLight ? "#fff" : "#000" }}>✓</span> : null}
-                        </span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.name}</div>
-                          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>{item.dimensions} · {item.ratio}</div>
-                          <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, lineHeight: 1.4 }}>{item.placement}</div>
-                          {item.recommended && (
-                            <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: t.green }}>★ Recommended</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          <button
-            type="button"
-            onClick={() =>
-              alert(
-                "Video processing requires server-side FFmpeg. This will be connected when deployed with a backend. For now, use the specs above as a reference guide for manual reformatting in your editor.",
-              )
-            }
-            style={{ ...S.genBtn, marginTop: 8 }}
-          >
-            Reformat & Download
-          </button>
-        </>
+        </div>
       )}
+
+      {displayDims && renderFormatGrid()}
     </div>
   );
 }
@@ -1929,6 +2164,7 @@ export default function App() {
   const [aiSteps, setAiSteps] = useState([]);
   const [storageReady, setStorageReady] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [scrapeKey, setScrapeKey] = useState("");
   const timerRef = useRef(null);
   const cancelledRef = useRef(false);
   const stepTimers = useRef([]);
@@ -1958,6 +2194,9 @@ export default function App() {
 
     const keyVal = storageGet("intake-apikey");
     if (keyVal) setApiKey(keyVal);
+
+    const scrapeVal = storageGet("intake-scrape-key");
+    if (scrapeVal) setScrapeKey(scrapeVal);
 
     setStorageReady(true);
   }, []);
@@ -2007,6 +2246,8 @@ export default function App() {
   // ── API Connection Test ──
   const [apiStatus, setApiStatus] = useState(null); // null | "testing" | "ok" | "fail"
   const [apiMsg, setApiMsg] = useState("");
+  const [scrapeStatus, setScrapeStatus] = useState(null);
+  const [scrapeMsg, setScrapeMsg] = useState("");
 
   const saveApiKey = (key) => {
     setApiKey(key);
@@ -2014,6 +2255,51 @@ export default function App() {
     setApiMsg("");
     storageSet("intake-apikey", key);
     return key;
+  };
+
+  const saveScrapeKey = (key) => {
+    setScrapeKey(key);
+    setScrapeStatus(null);
+    setScrapeMsg("");
+    storageSet("intake-scrape-key", key);
+    return key;
+  };
+
+  const testScrapeApi = async (keyOverride) => {
+    const key = keyOverride ?? scrapeKey;
+    if (!key?.trim()) {
+      setScrapeStatus("fail");
+      setScrapeMsg("Paste your ScrapeCreators API key first.");
+      return;
+    }
+    setScrapeStatus("testing");
+    setScrapeMsg("");
+    try {
+      const res = await fetch("https://api.scrapecreators.com/v1/credit-balance", {
+        headers: { "x-api-key": key.trim() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setScrapeStatus("fail");
+        setScrapeMsg(data?.message || data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      const credits =
+        data?.credits ??
+        data?.balance ??
+        data?.remaining ??
+        data?.data?.credits ??
+        (typeof data === "number" ? data : null);
+      setScrapeStatus("ok");
+      setScrapeMsg(
+        credits != null && credits !== ""
+          ? `Connected — ${Number(credits).toLocaleString()} credits remaining.`
+          : "Connected — API key is valid."
+      );
+    } catch (err) {
+      setScrapeStatus("fail");
+      setScrapeMsg(err.message || "Request failed.");
+    }
   };
 
   const getApiHeaders = (keyOverride) => {
@@ -2330,7 +2616,8 @@ export default function App() {
         {/* HOME — dashboard */}
         {!aiLoading && view === "home" && (
           <div style={{ animation: "fadeIn 0.3s ease", maxWidth: 960, margin: "0 auto", padding: "32px 24px 60px" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, marginBottom: 20, letterSpacing: "0.02em" }}>Intake Breathing — Creator Partnerships</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.textSecondary, letterSpacing: "0.02em" }}>Intake Breathing — Creator Partnerships</div>
+            <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Dashboard</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
               {[
                 {
@@ -2366,7 +2653,7 @@ export default function App() {
                   icon: "🛠️",
                   title: "Tools",
                   desc: "Video reformatter, analytics, and more",
-                  badge: "1 tool available",
+                  badge: "1 tool",
                   badgeColor: t.blue,
                   onClick: () => setView("tools"),
                 },
@@ -2520,6 +2807,63 @@ export default function App() {
               {!apiKey && !apiMsg && (
                 <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
                   Your key is stored locally in this artifact's storage. It never leaves your browser and is never sent to Anthropic's servers except to authenticate your API calls.
+                </div>
+              )}
+            </div>
+
+            {/* ScrapeCreators API Key */}
+            <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>ScrapeCreators API Key</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+                Used for fetching TikTok and Instagram videos in the Video Reformatter tool. Get your key from{" "}
+                <span style={{ color: t.blue, fontWeight: 600 }}>app.scrapecreators.com</span>.
+              </div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <input
+                  id="scrape-key-input"
+                  type="password"
+                  defaultValue={scrapeKey}
+                  placeholder="Your ScrapeCreators API key…"
+                  style={{
+                    flex: 1, padding: "11px 14px", borderRadius: 8, border: `1px solid ${scrapeKey ? t.green+"50" : t.border}`,
+                    background: t.inputBg, color: t.inputText, fontSize: 14, fontFamily: "monospace", outline: "none", boxSizing: "border-box",
+                  }}
+                  onFocus={e => { e.target.style.borderColor = t.green; }}
+                  onBlur={e => { e.target.style.borderColor = scrapeKey ? t.green+"50" : t.border; }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById("scrape-key-input");
+                    const val = el ? el.value.trim() : "";
+                    if (!val) { setScrapeStatus("fail"); setScrapeMsg("Paste your key first."); return; }
+                    saveScrapeKey(val);
+                    testScrapeApi(val);
+                  }}
+                  disabled={scrapeStatus === "testing"}
+                  style={{
+                    padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+                    cursor: scrapeStatus === "testing" ? "not-allowed" : "pointer",
+                    border: "none", background: t.green, color: t.isLight ? "#fff" : "#000",
+                    opacity: scrapeStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap",
+                  }}
+                >
+                  {scrapeStatus === "testing" ? "Testing…" : "Save & Test"}
+                </button>
+              </div>
+              {scrapeMsg && (
+                <div style={{
+                  fontSize: 12, padding: "10px 12px", borderRadius: 8, lineHeight: 1.5, fontFamily: "monospace", wordBreak: "break-word",
+                  background: scrapeStatus === "ok" ? t.green+"10" : t.red+"08",
+                  color: scrapeStatus === "ok" ? t.green : t.red,
+                  border: `1px solid ${scrapeStatus === "ok" ? t.green+"25" : t.red+"25"}`,
+                }}>
+                  {scrapeStatus === "ok" ? "✓ " : "✗ "}{scrapeMsg}
+                </div>
+              )}
+              {!scrapeKey && !scrapeMsg && (
+                <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
+                  Stored locally as <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>intake-scrape-key</code>. Sent only to ScrapeCreators when you fetch videos or test the connection.
                 </div>
               )}
             </div>
