@@ -40,8 +40,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.13.0";
+const APP_VERSION = "5.14.0";
 const CHANGELOG = [
+  { version: "5.14.0", date: "2026-04-01", changes: [
+    "Channel Pipeline dashboard is live — Overview and Partnership Spend tabs",
+    "Monthly overview with budget vs actual, ROAS, CPA across all channels",
+    "Partnership Spend — editable creator payment tracker with status, deliverables, payments",
+    "Sub-tab navigation: Overview, Spend, TTS, Instagram, UGC, YouTube, SOPs, KPIs",
+  ]},
   { version: "5.13.0", date: "2026-04-01", changes: [
     "Removed Proof Points and Required Disclosure sections from briefs",
   ]},
@@ -6277,6 +6283,14 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
           <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
         </div>
 
+        <div style={cardStyle(t.orange)} onClick={() => navigate("pipeline")}
+          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={hoverOut}>
+          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
+          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
+        </div>
+
         <div style={{ ...cardStyle(t.textFaint), cursor: "default", opacity: 0.6 }}>
           <div style={{ height: 3, width: 40, borderRadius: 2, background: t.textFaint, marginBottom: 16 }} />
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
@@ -6404,6 +6418,724 @@ function ManagerLogin({ onLogin, t }) {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHANNEL PIPELINE (Supabase: monthly_metrics, partnership_spend, weekly_metrics, sops, team_kpis)
+// ═══════════════════════════════════════════════════════════
+
+function WeeklyMetricsTab({ channel, t, S }) {
+  const [weeks, setWeeks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const channelLabels = { tts: "TikTok Shop", instagram: "Instagram", ugc: "UGC Army", youtube: "YouTube" };
+
+  useEffect(() => {
+    setLoading(true);
+    (async () => {
+      const { data } = await supabase
+        .from("weekly_metrics")
+        .select("*")
+        .eq("channel", channel)
+        .order("week_start", { ascending: false })
+        .limit(52);
+      setWeeks(data || []);
+      setLoading(false);
+    })();
+  }, [channel]);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading...</div>;
+
+  const allKeys = new Set();
+  weeks.forEach((w) => {
+    if (w.data && typeof w.data === "object") Object.keys(w.data).forEach((k) => allKeys.add(k));
+  });
+  const columns = [...allKeys].filter((k) => k !== "notes").slice(0, 12);
+
+  const fmtVal = (v) => {
+    if (v == null) return "—";
+    if (typeof v === "boolean") return v ? "✓" : "✗";
+    if (typeof v === "string") return v;
+    if (typeof v === "number") {
+      if (Math.abs(v) >= 1000000) return (v / 1000000).toFixed(1) + "M";
+      if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "K";
+      return !Number.isInteger(v) ? v.toFixed(2) : String(v);
+    }
+    return String(v);
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return "";
+    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 16 }}>{channelLabels[channel] || channel} — Weekly</div>
+      {weeks.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No weekly data for {channelLabels[channel]}</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden", minWidth: 800 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${t.border}` }}>
+                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap", position: "sticky", left: 0, background: t.card, zIndex: 1 }}>Week</th>
+                  {columns.map((col) => (
+                    <th key={col} style={{ padding: "8px 10px", textAlign: "right", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                      {col.replace(/_/g, " ")}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {weeks.map((w) => (
+                  <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}08` }}>
+                    <td style={{ padding: "8px 10px", fontSize: 12, color: t.text, fontWeight: 500, whiteSpace: "nowrap", position: "sticky", left: 0, background: t.card, zIndex: 1 }}>
+                      {fmtDate(w.week_start)} – {fmtDate(w.week_end)}
+                    </td>
+                    {columns.map((col) => (
+                      <td key={col} style={{ padding: "8px 10px", textAlign: "right", color: t.text, fontVariantNumeric: "tabular-nums" }}>
+                        {fmtVal(w.data?.[col])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SOPsTab({ t, S }) {
+  const [sops, setSops] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deptFilter, setDeptFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("sops").select("*").order("department", { ascending: true }).order("sort_order", { ascending: true });
+      setSops(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  const toggleComplete = async (id, current) => {
+    const { error } = await supabase.from("sops").update({ completed: !current }).eq("id", id);
+    if (!error) setSops((prev) => prev.map((s) => (s.id === id ? { ...s, completed: !current } : s)));
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading SOPs...</div>;
+
+  const departments = [...new Set(sops.map((s) => s.department).filter(Boolean))];
+  const owners = [...new Set(sops.map((s) => s.owner).filter(Boolean))];
+  const filtered = sops.filter(
+    (s) => (deptFilter === "all" || s.department === deptFilter) && (ownerFilter === "all" || s.owner === ownerFilter),
+  );
+
+  const grouped = {};
+  filtered.forEach((s) => {
+    const dept = s.department || "Other";
+    if (!grouped[dept]) grouped[dept] = {};
+    const sec = s.section || "General";
+    if (!grouped[dept][sec]) grouped[dept][sec] = [];
+    grouped[dept][sec].push(s);
+  });
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Standard Operating Procedures</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+            <option value="all">All Departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {String(d).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+              </option>
+            ))}
+          </select>
+          <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+            <option value="all">All Owners</option>
+            {owners.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {Object.entries(grouped).map(([dept, sections]) => {
+        const deptItems = Object.values(sections).flat();
+        const doneCount = deptItems.filter((s) => s.completed).length;
+        const pct = deptItems.length > 0 ? Math.round((doneCount / deptItems.length) * 100) : 0;
+        const deptLabel = String(dept).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+        return (
+          <div key={dept} style={{ marginBottom: 28 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{deptLabel}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 100, height: 4, borderRadius: 2, background: t.border, overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", background: t.green, borderRadius: 2 }} />
+                </div>
+                <span style={{ fontSize: 11, color: t.textFaint }}>{pct}%</span>
+              </div>
+            </div>
+
+            {Object.entries(sections).map(([sec, items]) => (
+              <div key={sec} style={{ marginBottom: 12 }}>
+                {sec !== "General" ? (
+                  <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6, marginLeft: 4 }}>{sec}</div>
+                ) : null}
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => toggleComplete(item.id, item.completed)}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", borderRadius: 6, cursor: "pointer", marginBottom: 2 }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = t.cardAlt;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <span style={{ fontSize: 14, color: item.completed ? t.green : t.textFaint, flexShrink: 0, marginTop: 1 }}>{item.completed ? "✓" : "☐"}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: item.completed ? t.textMuted : t.text, textDecoration: item.completed ? "line-through" : "none" }}>{item.title}</div>
+                      {item.description ? <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.description}</div> : null}
+                    </div>
+                    {item.owner ? <span style={{ fontSize: 10, color: t.textFaint, whiteSpace: "nowrap", flexShrink: 0 }}>{item.owner}</span> : null}
+                    {item.sop_link && item.sop_link !== "Link" ? (
+                      <a href={item.sop_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 10, color: t.blue, textDecoration: "none", flexShrink: 0 }}>
+                        Link
+                      </a>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TeamKPIsTab({ t, S }) {
+  const [kpis, setKpis] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [memberFilter, setMemberFilter] = useState("all");
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("team_kpis").select("*").order("week_start", { ascending: false }).limit(200);
+      setKpis(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading KPIs...</div>;
+
+  const members = [...new Set(kpis.map((k) => k.team_member).filter(Boolean))];
+  const filtered = memberFilter === "all" ? kpis : kpis.filter((k) => k.team_member === memberFilter);
+
+  const allKeys = new Set();
+  filtered.forEach((k) => {
+    if (k.data && typeof k.data === "object")
+      Object.keys(k.data).forEach((key) => {
+        if (typeof k.data[key] === "number") allKeys.add(key);
+      });
+  });
+  const columns = [...allKeys].slice(0, 10);
+
+  const fmtVal = (v) => {
+    if (v == null) return "—";
+    if (typeof v === "boolean") return v ? "✓" : "✗";
+    if (typeof v === "number" && Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "K";
+    return String(v);
+  };
+  const fmtDate = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>Team KPIs</div>
+        <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+          <option value="all">All Members</option>
+          {members.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No KPI data</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden", minWidth: 700 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${t.border}` }}>
+                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", position: "sticky", left: 0, background: t.card }}>Week</th>
+                  {memberFilter === "all" ? <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Member</th> : null}
+                  {columns.map((col) => (
+                    <th key={col} style={{ padding: "8px 10px", textAlign: "right", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                      {col.replace(/_/g, " ")}
+                    </th>
+                  ))}
+                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>Wins</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((k) => (
+                  <tr key={k.id} style={{ borderBottom: `1px solid ${t.border}08` }}>
+                    <td style={{ padding: "8px 10px", color: t.text, whiteSpace: "nowrap", position: "sticky", left: 0, background: t.card }}>{fmtDate(k.week_start)}</td>
+                    {memberFilter === "all" ? <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11 }}>{k.team_member}</td> : null}
+                    {columns.map((col) => (
+                      <td key={col} style={{ padding: "8px 10px", textAlign: "right", color: t.text, fontVariantNumeric: "tabular-nums" }}>
+                        {fmtVal(k.data?.[col])}
+                      </td>
+                    ))}
+                    <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.wins || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChannelPipeline({ navigate, creators, t, S }) {
+  const [tab, setTab] = useState("overview");
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [spendData, setSpendData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [spendFilter, setSpendFilter] = useState("all");
+  const [editing, setEditing] = useState(null);
+  const [editDraft, setEditDraft] = useState({});
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: monthly }, { data: spend }] = await Promise.all([
+        supabase.from("monthly_metrics").select("*").order("month", { ascending: false }),
+        supabase.from("partnership_spend").select("*").order("month", { ascending: false }).order("section", { ascending: true }),
+      ]);
+      setMonthlyData(monthly || []);
+      setSpendData(spend || []);
+      if (monthly?.length > 0) {
+        const months = [...new Set(monthly.map((m) => m.month))].sort().reverse();
+        setSelectedMonth(months[0]);
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "spend", label: "Spend" },
+    { id: "tts", label: "TTS" },
+    { id: "instagram", label: "Instagram" },
+    { id: "ugc", label: "UGC" },
+    { id: "youtube", label: "YouTube" },
+    { id: "sops", label: "SOPs" },
+    { id: "kpis", label: "Team KPIs" },
+  ];
+
+  const months = [...new Set(monthlyData.map((m) => m.month))].sort().reverse();
+  const currentMonthData = monthlyData.filter((m) => m.month === selectedMonth);
+  const currentSpend = spendData.filter((s) => s.month === selectedMonth);
+
+  const fmt = (n) => {
+    if (n == null || n === 0) return "—";
+    if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(1) + "M";
+    if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
+    return "$" + Math.round(n).toLocaleString();
+  };
+  const fmtNum = (n) => {
+    if (n == null) return "—";
+    if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + "M";
+    if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + "K";
+    return Math.round(n).toLocaleString();
+  };
+  const fmtMonth = (m) => {
+    if (!m) return "";
+    const d = new Date(m + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+
+  const saveSpendRow = async (id) => {
+    const updates = { ...editDraft };
+    for (const k of ["pay", "new_pay", "pl", "paid_pl", "organic_views", "ad_views", "ad_spend", "purchase_value", "roas", "num_videos"]) {
+      if (updates[k] !== undefined) {
+        updates[k] = updates[k] === "" || updates[k] === null ? null : Number(updates[k]);
+      }
+    }
+    if (updates.deliverable_met !== undefined) updates.deliverable_met = updates.deliverable_met === true || updates.deliverable_met === "true";
+    if (updates.creator_paid !== undefined) updates.creator_paid = updates.creator_paid === true || updates.creator_paid === "true";
+
+    const { error } = await supabase.from("partnership_spend").update(updates).eq("id", id);
+    if (error) {
+      alert("Save failed: " + error.message);
+      return;
+    }
+    setSpendData((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
+    setEditing(null);
+    setEditDraft({});
+  };
+
+  if (loading) return <div style={{ padding: 60, textAlign: "center", color: t.textMuted }}>Loading pipeline data...</div>;
+
+  return (
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Channel Pipeline</div>
+          <div style={{ fontSize: 13, color: t.textMuted }}>Performance, spend, and operations across all channels</div>
+        </div>
+        <select
+          value={selectedMonth || ""}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          disabled={months.length === 0}
+          style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+        >
+          {months.map((m) => (
+            <option key={m} value={m}>
+              {fmtMonth(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, overflowX: "auto", borderBottom: `1px solid ${t.border}`, paddingBottom: 0 }}>
+        {tabs.map((tb) => (
+          <button
+            key={tb.id}
+            type="button"
+            onClick={() => setTab(tb.id)}
+            style={{
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: tab === tb.id ? 700 : 500,
+              color: tab === tb.id ? t.green : t.textMuted,
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              borderBottom: tab === tb.id ? `2px solid ${t.green}` : "2px solid transparent",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {tb.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 16 }}>{fmtMonth(selectedMonth) || "Select a month"}</div>
+          {currentMonthData.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: t.textFaint, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10 }}>No monthly metrics for this period</div>
+          ) : (
+            <>
+              {(() => {
+                const totals = currentMonthData.reduce(
+                  (acc, m) => ({
+                    budget: (acc.budget || 0) + (m.budget || 0),
+                    spend: (acc.spend || 0) + (m.actual_spend || 0),
+                    pv: (acc.pv || 0) + (m.purchase_value || 0),
+                    adSpend: (acc.adSpend || 0) + (m.ad_spend || 0),
+                    adViews: (acc.adViews || 0) + (m.ad_views || 0),
+                  }),
+                  {},
+                );
+                const roas = totals.adSpend > 0 ? totals.pv / totals.adSpend : null;
+
+                return (
+                  <div style={{ display: "flex", gap: 14, marginBottom: 28, flexWrap: "wrap" }}>
+                    {[
+                      { label: "Total Budget", value: fmt(totals.budget), color: t.textMuted },
+                      { label: "Total Spend", value: fmt(totals.spend), color: t.text },
+                      { label: "Purchase Value", value: fmt(totals.pv), color: t.green },
+                      { label: "ROAS", value: roas ? roas.toFixed(2) + "x" : "—", color: roas == null ? t.textMuted : roas > 1 ? t.green : t.red },
+                      { label: "Ad Views", value: fmtNum(totals.adViews), color: t.blue },
+                    ].map((card, i) => (
+                      <div key={i} style={{ flex: "1 1 140px", minWidth: 130, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: card.color }}>{card.value}</div>
+                        <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{card.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>By Channel</div>
+              <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${t.border}` }}>
+                      {["Channel", "Budget", "Actual", "Δ", "Purchase Value", "Ad Spend", "ROAS", "Ad Views"].map((h) => (
+                        <th key={h} style={{ padding: "10px 12px", textAlign: h === "Channel" ? "left" : "right", fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentMonthData.map((m, i) => {
+                      const delta = (m.actual_spend || 0) - (m.budget || 0);
+                      const roas = m.ad_spend > 0 ? m.purchase_value / m.ad_spend : null;
+                      return (
+                        <tr key={i} style={{ borderBottom: `1px solid ${t.border}08` }}>
+                          <td style={{ padding: "10px 12px", fontWeight: 600, color: t.text }}>{m.channel}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.textMuted }}>{fmt(m.budget)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.text }}>{fmt(m.actual_spend)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: delta > 0 ? t.red : delta < 0 ? t.green : t.textFaint }}>{delta !== 0 ? (delta > 0 ? "+" : "") + fmt(delta) : "—"}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.green, fontWeight: 600 }}>{fmt(m.purchase_value)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.textMuted }}>{fmt(m.ad_spend)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: roas && roas > 1 ? t.green : t.textFaint, fontWeight: 600 }}>{roas ? roas.toFixed(2) + "x" : "—"}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.textMuted }}>{fmtNum(m.ad_views)}</td>
+                        </tr>
+                      );
+                    })}
+                    {(() => {
+                      const tot = currentMonthData.reduce(
+                        (a, m) => ({
+                          budget: (a.budget || 0) + (m.budget || 0),
+                          spend: (a.spend || 0) + (m.actual_spend || 0),
+                          pv: (a.pv || 0) + (m.purchase_value || 0),
+                          ads: (a.ads || 0) + (m.ad_spend || 0),
+                          av: (a.av || 0) + (m.ad_views || 0),
+                        }),
+                        {},
+                      );
+                      const r = tot.ads > 0 ? tot.pv / tot.ads : null;
+                      return (
+                        <tr style={{ borderTop: `2px solid ${t.border}`, fontWeight: 700 }}>
+                          <td style={{ padding: "10px 12px", color: t.text }}>Total</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.text }}>{fmt(tot.budget)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.text }}>{fmt(tot.spend)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right" }}>—</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.green }}>{fmt(tot.pv)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.text }}>{fmt(tot.ads)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: r && r > 1 ? t.green : t.textFaint }}>{r ? r.toFixed(2) + "x" : "—"}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: t.text }}>{fmtNum(tot.av)}</td>
+                        </tr>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {currentMonthData.filter((m) => m.notes).length > 0 ? (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Notes</div>
+                  {currentMonthData
+                    .filter((m) => m.notes)
+                    .map((m, i) => (
+                      <div key={i} style={{ fontSize: 13, color: t.textMuted, marginBottom: 6, lineHeight: 1.5 }}>
+                        <strong style={{ color: t.text }}>{m.channel}:</strong> {m.notes}
+                      </div>
+                    ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "spend" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>
+              {fmtMonth(selectedMonth)} — Partnership Spend
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select value={spendFilter} onChange={(e) => setSpendFilter(e.target.value)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                <option value="all">All Sections</option>
+                {[...new Set(currentSpend.map((s) => s.section).filter(Boolean))].sort().map((s) => (
+                  <option key={s} value={s}>
+                    {String(s).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {(() => {
+            const filtered = spendFilter === "all" ? currentSpend : currentSpend.filter((s) => s.section === spendFilter);
+            const sections = [...new Set(filtered.map((s) => s.section))];
+
+            return sections.map((section) => {
+              const rows = filtered.filter((s) => s.section === section);
+              const sectionTotal = rows.reduce((sum, r) => sum + (r.pay || 0), 0);
+              const sectionLabel = String(section).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+              return (
+                <div key={section} style={{ marginBottom: 24 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em" }}>{sectionLabel}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{fmt(sectionTotal)}</div>
+                  </div>
+                  <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, overflow: "hidden" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${t.border}` }}>
+                          {["Status", "Creator", "Pay", "Platform", "Type", "Videos", "Delivered", "Paid"].map((h) => (
+                            <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase" }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r) => {
+                          const isEditing = editing === r.id;
+                          const statusColors = {
+                            Active: t.green,
+                            Pause: t.orange,
+                            "Under Review": t.blue,
+                            Complete: t.green,
+                            "": t.textFaint,
+                          };
+                          const sc = statusColors[r.status] || t.textFaint;
+
+                          const matchedCreator = creators.find(
+                            (c) =>
+                              c.handle?.toLowerCase() === r.creator_handle?.toLowerCase() ||
+                              c.handle?.toLowerCase() === ("@" + String(r.creator_handle || "").replace("@", "")).toLowerCase(),
+                          );
+
+                          return (
+                            <tr
+                              key={r.id}
+                              style={{ borderBottom: `1px solid ${t.border}08`, cursor: isEditing ? "default" : "pointer" }}
+                              onDoubleClick={() => {
+                                if (!isEditing) {
+                                  setEditing(r.id);
+                                  setEditDraft({});
+                                }
+                              }}
+                            >
+                              <td style={{ padding: "8px 10px" }}>
+                                {isEditing ? (
+                                  <select
+                                    value={editDraft.status ?? r.status ?? ""}
+                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, status: e.target.value }))}
+                                    style={{ padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+                                  >
+                                    {["", "Active", "Pause", "Under Review", "Complete"].map((s) => (
+                                      <option key={s || "empty"} value={s}>
+                                        {s || "—"}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8, background: sc + "15", color: sc }}>{r.status || "—"}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: "8px 10px" }}>
+                                {matchedCreator ? (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate("creatorDetail", { creatorId: matchedCreator.id });
+                                    }}
+                                    style={{ color: t.green, fontWeight: 600, cursor: "pointer", textDecoration: "none" }}
+                                  >
+                                    {r.creator_handle}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: t.text, fontWeight: 600 }}>{r.creator_handle}</span>
+                                )}
+                                {r.creator_name ? <div style={{ fontSize: 10, color: t.textFaint }}>{r.creator_name}</div> : null}
+                              </td>
+                              <td style={{ padding: "8px 10px" }}>
+                                {isEditing ? (
+                                  <input
+                                    value={editDraft.pay ?? r.pay ?? ""}
+                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, pay: e.target.value }))}
+                                    style={{ width: 60, padding: "4px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+                                  />
+                                ) : (
+                                  <span style={{ color: t.text }}>{r.pay != null ? `$${Number(r.pay).toLocaleString()}` : "—"}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11 }}>{r.platform || "—"}</td>
+                              <td style={{ padding: "8px 10px", color: t.textMuted, fontSize: 11 }}>{r.content_type || "—"}</td>
+                              <td style={{ padding: "8px 10px", color: t.textMuted, textAlign: "center" }}>{r.num_videos ?? "—"}</td>
+                              <td style={{ padding: "8px 10px", textAlign: "center" }}>
+                                {isEditing ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={editDraft.deliverable_met ?? r.deliverable_met ?? false}
+                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, deliverable_met: e.target.checked }))}
+                                  />
+                                ) : (
+                                  <span style={{ color: r.deliverable_met ? t.green : t.textFaint }}>{r.deliverable_met ? "✓" : "☐"}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: "8px 10px", textAlign: "center" }}>
+                                {isEditing ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={editDraft.creator_paid ?? r.creator_paid ?? false}
+                                    onChange={(e) => setEditDraft((prev) => ({ ...prev, creator_paid: e.target.checked }))}
+                                  />
+                                ) : (
+                                  <span style={{ color: r.creator_paid ? t.green : t.textFaint }}>{r.creator_paid ? "✓" : "☐"}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {rows.some((r) => editing === r.id) ? (
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button type="button" onClick={() => saveSpendRow(editing)} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(null);
+                          setEditDraft({});
+                        }}
+                        style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}
+                      >
+                        Cancel
+                      </button>
+                      <span style={{ fontSize: 11, color: t.textFaint, alignSelf: "center" }}>Double-click any row to edit</span>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            });
+          })()}
+
+          {currentSpend.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No partnership spend data for {fmtMonth(selectedMonth)}</div> : null}
+        </div>
+      )}
+
+      {["tts", "instagram", "ugc", "youtube"].includes(tab) && <WeeklyMetricsTab channel={tab} t={t} S={S} />}
+
+      {tab === "sops" && <SOPsTab t={t} S={S} />}
+      {tab === "kpis" && <TeamKPIsTab t={t} S={S} />}
     </div>
   );
 }
@@ -7914,11 +8646,12 @@ export default function App() {
                   <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{library.length} briefs · {activeCreatorCount} creators</div>
                 </div>
 
-                <div style={{ ...cardStyle(t.orange), cursor: "default", opacity: 0.6 }}>
+                <div style={cardStyle(t.orange)} onClick={() => navigate("pipeline")}
+                  onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={hoverOut}>
                   <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Track outreach, responses, and partnerships</div>
-                  <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
+                  <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
                 </div>
 
                 <div style={{ ...cardStyle(t.purple), cursor: "default", opacity: 0.6 }}>
@@ -7955,11 +8688,7 @@ export default function App() {
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "pipeline" && (
-          <ComingSoonPage
-            title="Channel Pipeline"
-            message="Channel Pipeline — Coming Soon. Track creator outreach, responses, and partnership status."
-            onBack={() => navigate("home")}
-          />
+          <ChannelPipeline navigate={navigate} creators={creators} t={t} S={S} />
         )}
         {!aiLoading && isCreatorViewAllowed && view === "influencer" && (
           <ComingSoonPage
