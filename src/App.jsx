@@ -4,8 +4,11 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext,
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.0.1";
 const CHANGELOG = [
+  { version: "2.0.1", date: "2025-04-01", changes: [
+    "Code audit cleanup — removed dead code, fixed bugs, eliminated redundancies",
+  ]},
   { version: "2.0.0", date: "2025-04-01", changes: [
     "Homepage reworked into multi-section dashboard with card navigation",
     "New sections: UGC Army, Channel Pipeline, Influencer Buys, Tools",
@@ -111,7 +114,6 @@ const THEMES = {
     text: "#ffffff", textSecondary: "#cccccc", textMuted: "#999999", textFaint: "#666666",
     inputBg: "#0d0d0d", inputText: "#ffffff",
     green: "#00FEA9", blue: "#63B7BA", red: "#ff6b6b", orange: "#ffaa3b", purple: "#c084fc",
-    heroGradient: "linear-gradient(135deg,#ffffff,#666666)",
     discBg: "rgba(0,0,0,0.3)",
     scrollThumb: "#222",
     isLight: false,
@@ -124,7 +126,6 @@ const THEMES = {
     text: "#0a0a0a", textSecondary: "#1a1a1a", textMuted: "#444444", textFaint: "#707070",
     inputBg: "#ffffff", inputText: "#0a0a0a",
     green: "#008c56", blue: "#2a7a7d", red: "#c62828", orange: "#b86e00", purple: "#6d28d9",
-    heroGradient: "linear-gradient(135deg,#0a0a0a,#555555)",
     discBg: "rgba(0,0,0,0.05)",
     scrollThumb: "#aaa",
     isLight: true,
@@ -149,11 +150,6 @@ function getS(t) {
     navBtn: (a) => ({ padding: "7px 14px", borderRadius: 8, border: "none", background: a ? t.green+"18" : "transparent", color: a ? t.green : t.textFaint, fontSize: 13, fontWeight: 600, cursor: "pointer" }),
     themeToggle: { width: 36, height: 20, borderRadius: 10, border: "none", cursor: "pointer", position: "relative", background: t.border, display: "flex", alignItems: "center", padding: 2, transition: "background 0.2s" },
     themeKnob: (isDark) => ({ width: 16, height: 16, borderRadius: 8, background: t.green, transition: "transform 0.2s", transform: isDark ? "translateX(16px)" : "translateX(0)" }),
-    hero: { textAlign: "center", padding: "72px 24px 48px" },
-    heroTag: { display: "inline-block", padding: "5px 14px", borderRadius: 20, background: t.green + (t.isLight ? "18" : "15"), color: t.green, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 20, border: t.isLight ? `1px solid ${t.green}30` : "none" },
-    heroTitle: { fontSize: 40, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1, marginBottom: 14, background: t.heroGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
-    heroDesc: { fontSize: 16, color: t.textMuted, lineHeight: 1.6, maxWidth: 520, margin: "0 auto 36px" },
-    heroActions: { display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" },
     btnP: { padding: "13px 28px", borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: "pointer" },
     btnS: { padding: "13px 28px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.text, fontSize: 14, fontWeight: 600, cursor: "pointer" },
     formWrap: { maxWidth: 720, margin: "0 auto", padding: "40px 24px 80px" },
@@ -303,15 +299,6 @@ function genShareId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : `share-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
-
-function escapeHtml(str) {
-  if (str == null) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
@@ -471,8 +458,6 @@ const DEFAULTS = {
   bannedClaims: [...BANNED_CLAIMS.slice(0, 5)],
 };
 
-const PREFILL = { ...DEFAULTS };
-
 // ═══════════════════════════════════════════════════════════
 // BRIEF GENERATOR
 // ═══════════════════════════════════════════════════════════
@@ -599,7 +584,7 @@ function generateBrief(d) {
 
 const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const { t, S } = useContext(ThemeContext);
-  const pf = prefill || PREFILL;
+  const pf = prefill || DEFAULTS;
   const [ageRange, setAgeRange] = useState(pf.ageRange ?? DEFAULTS.ageRange);
   const [gender, setGender] = useState(pf.gender ?? DEFAULTS.gender);
   const [selectedStats, setSelectedStats] = useState([...(pf.selectedStats ?? DEFAULTS.selectedStats)]);
@@ -731,13 +716,18 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       const match = text.match(/\{[\s\S]*\}/);
       if (match) {
         try {
+          const normalize = (s) => String(s ?? "").trim().toLowerCase();
           const result = JSON.parse(match[0]);
           if (Array.isArray(result.approved) && result.approved.length > 0) {
-            const ok = result.approved.filter((c) => APPROVED_CLAIMS.includes(c));
+            const ok = result.approved.filter((c) =>
+              APPROVED_CLAIMS.some((ac) => normalize(ac) === normalize(c))
+            );
             if (ok.length > 0) setSelectedApproved(ok);
           }
           if (Array.isArray(result.banned) && result.banned.length > 0) {
-            const ok = result.banned.filter((c) => BANNED_CLAIMS.includes(c));
+            const ok = result.banned.filter((c) =>
+              BANNED_CLAIMS.some((bc) => normalize(bc) === normalize(c))
+            );
             if (ok.length > 0) setSelectedBanned(ok);
           }
         } catch { /* ignore malformed JSON */ }
@@ -1580,7 +1570,12 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
   };
 
   const copyShareLink = () => {
-    const id = fd.shareId || "";
+    const id = (fd.shareId && String(fd.shareId).trim()) || "";
+    if (!id) {
+      setShareToast("No share ID on this brief — go back and generate again");
+      setTimeout(() => setShareToast(null), 3500);
+      return;
+    }
     navigator.clipboard.writeText(id).then(() => {
       setShareToast("Share link copied — creator view coming soon");
       setTimeout(() => setShareToast(null), 3500);
@@ -2218,7 +2213,8 @@ export default function App() {
   const ctx = { t, S };
 
   const saveBrief = (brief, formData) => {
-    const shareId = formData.shareId || genShareId();
+    const existing = formData.shareId != null && String(formData.shareId).trim() !== "";
+    const shareId = existing ? String(formData.shareId).trim() : genShareId();
     const fd = { ...formData, shareId };
     setCurrentBrief(brief);
     setCurrentFormData(fd);
@@ -2390,7 +2386,7 @@ export default function App() {
     // IB-Ai mode
     const liveKey = localStorage.getItem("intake-apikey") || "";
     if (!liveKey) {
-      setAiError("No API key set. Go to ⚙ Settings and add your Anthropic API key.");
+      setAiError("No API key set. Go to Settings and add your Anthropic API key.");
       return;
     }
     cancelledRef.current = false;
@@ -2407,7 +2403,12 @@ export default function App() {
       const response = await Promise.race([
         fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: getApiHeaders(liveKey),
+          headers: {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "x-api-key": liveKey,
+          },
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 3000,
@@ -2421,7 +2422,7 @@ export default function App() {
       if (!response.ok) {
         const e = await response.json().catch(() => ({}));
         const msg = e.error?.message || `API returned ${response.status}`;
-        if (response.status === 401) throw new Error("Invalid API key. Check ⚙ Settings.");
+        if (response.status === 401) throw new Error("Invalid API key. Check Settings.");
         throw new Error(msg);
       }
 
