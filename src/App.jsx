@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext, Fragment } from "react";
 import SEED_CREATORS from "./seedCreators.json";
 // If API key sync fails, ensure `app_settings` exists — run the SQL block in supabase/schema.sql in the Supabase SQL Editor.
 import {
@@ -40,8 +40,15 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.14.0";
+const APP_VERSION = "5.15.0";
 const CHANGELOG = [
+  { version: "5.15.0", date: "2026-04-01", changes: [
+    "TTS Weekly tab rebuilt — exact match of Google Sheet with all 20+ columns",
+    "Monthly and quarterly auto-totals",
+    "Editable cells — double-click to edit, Enter to save",
+    "Add Week form for new data entry",
+    "Calculated fields auto-compute (S/V Ratio, CPVideo, Net Per Video, PR %)",
+  ]},
   { version: "5.14.0", date: "2026-04-01", changes: [
     "Channel Pipeline dashboard is live — Overview and Partnership Spend tabs",
     "Monthly overview with budget vs actual, ROAS, CPA across all channels",
@@ -6426,6 +6433,572 @@ function ManagerLogin({ onLogin, t }) {
 // CHANNEL PIPELINE (Supabase: monthly_metrics, partnership_spend, weekly_metrics, sops, team_kpis)
 // ═══════════════════════════════════════════════════════════
 
+const TTS_WEEKLY_MILESTONE_KEY = "_milestone";
+
+function ttsIsMilestoneRow(w) {
+  return w?.data && typeof w.data[TTS_WEEKLY_MILESTONE_KEY] === "string" && String(w.data[TTS_WEEKLY_MILESTONE_KEY]).trim();
+}
+
+function ttsNormalizeData(raw) {
+  const d = raw && typeof raw === "object" ? raw : {};
+  const n = (x) => (x === "" || x == null ? null : Number(x));
+  return {
+    sf_invites: n(d.sf_invites),
+    samples_requested: n(d.samples_requested ?? d.samples_sent),
+    samples_approved: n(d.samples_approved),
+    videos_posted: n(d.videos_posted),
+    sample_cost: n(d.sample_cost),
+    impressions: n(d.impressions),
+    organic_impressions: n(d.organic_impressions),
+    ad_impressions: n(d.ad_impressions),
+    tts_gmv: n(d.tts_gmv),
+    ad_spend: n(d.ad_spend),
+    attribution_total: n(d.attribution_total ?? d.attribution_val),
+    cs_inbox: n(d.cs_inbox),
+    discord: n(d.discord),
+    auto_approved: n(d.auto_approved),
+    post_rate: n(d.post_rate),
+  };
+}
+
+function ttsCalc(d) {
+  const vp = d.videos_posted || 0;
+  const sa = d.samples_approved || 0;
+  const out = { ...d };
+  out.sv_ratio = vp > 0 ? sa / vp : null;
+  out.cp_video = vp > 0 && d.sample_cost != null ? d.sample_cost / vp : null;
+  out.net_per_video = vp > 0 && d.tts_gmv != null ? d.tts_gmv / vp : null;
+  out.attribution_per_video = vp > 0 && d.attribution_total != null ? d.attribution_total / vp : null;
+  out.pr_pct = sa > 0 && d.post_rate != null ? d.post_rate / sa : null;
+  return out;
+}
+
+function ttsSumNormalizedWeeks(weekRows) {
+  const sum = {
+    sf_invites: 0,
+    samples_requested: 0,
+    samples_approved: 0,
+    videos_posted: 0,
+    sample_cost: 0,
+    impressions: 0,
+    organic_impressions: 0,
+    ad_impressions: 0,
+    tts_gmv: 0,
+    ad_spend: 0,
+    attribution_total: 0,
+    cs_inbox: 0,
+    discord: 0,
+    auto_approved: 0,
+    post_rate: 0,
+  };
+  for (const w of weekRows) {
+    const n = ttsNormalizeData(w.data);
+    for (const k of Object.keys(sum)) {
+      if (n[k] != null && Number.isFinite(n[k])) sum[k] += n[k];
+    }
+  }
+  return ttsCalc(sum);
+}
+
+function TTSWeeklyTab({ t }) {
+  const TTS_COLUMNS = [
+    { key: "sf_invites", label: "SF 📬", type: "number", editable: true, width: 80 },
+    { key: "sf_change_pct", label: "%", type: "pct", editable: false, width: 55 },
+    { key: "samples_requested", label: "Sample 📥", type: "number", editable: true, width: 80 },
+    { key: "samples_approved", label: "Samples ☑️", type: "number", editable: true, width: 80 },
+    { key: "videos_posted", label: "🎥 Posted", type: "number", editable: true, width: 75 },
+    { key: "sample_cost", label: "Sample 💰", type: "currency", editable: true, width: 85 },
+    { key: "sv_ratio", label: "S/V Ratio", type: "decimal", editable: false, width: 70 },
+    { key: "cp_video", label: "CPVideo", type: "currency", editable: false, width: 75 },
+    { key: "impressions", label: "Impressions", type: "number", editable: true, width: 95 },
+    { key: "organic_impressions", label: "Organic Imp", type: "number", editable: true, width: 80 },
+    { key: "ad_impressions", label: "Ad Imp", type: "number", editable: true, width: 80 },
+    { key: "tts_gmv", label: "TTS GMV", type: "currency", editable: true, width: 90 },
+    { key: "ad_spend", label: "Ad Spend", type: "currency", editable: true, width: 90 },
+    { key: "net_per_video", label: "Net/Video", type: "currency", editable: false, width: 80 },
+    { key: "attribution_per_video", label: "Attribution", type: "currency", editable: false, width: 80 },
+    { key: "attribution_total", label: "Attribution $", type: "currency", editable: true, width: 85 },
+    { key: "cs_inbox", label: "CS 📥", type: "number", editable: true, width: 60 },
+    { key: "discord", label: "Discord", type: "number", editable: true, width: 65 },
+    { key: "auto_approved", label: "Auto ☑️", type: "number", editable: true, width: 65 },
+    { key: "post_rate", label: "Post Rate", type: "number", editable: true, width: 75 },
+    { key: "pr_pct", label: "PR %", type: "pct", editable: false, width: 55 },
+  ];
+
+  const [weeks, setWeeks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const [editVal, setEditVal] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newWeek, setNewWeek] = useState({});
+  const skipSaveBlurRef = useRef(false);
+
+  const editableKeys = useMemo(() => TTS_COLUMNS.filter((c) => c.editable).map((c) => c.key), []);
+
+  useEffect(() => {
+    setLoading(true);
+    (async () => {
+      const { data, error } = await supabase.from("weekly_metrics").select("*").eq("channel", "tts").order("week_start", { ascending: false });
+      if (error) console.error("[TTS] Load error:", error);
+      setWeeks(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  const fmtVal = (val, type) => {
+    if (val == null || val === "") return "—";
+    const n = Number(val);
+    if (!Number.isFinite(n)) return "—";
+    if (type === "currency") {
+      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toFixed(2) + "M";
+      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
+      return "$" + n.toFixed(n % 1 === 0 ? 0 : 2);
+    }
+    if (type === "pct") return (n * 100).toFixed(1) + "%";
+    if (type === "decimal") return n.toFixed(2);
+    if (type === "number") {
+      if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + "M";
+      if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + "K";
+      return n.toLocaleString();
+    }
+    return String(val);
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return "";
+    const dt = new Date(String(d).substring(0, 10) + "T00:00:00");
+    return dt.getMonth() + 1 + "/" + String(dt.getDate()).padStart(2, "0");
+  };
+
+  const sortedAsc = useMemo(() => [...weeks].sort((a, b) => String(a.week_start).localeCompare(String(b.week_start))), [weeks]);
+  const prevWeekMap = useMemo(() => {
+    const m = new Map();
+    const dataOnly = sortedAsc.filter((w) => !ttsIsMilestoneRow(w));
+    for (let i = 0; i < dataOnly.length; i++) {
+      if (i > 0) m.set(dataOnly[i].id, dataOnly[i - 1]);
+    }
+    return m;
+  }, [sortedAsc]);
+
+  const weekWithWow = (w) => {
+    const raw = w.data || {};
+    const base = ttsCalc(ttsNormalizeData(raw));
+    const prev = prevWeekMap.get(w.id);
+    if (prev) {
+      const psf = ttsNormalizeData(prev.data).sf_invites;
+      const csf = base.sf_invites;
+      if (psf != null && psf > 0 && csf != null) base.sf_change_pct = (csf - psf) / psf;
+    }
+    return base;
+  };
+
+  const monthGroups = useMemo(() => {
+    const groups = [];
+    let currentMonth = null;
+    let currentGroup = null;
+    for (const w of sortedAsc) {
+      if (!w.week_start) continue;
+      const monthKey = String(w.week_start).substring(0, 7);
+      if (monthKey !== currentMonth) {
+        if (currentGroup) groups.push(currentGroup);
+        currentMonth = monthKey;
+        currentGroup = { month: monthKey, weeks: [] };
+      }
+      currentGroup.weeks.push(w);
+    }
+    if (currentGroup) groups.push(currentGroup);
+    return groups;
+  }, [sortedAsc]);
+
+  const monthTotalsMap = useMemo(() => {
+    const map = {};
+    for (const g of monthGroups) {
+      const dataWeeks = g.weeks.filter((w) => !ttsIsMilestoneRow(w));
+      map[g.month] = ttsSumNormalizedWeeks(dataWeeks);
+    }
+    return map;
+  }, [monthGroups]);
+
+  const quarterRollup = (year, q) => {
+    const mnums = [(q - 1) * 3 + 1, (q - 1) * 3 + 2, (q - 1) * 3 + 3];
+    const keys = mnums.map((mn) => `${year}-${String(mn).padStart(2, "0")}`);
+    const sum = {
+      sf_invites: 0,
+      samples_requested: 0,
+      samples_approved: 0,
+      videos_posted: 0,
+      sample_cost: 0,
+      impressions: 0,
+      organic_impressions: 0,
+      ad_impressions: 0,
+      tts_gmv: 0,
+      ad_spend: 0,
+      attribution_total: 0,
+      cs_inbox: 0,
+      discord: 0,
+      auto_approved: 0,
+      post_rate: 0,
+    };
+    let any = false;
+    for (const mk of keys) {
+      const t = monthTotalsMap[mk];
+      if (!t) continue;
+      any = true;
+      for (const k of Object.keys(sum)) {
+        const v = t[k];
+        if (v != null && Number.isFinite(v)) sum[k] += v;
+      }
+    }
+    if (!any) return null;
+    return ttsCalc(sum);
+  };
+
+  const saveEdit = async (weekId, field, value) => {
+    const week = weeks.find((w) => w.id === weekId);
+    if (!week) return;
+    const prevData = week.data && typeof week.data === "object" ? { ...week.data } : {};
+    const numVal = value === "" ? null : Number(value);
+    const newData = { ...prevData };
+    if (field === "samples_requested") {
+      newData.samples_requested = numVal;
+      delete newData.samples_sent;
+    } else if (field === "attribution_total") {
+      newData.attribution_total = numVal;
+      delete newData.attribution_val;
+    } else {
+      newData[field] = numVal;
+    }
+    const { error } = await supabase.from("weekly_metrics").update({ data: newData }).eq("id", weekId);
+    if (error) {
+      alert("Save failed: " + error.message);
+      return;
+    }
+    setWeeks((prev) => prev.map((w) => (w.id === weekId ? { ...w, data: newData } : w)));
+    setEditing(null);
+  };
+
+  const addWeek = async () => {
+    if (!newWeek.week_start || !newWeek.week_end) {
+      alert("Enter start and end dates.");
+      return;
+    }
+    const data = {};
+    for (const k of editableKeys) {
+      const v = newWeek[k];
+      if (v !== undefined && v !== "" && v != null) data[k] = Number(v);
+    }
+    const { error } = await supabase.from("weekly_metrics").insert({
+      channel: "tts",
+      week_start: newWeek.week_start,
+      week_end: newWeek.week_end,
+      data,
+    });
+    if (error) {
+      alert("Add failed: " + error.message);
+      return;
+    }
+    const { data: fresh } = await supabase.from("weekly_metrics").select("*").eq("channel", "tts").order("week_start", { ascending: false });
+    setWeeks(fresh || []);
+    setShowAddForm(false);
+    setNewWeek({});
+  };
+
+  const fmtMonthLabel = (m) => {
+    const d = new Date(m + "-01T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+
+  const monthNum = (monthKey) => Number(monthKey.slice(5, 7));
+  const isEndOfQuarterMonth = (monthKey) => {
+    const mn = monthNum(monthKey);
+    return mn === 3 || mn === 6 || mn === 9 || mn === 12;
+  };
+  const quarterLabelFromMonthKey = (monthKey) => {
+    const y = monthKey.slice(0, 4);
+    const mn = monthNum(monthKey);
+    const q = Math.ceil(mn / 3);
+    return `Q${q} ${y}`;
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading TTS data...</div>;
+
+  const stickyWeekBg = t.card;
+  const monthRowBg = t.cardAlt;
+  const quarterRowBg = t.isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)";
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>TikTok Shop — Weekly</div>
+        <button
+          type="button"
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+        >
+          {showAddForm ? "Cancel" : "+ Add Week"}
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div style={{ background: t.card, border: `1px solid ${t.green}30`, borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 12 }}>New Week Entry</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Start Date</div>
+              <input
+                type="date"
+                value={newWeek.week_start || ""}
+                onChange={(e) => setNewWeek((p) => ({ ...p, week_start: e.target.value }))}
+                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>End Date</div>
+              <input
+                type="date"
+                value={newWeek.week_end || ""}
+                onChange={(e) => setNewWeek((p) => ({ ...p, week_end: e.target.value }))}
+                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
+              />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {TTS_COLUMNS.filter((c) => c.editable).map((col) => (
+              <div key={col.key} style={{ width: col.width + 24 }}>
+                <div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>{col.label}</div>
+                <input
+                  type="number"
+                  step="any"
+                  value={newWeek[col.key] ?? ""}
+                  onChange={(e) => setNewWeek((p) => ({ ...p, [col.key]: e.target.value }))}
+                  style={{ width: "100%", padding: "5px 6px", borderRadius: 4, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }}
+                />
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addWeek} style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Save Week
+          </button>
+        </div>
+      )}
+
+      <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1680 }}>
+          <thead>
+            <tr style={{ background: t.cardAlt }}>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  textAlign: "left",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: t.textFaint,
+                  textTransform: "uppercase",
+                  position: "sticky",
+                  left: 0,
+                  background: t.cardAlt,
+                  zIndex: 2,
+                  minWidth: 130,
+                }}
+              >
+                Week
+              </th>
+              {TTS_COLUMNS.map((col) => (
+                <th key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", whiteSpace: "nowrap", minWidth: col.width }}>
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...monthGroups].reverse().map((group) => (
+              <Fragment key={group.month}>
+                {group.weeks
+                  .slice()
+                  .reverse()
+                  .map((w) => {
+                    if (ttsIsMilestoneRow(w)) {
+                      return (
+                        <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
+                          <td
+                            colSpan={1 + TTS_COLUMNS.length}
+                            style={{
+                              padding: "8px 12px",
+                              fontSize: 12,
+                              fontStyle: "italic",
+                              color: t.textFaint,
+                              background: t.card,
+                              position: "sticky",
+                              left: 0,
+                            }}
+                          >
+                            {w.data[TTS_WEEKLY_MILESTONE_KEY]}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const d = weekWithWow(w);
+                    return (
+                      <tr key={w.id} style={{ borderBottom: `1px solid ${t.border}10` }}>
+                        <td
+                          style={{
+                            padding: "7px 10px",
+                            fontSize: 12,
+                            color: t.text,
+                            fontWeight: 500,
+                            whiteSpace: "nowrap",
+                            position: "sticky",
+                            left: 0,
+                            background: stickyWeekBg,
+                            zIndex: 1,
+                          }}
+                        >
+                          {fmtDate(w.week_start)} – {fmtDate(w.week_end)}
+                        </td>
+                        {TTS_COLUMNS.map((col) => {
+                          const val = d[col.key];
+                          const isEdit = editing?.rowId === w.id && editing?.field === col.key;
+                          const rawForEdit =
+                            col.key === "samples_requested"
+                              ? w.data?.samples_requested ?? w.data?.samples_sent
+                              : col.key === "attribution_total"
+                                ? w.data?.attribution_total ?? w.data?.attribution_val
+                                : w.data?.[col.key];
+                          return (
+                            <td
+                              key={col.key}
+                              onDoubleClick={() => {
+                                if (col.editable) {
+                                  setEditing({ rowId: w.id, field: col.key });
+                                  setEditVal(rawForEdit != null && rawForEdit !== "" ? String(rawForEdit) : "");
+                                }
+                              }}
+                              style={{
+                                padding: "6px 8px",
+                                textAlign: "right",
+                                color: col.editable ? t.text : t.textMuted,
+                                fontVariantNumeric: "tabular-nums",
+                                fontSize: 11,
+                                cursor: col.editable ? "pointer" : "default",
+                              }}
+                            >
+                              {isEdit ? (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  autoFocus
+                                  value={editVal}
+                                  onChange={(e) => setEditVal(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      saveEdit(w.id, col.key, editVal);
+                                    }
+                                    if (e.key === "Escape") {
+                                      skipSaveBlurRef.current = true;
+                                      setEditing(null);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (skipSaveBlurRef.current) {
+                                      skipSaveBlurRef.current = false;
+                                      return;
+                                    }
+                                    saveEdit(w.id, col.key, editVal);
+                                  }}
+                                  style={{
+                                    width: col.width - 8,
+                                    padding: "2px 4px",
+                                    borderRadius: 3,
+                                    border: `1px solid ${t.green}`,
+                                    background: t.inputBg,
+                                    color: t.inputText,
+                                    fontSize: 11,
+                                    textAlign: "right",
+                                  }}
+                                />
+                              ) : (
+                                fmtVal(val, col.type)
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                <tr style={{ background: monthRowBg, borderTop: `2px solid ${t.border}`, borderBottom: `2px solid ${t.border}` }}>
+                  <td
+                    style={{
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: t.text,
+                      position: "sticky",
+                      left: 0,
+                      background: monthRowBg,
+                      zIndex: 1,
+                    }}
+                  >
+                    {fmtMonthLabel(group.month)}
+                  </td>
+                  {TTS_COLUMNS.map((col) => {
+                    const total = monthTotalsMap[group.month];
+                    const v = col.key === "sf_change_pct" ? null : total?.[col.key];
+                    return (
+                      <td key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: t.text, fontSize: 11 }}>
+                        {v != null && v !== "" ? fmtVal(v, col.type) : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+                {isEndOfQuarterMonth(group.month)
+                  ? (() => {
+                      const y = Number(group.month.slice(0, 4));
+                      const mn = monthNum(group.month);
+                      const q = Math.ceil(mn / 3);
+                      const qtot = quarterRollup(y, q);
+                      if (!qtot) return null;
+                      return (
+                        <tr style={{ background: quarterRowBg, borderTop: `3px solid ${t.border}` }}>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              color: t.text,
+                              position: "sticky",
+                              left: 0,
+                              background: quarterRowBg,
+                              zIndex: 1,
+                            }}
+                          >
+                            {quarterLabelFromMonthKey(group.month)} (total)
+                          </td>
+                          {TTS_COLUMNS.map((col) => {
+                            const v = col.key === "sf_change_pct" ? null : qtot[col.key];
+                            return (
+                              <td key={col.key} style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, color: t.text, fontSize: 11 }}>
+                                {v != null && v !== "" ? fmtVal(v, col.type) : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })()
+                  : null}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10 }}>
+        Double-click any editable cell to edit · Enter to save, Esc to cancel · Calculated fields update automatically · {weeks.length} rows loaded
+      </div>
+    </div>
+  );
+}
+
 function WeeklyMetricsTab({ channel, t, S }) {
   const [weeks, setWeeks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -6727,25 +7300,17 @@ function ChannelPipeline({ navigate, creators, t, S }) {
   const [spendFilter, setSpendFilter] = useState("all");
   const [editing, setEditing] = useState(null);
   const [editDraft, setEditDraft] = useState({});
-  const [debugInfo, setDebugInfo] = useState("");
 
   useEffect(() => {
     (async () => {
-      const [{ data: monthly, error: e1 }, { data: spend, error: e2 }] = await Promise.all([
+      const [{ data: monthly }, { data: spend }] = await Promise.all([
         supabase.from("monthly_metrics").select("*").order("month", { ascending: false }),
         supabase.from("partnership_spend").select("*").order("month", { ascending: false }).order("section", { ascending: true }),
       ]);
 
-      // DEBUG — log what we got
-      console.log("[Pipeline] monthly_metrics:", monthly?.length || 0, "rows", e1 ? "ERROR: " + e1.message : "ok");
-      console.log("[Pipeline] partnership_spend:", spend?.length || 0, "rows", e2 ? "ERROR: " + e2.message : "ok");
-      if (monthly?.length > 0) console.log("[Pipeline] First monthly row:", JSON.stringify(monthly[0]).substring(0, 200));
-      if (spend?.length > 0) console.log("[Pipeline] First spend row:", JSON.stringify(spend[0]).substring(0, 200));
-
       setMonthlyData(monthly || []);
       setSpendData(spend || []);
 
-      // Derive months from BOTH tables, not just monthly
       const allMonths = new Set();
       (monthly || []).forEach((m) => {
         if (m.month) allMonths.add(String(m.month).substring(0, 10));
@@ -6754,12 +7319,6 @@ function ChannelPipeline({ navigate, creators, t, S }) {
         if (s.month) allMonths.add(String(s.month).substring(0, 10));
       });
       const sortedMonths = [...allMonths].sort().reverse();
-
-      console.log("[Pipeline] Available months:", sortedMonths);
-
-      setDebugInfo(
-        `monthly: ${monthly?.length || 0} rows ${e1 ? "(ERROR: " + e1.message + ")" : ""} | spend: ${spend?.length || 0} rows ${e2 ? "(ERROR: " + e2.message + ")" : ""} | months: ${sortedMonths.join(", ") || "NONE"} | selected: ${sortedMonths[0] || "NULL"}`
-      );
 
       if (sortedMonths.length > 0) {
         setSelectedMonth(sortedMonths[0]);
@@ -6898,10 +7457,6 @@ function ChannelPipeline({ navigate, creators, t, S }) {
             {tb.label}
           </button>
         ))}
-      </div>
-
-      <div style={{ padding: "8px 12px", marginBottom: 16, background: "#ff880015", border: "1px solid #ff880030", borderRadius: 8, fontSize: 11, color: "#ff8800", fontFamily: "monospace" }}>
-        DEBUG: {debugInfo || "loading..."}
       </div>
 
       {tab === "overview" && (
@@ -7293,7 +7848,8 @@ function ChannelPipeline({ navigate, creators, t, S }) {
         </div>
       )}
 
-      {["tts", "instagram", "ugc", "youtube"].includes(tab) && <WeeklyMetricsTab channel={tab} t={t} S={S} />}
+      {tab === "tts" && <TTSWeeklyTab t={t} />}
+      {["instagram", "ugc", "youtube"].includes(tab) && <WeeklyMetricsTab channel={tab} t={t} S={S} />}
 
       {tab === "sops" && <SOPsTab t={t} S={S} />}
       {tab === "kpis" && <TeamKPIsTab t={t} S={S} />}
