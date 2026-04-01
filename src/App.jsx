@@ -5,8 +5,14 @@ import SEED_CREATORS from "./seedCreators.json";
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.3";
+const APP_VERSION = "2.0.4";
 const CHANGELOG = [
+  { version: "2.0.4", date: "2025-04-01", changes: [
+    "Complete PDF overhaul — eliminated dead white space, tighter professional layout",
+    "Two-column layout for persona, say/don't, and proof points sections",
+    "Condensed story arc beats into a more compact format",
+    "Better use of page real estate — fits more content per page",
+  ]},
   { version: "2.0.3", date: "2025-04-01", changes: [
     "Video reformatter now downloads reformatted videos — click any format to download",
     "Server-side FFmpeg processing via Express backend on Railway",
@@ -26,11 +32,6 @@ const CHANGELOG = [
     "Removed 'Dashboard' subtitle from homepage",
     "Replaced all emojis with custom SVG icons throughout the app for a more professional feel",
     "Improved homepage card design",
-  ]},
-  { version: "2.0.4", date: "2025-04-01", changes: [
-    "URL-based routing — each section has its own URL path",
-    "Browser back/forward buttons now work correctly",
-    "Direct links to sections work (e.g. /tools, /ugc-army/new)",
   ]},
   { version: "2.0.2", date: "2025-04-01", changes: [
     "ScrapeCreators API fully wired — paste TikTok or Instagram URL to fetch video data",
@@ -1543,7 +1544,7 @@ function buildBriefPrintHtml(b, fd, esc) {
     { label: "AGITATE", cls: "agitate", inst: b.agInst, lines: b.agLines || [], overlays: b.agOverlays || [] },
     { label: "SOLUTION", cls: "solution", inst: b.solInst, lines: b.solLines || [], overlays: b.solOverlays || [] },
   ];
-  const beatsHtml = beatDefs
+  const beatsInnerHtml = beatDefs
     .map((bt) => {
       const lines = (bt.lines || []).map((l) => `<div class="riff">"${escSafe(l)}"</div>`).join("");
       const ovs = (bt.overlays || []).map((o) => `<div class="riff">${escSafe(o)}</div>`).join("");
@@ -1551,21 +1552,22 @@ function buildBriefPrintHtml(b, fd, esc) {
         `<div class="beat ${bt.cls}">` +
         `<div class="beat-label">${bt.label}</div>` +
         `<div class="beat-inst">${escSafe(bt.inst)}</div>` +
-        `<div class="beat-sub">Lines to riff on</div>` +
+        `<div class="beat-sub">Riff lines</div>` +
         lines +
-        `<div class="beat-sub">Overlay ideas</div>` +
+        `<div class="beat-sub">Overlays</div>` +
         ovs +
         `</div>`
       );
     })
     .join("");
+  const beatsHtml = `<div class="beats-grid">${beatsInnerHtml}</div>`;
   const hooksHtml = (b.hooks || [])
     .map((h, i) => `<div class="hook"><div class="hook-num">${i + 1}</div><div class="hook-text">${escSafe(h)}</div></div>`)
     .join("");
   const sayHtml = (b.sayThis || []).map((s) => `<div class="compliance-item"><span class="mark">+</span>${escSafe(s)}</div>`).join("");
   const notHtml = (b.notThis || []).map((s) => `<div class="compliance-item"><span class="mark">–</span>${escSafe(s)}</div>`).join("");
   const rejList = Array.isArray(b.rejections) && b.rejections.length ? b.rejections : buildRejectionsArray(fd);
-  const rejHtml = rejList.map((r) => `<div class="rejection-item"><span class="rx">-</span>${escSafe(r)}</div>`).join("");
+  const rejHtml = rejList.map((r) => `<div class="revision-item"><span class="rx">•</span>${escSafe(r)}</div>`).join("");
   const proofHtml = (b.proof || []).map((p) => `<div class="proof-card">${escSafe(p)}</div>`).join("");
   const platNotesHtml = escSafe(b.platNotes || "").replace(/\n/g, "<br>");
   const deliverablesHtml = escSafe(b.deliverables || "").replace(/\n/g, "<br>");
@@ -1579,108 +1581,163 @@ function buildBriefPrintHtml(b, fd, esc) {
 <meta charset="UTF-8">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  @page { margin: 0.6in; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Inter', Helvetica, Arial, sans-serif;
-    color: #222;
-    font-size: 13px;
-    line-height: 1.7;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 48px 48px 24px;
-    background: #fff;
-  }
+@page { margin: 0.5in 0.6in; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  color: #1a1a1a;
+  font-size: 11px;
+  line-height: 1.55;
+  max-width: 100%;
+  padding: 0;
+  background: #fff;
+}
 
-  /* Header */
-  .doc-header { text-align: center; padding-bottom: 24px; margin-bottom: 8px; border-bottom: 2px solid #111; }
-  .doc-brand { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; color: #999; text-transform: uppercase; margin-bottom: 12px; }
-  .doc-title { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: #111; margin-bottom: 4px; }
-  .doc-mission { font-size: 14px; color: #555; font-style: italic; margin-bottom: 16px; }
-  .doc-meta { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
-  .doc-tag { padding: 3px 10px; border-radius: 4px; font-size: 10px; font-weight: 600; background: #f0f0f0; color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
-  .doc-manager { font-size: 11px; color: #888; margin-top: 12px; }
+/* ── Header ── */
+.doc-header {
+  text-align: center;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #111;
+}
+.doc-brand {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.18em;
+  color: #999; text-transform: uppercase; margin-bottom: 8px;
+}
+.doc-title {
+  font-size: 24px; font-weight: 800; letter-spacing: -0.02em;
+  color: #111; margin-bottom: 2px; line-height: 1.2;
+}
+.doc-mission {
+  font-size: 12px; color: #666; font-style: italic; margin-bottom: 10px;
+}
+.doc-meta {
+  display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;
+}
+.doc-tag {
+  padding: 2px 8px; border-radius: 3px; font-size: 9px; font-weight: 600;
+  background: #f0f0f0; color: #555; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.doc-manager {
+  font-size: 10px; color: #999; margin-top: 8px;
+}
 
-  /* Section headers */
-  .section-title {
-    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-    color: #888; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px;
-    margin-top: 36px; margin-bottom: 16px;
-  }
+/* ── Section headers ── */
+.section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: #888; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px;
+  margin-top: 20px; margin-bottom: 10px;
+}
 
-  /* Persona card */
-  .persona-card { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; }
-  .persona-name { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 2px; }
-  .persona-age { font-size: 12px; font-weight: 600; color: #4a9a9d; margin-bottom: 10px; }
-  .persona-psycho { font-size: 13px; color: #444; line-height: 1.7; margin-bottom: 16px; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .col-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
-  .col-title.green { color: #1a7a4e; }
-  .col-title.red { color: #b71c1c; }
-  .col-item { font-size: 12px; color: #333; line-height: 1.8; }
-  .col-item .dot { font-weight: 700; margin-right: 6px; }
-  .col-item .dot.green { color: #1a7a4e; }
-  .col-item .dot.red { color: #b71c1c; }
+/* ── Grid layouts ── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 
-  /* Story beats */
-  .beat { padding: 16px 20px; margin-bottom: 12px; background: #fafafa; border: 1px solid #e5e5e5; border-left: 4px solid #ccc; border-radius: 0 8px 8px 0; }
-  .beat.problem { border-left-color: #c62828; }
-  .beat.agitate { border-left-color: #e67e00; }
-  .beat.solution { border-left-color: #1a7a4e; }
-  .beat-label { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px; }
-  .beat.problem .beat-label { color: #c62828; }
-  .beat.agitate .beat-label { color: #e67e00; }
-  .beat.solution .beat-label { color: #1a7a4e; }
-  .beat-inst { font-size: 13px; color: #333; line-height: 1.7; margin-bottom: 12px; }
-  .beat-sub { font-size: 9px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; margin-top: 10px; }
-  .riff { font-size: 12px; color: #444; line-height: 1.7; padding-left: 12px; border-left: 2px solid #ddd; margin-bottom: 3px; }
+/* ── Persona card — compact ── */
+.persona-card {
+  background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 6px; padding: 14px;
+}
+.persona-name { font-size: 15px; font-weight: 700; color: #111; margin-bottom: 1px; }
+.persona-age { font-size: 11px; font-weight: 600; color: #4a9a9d; margin-bottom: 6px; }
+.persona-psycho { font-size: 11px; color: #444; line-height: 1.5; margin-bottom: 10px; }
+.col-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.col-title.green { color: #1a7a4e; }
+.col-title.red { color: #b71c1c; }
+.col-item { font-size: 10px; color: #333; line-height: 1.6; }
+.col-item .dot { font-weight: 700; margin-right: 4px; }
+.col-item .dot.green { color: #1a7a4e; }
+.col-item .dot.red { color: #b71c1c; }
 
-  /* Hooks */
-  .hook { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
-  .hook-num { min-width: 22px; height: 22px; border-radius: 6px; background: #fff3e0; color: #e67e00; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; border: 1px solid #ffe0b2; }
-  .hook-text { font-size: 13px; color: #333; line-height: 1.6; padding-top: 2px; }
-  .hook-hint { font-size: 11px; color: #aaa; font-style: italic; margin-bottom: 12px; }
+/* ── Story beats — compact, no wasted space ── */
+.beats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.beat {
+  padding: 12px; background: #fafafa; border: 1px solid #e5e5e5;
+  border-top: 3px solid #ccc; border-radius: 6px;
+}
+.beat.problem { border-top-color: #c62828; }
+.beat.agitate { border-top-color: #e67e00; }
+.beat.solution { border-top-color: #1a7a4e; }
+.beat-label {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.beat.problem .beat-label { color: #c62828; }
+.beat.agitate .beat-label { color: #e67e00; }
+.beat.solution .beat-label { color: #1a7a4e; }
+.beat-inst { font-size: 10px; color: #333; line-height: 1.5; margin-bottom: 8px; }
+.beat-sub {
+  font-size: 8px; font-weight: 700; color: #aaa; text-transform: uppercase;
+  letter-spacing: 0.06em; margin-bottom: 3px; margin-top: 6px;
+}
+.riff {
+  font-size: 10px; color: #444; line-height: 1.5; padding-left: 8px;
+  border-left: 2px solid #ddd; margin-bottom: 2px;
+}
 
-  /* Say / Don't columns */
-  .compliance-col { border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; }
-  .compliance-col.approve { border-left: 3px solid #1a7a4e; }
-  .compliance-col.ban { border-left: 3px solid #c62828; }
-  .compliance-header { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
-  .compliance-col.approve .compliance-header { color: #1a7a4e; }
-  .compliance-col.ban .compliance-header { color: #c62828; }
-  .compliance-item { font-size: 12px; color: #333; line-height: 1.8; }
-  .compliance-item .mark { font-weight: 700; margin-right: 6px; }
-  .compliance-col.approve .mark { color: #1a7a4e; }
-  .compliance-col.ban .mark { color: #c62828; }
+/* ── Hooks — inline numbered list ── */
+.hooks-list { }
+.hook { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; }
+.hook-num {
+  min-width: 18px; height: 18px; border-radius: 4px;
+  background: #fff3e0; color: #e67e00; display: flex; align-items: center;
+  justify-content: center; font-size: 9px; font-weight: 800; border: 1px solid #ffe0b2;
+  flex-shrink: 0;
+}
+.hook-text { font-size: 11px; color: #333; line-height: 1.5; }
+.hook-hint { font-size: 9px; color: #aaa; font-style: italic; margin-bottom: 8px; }
 
-  /* Revision-required box */
-  .rejection-box { border: 1.5px solid #e67e00; border-radius: 8px; padding: 20px; margin-top: 8px; }
-  .rejection-header { font-size: 11px; font-weight: 800; color: #b86e00; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
-  .rejection-warning { font-size: 12px; color: #b86e00; font-weight: 500; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #ffe0b2; }
-  .rejection-item { font-size: 13px; color: #333; line-height: 1.8; margin-bottom: 4px; }
-  .rejection-item .rx { color: #e67e00; font-weight: 700; margin-right: 8px; }
+/* ── Compliance columns ── */
+.compliance-col { border: 1px solid #e5e5e5; border-radius: 6px; padding: 12px; }
+.compliance-col.approve { border-left: 3px solid #1a7a4e; }
+.compliance-col.ban { border-left: 3px solid #c62828; }
+.compliance-header { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.compliance-col.approve .compliance-header { color: #1a7a4e; }
+.compliance-col.ban .compliance-header { color: #c62828; }
+.compliance-item { font-size: 10px; color: #333; line-height: 1.6; }
+.compliance-item .mark { font-weight: 700; margin-right: 4px; }
+.compliance-col.approve .mark { color: #1a7a4e; }
+.compliance-col.ban .mark { color: #c62828; }
 
-  /* Proof grid */
-  .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .proof-card { background: #f8f8f8; border: 1px solid #e5e5e5; border-left: 3px solid #4a9a9d; border-radius: 6px; padding: 12px 14px; font-size: 12px; color: #333; line-height: 1.6; }
+/* ── Revision box — compact ── */
+.revision-box {
+  border: 1.5px solid #e67e00; border-radius: 6px; padding: 12px; margin-top: 6px;
+  background: #fffbf5;
+}
+.revision-header { font-size: 9px; font-weight: 800; color: #b86e00; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+.revision-warning { font-size: 10px; color: #b86e00; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #ffe0b2; }
+.revision-item { font-size: 10px; color: #333; line-height: 1.6; margin-bottom: 2px; }
+.revision-item .rx { color: #e67e00; font-weight: 700; margin-right: 6px; }
 
-  /* Platform & Deliverables */
-  .info-box { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px 20px; font-size: 13px; color: #333; line-height: 1.7; white-space: pre-line; }
+/* ── Proof grid ── */
+.proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.proof-card {
+  background: #f8f8f8; border: 1px solid #e5e5e5; border-left: 3px solid #4a9a9d;
+  border-radius: 4px; padding: 8px 10px; font-size: 10px; color: #333; line-height: 1.5;
+}
 
-  /* Footer */
-  .doc-footer { text-align: center; margin-top: 48px; padding-top: 16px; border-top: 1px solid #e0e0e0; font-size: 9px; color: #bbb; text-transform: uppercase; letter-spacing: 0.1em; }
+/* ── Info boxes ── */
+.info-box {
+  background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 6px;
+  padding: 10px 14px; font-size: 11px; color: #333; line-height: 1.6; white-space: pre-line;
+}
 
-  /* Page breaks */
-  .page-break { page-break-before: always; }
+/* ── Footer ── */
+.doc-footer {
+  text-align: center; margin-top: 24px; padding-top: 10px;
+  border-top: 1px solid #e0e0e0; font-size: 8px; color: #bbb;
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
 
-  @media print {
-    body { padding: 24px 0; }
-    .no-print { display: none; }
-  }
+/* ── Page breaks — only before major new sections ── */
+.page-break { page-break-before: always; }
+
+@media print {
+  body { padding: 0; }
+  .no-print { display: none; }
+}
 </style>
 </head><body>
 
-<!-- HEADER -->
 <div class="doc-header">
   <div class="doc-brand">Intake Breathing — Creator Partnerships</div>
   <div class="doc-title">${docTitle}</div>
@@ -1699,8 +1756,7 @@ function buildBriefPrintHtml(b, fd, esc) {
   </div>
 </div>
 
-<!-- PERSONA -->
-<div class="section-title">Who You're Talking To</div>
+<div class="section-title">Who You&apos;re Talking To</div>
 <div class="persona-card">
   <div class="persona-name">${escSafe(b.persona)}</div>
   <div class="persona-age">${escSafe(b.age)}</div>
@@ -1717,17 +1773,14 @@ function buildBriefPrintHtml(b, fd, esc) {
   </div>
 </div>
 
-<!-- STORY ARC — new page -->
-<div class="section-title page-break">Story Arc — Problem · Agitate · Solution</div>
+<div class="section-title">Story Arc — Problem · Agitate · Solution</div>
 ${beatsHtml}
 
-<!-- HOOKS -->
 <div class="section-title">Hook Options — First 3 Seconds</div>
-<div class="hook-hint">If they don't feel it here, they scroll.</div>
-${hooksHtml}
+<div class="hook-hint">If they don&apos;t feel it here, they scroll.</div>
+<div class="hooks-list">${hooksHtml}</div>
 
-<!-- SAY / DON'T — new page -->
-<div class="section-title page-break">Say This / Not This</div>
+<div class="section-title">Say This / Not This</div>
 <div class="two-col">
   <div class="compliance-col approve">
     <div class="compliance-header">Say This</div>
@@ -1739,32 +1792,24 @@ ${hooksHtml}
   </div>
 </div>
 
-<!-- REVISION CRITERIA -->
-<div class="section-title">Revision Required — Revisions Will Be Needed</div>
-<div class="rejection-box">
-  <div class="rejection-warning">If any of the following are present in your submission, revisions will be required before approval.</div>
+<div class="section-title">Revision Criteria</div>
+<div class="revision-box">
+  <div class="revision-header">Revisions will be needed if</div>
+  <div class="revision-warning">If any of the following are present in your submission, revisions will be required before approval.</div>
   ${rejHtml}
 </div>
 
-<!-- PROOF POINTS -->
 <div class="section-title">Proof Points</div>
 <div class="proof-grid">
   ${proofHtml}
 </div>
 
-<!-- REQUIRED DISCLOSURE -->
-<div class="section-title">Required Disclosure</div>
-<div class="info-box">${disclosureHtml}</div>
-
-<!-- PLATFORM NOTES -->
 <div class="section-title">Platform Notes</div>
 <div class="info-box">${platNotesHtml}</div>
 
-<!-- DELIVERABLES -->
 <div class="section-title">Deliverables</div>
 <div class="info-box">${deliverablesHtml}</div>
 
-<!-- FOOTER -->
 <div class="doc-footer">Confidential — For Creator Use Only · Intake Breathing Technology LLC · ${genDate}</div>
 
 </body></html>`;
