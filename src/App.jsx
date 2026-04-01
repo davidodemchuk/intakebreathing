@@ -1,12 +1,35 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext } from "react";
 import SEED_CREATORS from "./seedCreators.json";
 
+// FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
+
+const CREATOR_COLUMNS = [
+  { key: "status", label: "Status", width: 80, filterable: true, sortable: true },
+  { key: "handle", label: "Handle", width: 140, sortable: true },
+  { key: "niche", label: "Niche", width: 150, filterable: true, sortable: true, editable: true },
+  { key: "email", label: "Email", width: 200, editable: true, isLink: "mailto" },
+  { key: "tt", label: "TT", width: 36, isLink: "external" },
+  { key: "ig", label: "IG", width: 36, isLink: "external" },
+  { key: "videos", label: "Videos", width: 60, sortable: true, align: "right" },
+  { key: "quality", label: "Quality", width: 70, filterable: true, sortable: true },
+  { key: "cost", label: "Cost", width: 80, editable: true },
+  { key: "notes", label: "Notes", width: null, editable: true },
+];
+
+const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr" : `${c.width}px`)).join(" ");
+
 // ═══ UPDATE THIS WITH EVERY PUSH ═══
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.8.0";
+const APP_VERSION = "2.9.0";
 const CHANGELOG = [
+  { version: "2.9.0", date: "2026-03-31", changes: [
+    "Creator table completely redesigned — Google Sheets-style with filters in column headers",
+    "Inline editing — double-click any cell to edit directly in the table",
+    "Column header filters: click the filter icon in any header to filter by that column",
+    "Search bar is the only thing above the table — compact single row with action buttons",
+  ]},
   { version: "2.8.0", date: "2026-03-31", changes: [
     "Auto-enrichment pipeline — adding a creator by handle triggers automatic data pull",
     "ScrapeCreators auto-pulls TikTok profile, stats, and recent videos on creator add",
@@ -3981,10 +4004,14 @@ export default function App() {
   const [scrapeKey, setScrapeKey] = useState("");
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [sortCol, setSortCol] = useState("followers");
-  const [sortDir, setSortDir] = useState("desc");
-  const [filters, setFilters] = useState({ status: "All Statuses", niche: "All Niches", quality: "All Quality" });
+  const [sortCol, setSortCol] = useState("handle");
+  const [sortDir, setSortDir] = useState("asc");
+  const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All" });
   const [openFilter, setOpenFilter] = useState(null);
+  const [editingCell, setEditingCell] = useState(null);
+  const skipCreatorCellBlurRef = useRef(false);
+  const addHandleInputRef = useRef(null);
+  const [showAddCreatorPanel, setShowAddCreatorPanel] = useState(false);
   const [addHandleInput, setAddHandleInput] = useState("");
   const [addEnrichBusy, setAddEnrichBusy] = useState(false);
   const [addEnrichStepState, setAddEnrichStepState] = useState(null);
@@ -4083,7 +4110,7 @@ export default function App() {
   useEffect(() => {
     if (openFilter == null) return;
     const close = (e) => {
-      if (!e.target.closest?.("[data-creator-filter-dd]")) setOpenFilter(null);
+      if (!e.target.closest?.("[data-creator-sheet-filter]")) setOpenFilter(null);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -4769,21 +4796,15 @@ export default function App() {
           });
       }
     });
-    return ["All Niches", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [creators]);
-
-  const parseCostSort = (c) => {
-    const raw = String(c.costPerVideo ?? "").replace(/[$,\s]/g, "");
-    const n = parseInt(raw, 10);
-    return Number.isFinite(n) ? n : 999999;
-  };
 
   const sortedCreators = useMemo(() => {
     let list = [...creators];
 
-    if (filters.status !== "All Statuses" && filters.status !== "All") list = list.filter((c) => c.status === filters.status);
-    if (filters.quality !== "All Quality" && filters.quality !== "All") list = list.filter((c) => (c.quality || "Standard") === filters.quality);
-    if (filters.niche !== "All Niches" && filters.niche !== "All") {
+    if (filters.status !== "All") list = list.filter((c) => c.status === filters.status);
+    if (filters.quality !== "All") list = list.filter((c) => (c.quality || "Standard") === filters.quality);
+    if (filters.niche !== "All") {
       const needle = filters.niche.toLowerCase();
       list = list.filter((c) =>
         String(c.niche || "")
@@ -4805,20 +4826,6 @@ export default function App() {
 
     const statusOrder = { Active: 0, "One-time": 1, "Off-boarded": 2 };
     list.sort((a, b) => {
-      if (sortCol === "fitScore") return cmpMetric(a, b, (x) => x.aiAnalysis?.fitScore, sortDir);
-      if (sortCol === "followers") return cmpMetric(a, b, (x) => x.tiktokData?.followers, sortDir);
-      if (sortCol === "hearts") return cmpMetric(a, b, (x) => x.tiktokData?.hearts, sortDir);
-      if (sortCol === "engagement") {
-        return cmpMetric(
-          a,
-          b,
-          (x) => {
-            const r = parseFloat(x.engagementRate);
-            return Number.isFinite(r) ? r : null;
-          },
-          sortDir
-        );
-      }
       let valA;
       let valB;
       switch (sortCol) {
@@ -4830,17 +4837,9 @@ export default function App() {
           valA = (a.handle || "").toLowerCase();
           valB = (b.handle || "").toLowerCase();
           break;
-        case "name":
-          valA = (a.name || "").toLowerCase();
-          valB = (b.name || "").toLowerCase();
-          break;
         case "niche":
           valA = (a.niche || "").toLowerCase();
           valB = (b.niche || "").toLowerCase();
-          break;
-        case "email":
-          valA = (a.email || "").toLowerCase();
-          valB = (b.email || "").toLowerCase();
           break;
         case "videos":
           valA = Math.max(Number(a.totalVideos) || 0, (a.videoLog || []).length);
@@ -4849,25 +4848,6 @@ export default function App() {
         case "quality":
           valA = a.quality === "High" ? 0 : 1;
           valB = b.quality === "High" ? 0 : 1;
-          break;
-        case "cost":
-          valA = parseCostSort(a);
-          valB = parseCostSort(b);
-          break;
-        case "notes":
-          valA = (a.notes || "").toLowerCase();
-          valB = (b.notes || "").toLowerCase();
-          break;
-        case "tiktok": {
-          const ttA = (a.tiktokUrl || "").trim() || tiktokUrlFromHandle(a.handle);
-          const ttB = (b.tiktokUrl || "").trim() || tiktokUrlFromHandle(b.handle);
-          valA = ttA ? 0 : 1;
-          valB = ttB ? 0 : 1;
-          break;
-        }
-        case "instagram":
-          valA = (a.instagramUrl || "").trim() ? 0 : 1;
-          valB = (b.instagramUrl || "").trim() ? 0 : 1;
           break;
         default:
           valA = (a.handle || "").toLowerCase();
@@ -4881,20 +4861,19 @@ export default function App() {
     return list;
   }, [creators, filters, creatorSearch, sortCol, sortDir]);
 
-  const handleCreatorSort = useCallback((col) => {
+  const toggleSort = useCallback((col) => {
     setSortCol((prev) => {
       if (prev === col) {
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         return prev;
       }
-      const descFirst = ["fitScore", "followers", "hearts", "engagement", "videos"];
-      setSortDir(descFirst.includes(col) ? "desc" : "asc");
+      setSortDir("asc");
       return col;
     });
   }, []);
 
   const clearCreatorFilters = useCallback(() => {
-    setFilters({ status: "All Statuses", niche: "All Niches", quality: "All Quality" });
+    setFilters({ status: "All", niche: "All", quality: "All" });
     setCreatorSearch("");
   }, []);
 
@@ -5631,126 +5610,116 @@ export default function App() {
         )}
 
         {!aiLoading && isCreatorViewAllowed && view === "creators" && (() => {
-          const gridCols = "60px 40px 130px 36px 140px 80px 80px 55px 55px 160px 34px 34px 60px 70px 1fr";
-          const filterSelect = (active) => ({
-            ...S.select,
+          const fmtHandle = (h) => {
+            const x = String(h || "").trim();
+            if (!x) return "—";
+            return x.startsWith("@") ? x : `@${x}`;
+          };
+          const cellBase = {
             padding: "6px 10px",
             fontSize: 12,
-            minWidth: 120,
-            fontFamily: "inherit",
-            boxSizing: "border-box",
-            border: `1px solid ${active ? t.green : t.border}`,
-          });
-          const headCell = {
-            display: "grid",
-            gridTemplateColumns: gridCols,
-            background: t.cardAlt,
-            borderBottom: `2px solid ${t.border}`,
-            padding: "8px 12px",
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-            minWidth: 1140,
-          };
-          const rowCell = {
-            display: "grid",
-            gridTemplateColumns: gridCols,
-            padding: "6px 12px",
-            borderBottom: `1px solid ${t.border}66`,
-            cursor: "pointer",
-            fontSize: 12,
             color: t.textSecondary,
-            lineHeight: 1.4,
-            transition: "background 0.1s",
-            minWidth: 1140,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: "32px",
+            minWidth: 0,
           };
           const ttLinkStyle = {
             fontWeight: 800,
             fontSize: 10,
-            padding: "2px 6px",
-            borderRadius: 4,
-            background: t.cardAlt,
             color: t.textMuted,
             cursor: "pointer",
             textDecoration: "none",
             display: "inline-block",
           };
-          const ellip = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-          const sortArrow = (col) => (sortCol === col ? (sortDir === "asc" ? "↑" : "↓") : "");
-          const hdr = (col, label, filterKey) => {
-            const active =
-              filterKey === "status"
-                ? filters.status !== "All Statuses" && filters.status !== "All"
-                : filterKey === "niche"
-                  ? filters.niche !== "All Niches" && filters.niche !== "All"
-                  : filterKey === "quality"
-                    ? filters.quality !== "All Quality" && filters.quality !== "All"
-                    : false;
+          const sortArrow = (key) => (sortCol === key ? (sortDir === "asc" ? "↑" : "↓") : "");
+          const filterActive = (fk) =>
+            fk === "status"
+              ? filters.status !== "All"
+              : fk === "niche"
+                ? filters.niche !== "All"
+                : fk === "quality"
+                  ? filters.quality !== "All"
+                  : false;
+          const renderHeaderCell = (col) => {
+            const fk = col.filterable ? col.key : null;
+            const fa = fk ? filterActive(fk) : false;
+            const sortOn = col.sortable && sortCol === col.key;
+            const labelColor = sortOn || fa ? t.green : t.textFaint;
+            const jc = col.align === "right" ? "flex-end" : "flex-start";
             return (
-              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, minWidth: 0 }} data-creator-filter-dd={filterKey || undefined}>
+              <div
+                key={col.key}
+                data-creator-sheet-filter={fk || undefined}
+                style={{
+                  position: "relative",
+                  padding: "8px 10px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: labelColor,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  cursor: col.sortable ? "pointer" : "default",
+                  userSelect: "none",
+                  whiteSpace: "nowrap",
+                  justifyContent: jc,
+                }}
+              >
                 <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleCreatorSort(col)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCreatorSort(col); } }}
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: active ? t.green : t.textFaint,
-                    cursor: "pointer",
-                    userSelect: "none",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    flex: 1,
-                    minWidth: 0,
-                  }}
+                  role={col.sortable ? "button" : undefined}
+                  tabIndex={col.sortable ? 0 : undefined}
+                  onClick={col.sortable ? () => toggleSort(col.key) : undefined}
+                  onKeyDown={col.sortable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort(col.key); } } : undefined}
+                  style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, color: sortOn ? t.green : fa && fk === col.key ? t.green : t.textFaint }}
                 >
-                  {label}
-                  <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow(col)}</span>
+                  {col.label}
+                  {col.sortable ? <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow(col.key)}</span> : null}
                 </span>
-                {filterKey ? (
+                {fk ? (
                   <button
                     type="button"
-                    data-creator-filter-dd
+                    data-creator-sheet-filter
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpenFilter((o) => (o === filterKey ? null : filterKey));
+                      setOpenFilter((o) => (o === fk ? null : fk));
                     }}
                     style={{
                       background: "none",
                       border: "none",
-                      color: active ? t.green : t.textFaint,
+                      color: fa ? t.green : t.textFaint,
                       cursor: "pointer",
                       fontSize: 9,
                       padding: "0 2px",
                       lineHeight: 1,
                     }}
-                    aria-label={`Filter ${label}`}
+                    aria-label={`Filter ${col.label}`}
                   >
-                    ▼
+                    ▾
                   </button>
                 ) : null}
-                {openFilter === filterKey && filterKey === "status" ? (
+                {openFilter === fk && fk === "status" ? (
                   <div
-                    data-creator-filter-dd
+                    data-creator-sheet-filter
                     style={{
                       position: "absolute",
                       top: "100%",
                       left: 0,
-                      marginTop: 4,
+                      minWidth: 160,
+                      maxHeight: 240,
+                      overflowY: "auto",
                       background: t.card,
                       border: `1px solid ${t.border}`,
                       borderRadius: 8,
-                      boxShadow: t.shadow,
-                      padding: "4px 0",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
                       zIndex: 20,
-                      minWidth: 140,
+                      padding: "4px 0",
                     }}
                   >
-                    {["All Statuses", "Active", "One-time", "Off-boarded"].map((opt) => (
+                    {["All", "Active", "One-time", "Off-boarded"].map((opt) => (
                       <div
                         key={opt}
                         role="button"
@@ -5759,8 +5728,13 @@ export default function App() {
                           setFilters((f) => ({ ...f, status: opt }));
                           setOpenFilter(null);
                         }}
-                        onKeyDown={(e) => { if (e.key === "Enter") { setFilters((f) => ({ ...f, status: opt })); setOpenFilter(null); } }}
-                        style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          color: filters.status === opt ? t.green : t.textSecondary,
+                          fontWeight: filters.status === opt ? 600 : 400,
+                        }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                       >
@@ -5769,23 +5743,22 @@ export default function App() {
                     ))}
                   </div>
                 ) : null}
-                {openFilter === filterKey && filterKey === "niche" ? (
+                {openFilter === fk && fk === "niche" ? (
                   <div
-                    data-creator-filter-dd
+                    data-creator-sheet-filter
                     style={{
                       position: "absolute",
                       top: "100%",
                       left: 0,
-                      marginTop: 4,
-                      background: t.card,
-                      border: `1px solid ${t.border}`,
-                      borderRadius: 8,
-                      boxShadow: t.shadow,
-                      padding: "4px 0",
-                      zIndex: 20,
                       minWidth: 160,
                       maxHeight: 240,
                       overflowY: "auto",
+                      background: t.card,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: 8,
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                      zIndex: 20,
+                      padding: "4px 0",
                     }}
                   >
                     {allNiches.map((opt) => (
@@ -5797,7 +5770,13 @@ export default function App() {
                           setFilters((f) => ({ ...f, niche: opt }));
                           setOpenFilter(null);
                         }}
-                        style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          color: filters.niche === opt ? t.green : t.textSecondary,
+                          fontWeight: filters.niche === opt ? 600 : 400,
+                        }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                       >
@@ -5806,37 +5785,48 @@ export default function App() {
                     ))}
                   </div>
                 ) : null}
-                {openFilter === filterKey && filterKey === "quality" ? (
+                {openFilter === fk && fk === "quality" ? (
                   <div
-                    data-creator-filter-dd
+                    data-creator-sheet-filter
                     style={{
                       position: "absolute",
                       top: "100%",
                       left: 0,
-                      marginTop: 4,
+                      minWidth: 160,
+                      maxHeight: 240,
+                      overflowY: "auto",
                       background: t.card,
                       border: `1px solid ${t.border}`,
                       borderRadius: 8,
-                      boxShadow: t.shadow,
-                      padding: "4px 0",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
                       zIndex: 20,
-                      minWidth: 120,
+                      padding: "4px 0",
                     }}
                   >
-                    {["All Quality", "High", "Standard"].map((opt) => (
+                    {[
+                      { v: "All", lab: "All" },
+                      { v: "High", lab: "★ High" },
+                      { v: "Standard", lab: "Standard" },
+                    ].map(({ v, lab }) => (
                       <div
-                        key={opt}
+                        key={v}
                         role="button"
                         tabIndex={0}
                         onClick={() => {
-                          setFilters((f) => ({ ...f, quality: opt }));
+                          setFilters((f) => ({ ...f, quality: v }));
                           setOpenFilter(null);
                         }}
-                        style={{ padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          color: filters.quality === v ? t.green : t.textSecondary,
+                          fontWeight: filters.quality === v ? 600 : 400,
+                        }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                       >
-                        {opt === "High" ? "★ High" : opt}
+                        {lab}
                       </div>
                     ))}
                   </div>
@@ -5844,22 +5834,388 @@ export default function App() {
               </div>
             );
           };
-          const fmtHandle = (h) => {
-            const x = String(h || "").trim();
-            if (!x) return "—";
-            return x.startsWith("@") ? x : `@${x}`;
+
+          const renderBodyCell = (c, col) => {
+            const align = col.align === "right" ? { textAlign: "right" } : {};
+            const stopNav = col.editable
+              ? { onClick: (e) => e.stopPropagation() }
+              : {};
+            const base = { ...cellBase, ...align };
+
+            if (col.key === "status") {
+              const dotBg = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.textFaint;
+              const stLabel = c.status === "Off-boarded" ? "Off" : c.status === "One-time" ? "One-time" : "Active";
+              const stColor = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.textFaint;
+              return (
+                <div key={col.key} style={{ ...base, display: "flex", alignItems: "center" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 4, background: dotBg, marginRight: 6, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: stColor, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
+                </div>
+              );
+            }
+            if (col.key === "handle") {
+              const hDisp = fmtHandle(c.handle);
+              return (
+                <div key={col.key} style={base} title={hDisp}>
+                  <span style={{ fontWeight: 600, color: t.text }}>{hDisp}</span>
+                </div>
+              );
+            }
+            if (col.key === "niche") {
+              const raw = String(c.niche || "");
+              const isEditing = editingCell?.creatorId === c.id && editingCell?.column === "niche";
+              return (
+                <div key={col.key} style={base} {...stopNav}>
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      defaultValue={raw}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        outline: "none",
+                        background: t.green + "10",
+                        color: t.text,
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        padding: "2px 4px",
+                        borderRadius: 3,
+                        boxSizing: "border-box",
+                      }}
+                      onBlur={(e) => {
+                        if (skipCreatorCellBlurRef.current) {
+                          skipCreatorCellBlurRef.current = false;
+                          return;
+                        }
+                        updateCreator(c.id, { niche: e.target.value });
+                        setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          skipCreatorCellBlurRef.current = true;
+                          setEditingCell(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCell({ creatorId: c.id, column: "niche" });
+                      }}
+                      title="Double-click to edit"
+                      style={{ fontSize: 11, color: t.textMuted }}
+                    >
+                      {raw.trim() ? raw : "—"}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+            if (col.key === "email") {
+              const em = (c.email || "").trim();
+              const isEditing = editingCell?.creatorId === c.id && editingCell?.column === "email";
+              return (
+                <div key={col.key} style={base} {...stopNav}>
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      defaultValue={em}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        outline: "none",
+                        background: t.green + "10",
+                        color: t.text,
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        padding: "2px 4px",
+                        borderRadius: 3,
+                        boxSizing: "border-box",
+                      }}
+                      onBlur={(e) => {
+                        if (skipCreatorCellBlurRef.current) {
+                          skipCreatorCellBlurRef.current = false;
+                          return;
+                        }
+                        updateCreator(c.id, { email: e.target.value });
+                        setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          skipCreatorCellBlurRef.current = true;
+                          setEditingCell(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : em ? (
+                    <a
+                      href={`mailto:${em}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setEditingCell({ creatorId: c.id, column: "email" });
+                      }}
+                      style={{ color: t.blue, textDecoration: "none", fontSize: 12 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                      title={em}
+                    >
+                      {em}
+                    </a>
+                  ) : (
+                    <span
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCell({ creatorId: c.id, column: "email" });
+                      }}
+                      title="Double-click to edit"
+                      style={{ color: t.textFaint }}
+                    >
+                      —
+                    </span>
+                  )}
+                </div>
+              );
+            }
+            if (col.key === "tt") {
+              const ttUrl = ((c.tiktokUrl || "").trim() || tiktokUrlFromHandle(c.handle)).trim();
+              return (
+                <div key={col.key} style={{ ...base, textAlign: "center" }}>
+                  {ttUrl ? (
+                    <a
+                      href={ttUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={ttLinkStyle}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = t.green;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = t.textMuted;
+                      }}
+                    >
+                      TT
+                    </a>
+                  ) : (
+                    <span style={{ color: t.textFaint }}>—</span>
+                  )}
+                </div>
+              );
+            }
+            if (col.key === "ig") {
+              const igUrl = (c.instagramUrl || "").trim();
+              return (
+                <div key={col.key} style={{ ...base, textAlign: "center" }}>
+                  {igUrl ? (
+                    <a
+                      href={igUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={ttLinkStyle}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = "#E1306C";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = t.textMuted;
+                      }}
+                    >
+                      IG
+                    </a>
+                  ) : (
+                    <span style={{ color: t.textFaint }}>—</span>
+                  )}
+                </div>
+              );
+            }
+            if (col.key === "videos") {
+              const vc = creatorDisplayVideoCount(c);
+              return (
+                <div key={col.key} style={{ ...base, fontWeight: 600, color: vc ? t.text : t.textFaint }}>
+                  {vc}
+                </div>
+              );
+            }
+            if (col.key === "quality") {
+              return (
+                <div key={col.key} style={base}>
+                  {c.quality === "High" ? (
+                    <span style={{ color: "#f59e0b", fontWeight: 600, fontSize: 11 }}>★ High</span>
+                  ) : (
+                    <span style={{ color: t.textFaint, fontSize: 11 }}>Standard</span>
+                  )}
+                </div>
+              );
+            }
+            if (col.key === "cost") {
+              const rawCost = String(c.costPerVideo || "").trim();
+              const costShow = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
+              const isEditing = editingCell?.creatorId === c.id && editingCell?.column === "cost";
+              return (
+                <div key={col.key} style={base} {...stopNav}>
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      defaultValue={rawCost}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        outline: "none",
+                        background: t.green + "10",
+                        color: t.text,
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        padding: "2px 4px",
+                        borderRadius: 3,
+                        boxSizing: "border-box",
+                      }}
+                      onBlur={(e) => {
+                        if (skipCreatorCellBlurRef.current) {
+                          skipCreatorCellBlurRef.current = false;
+                          return;
+                        }
+                        updateCreator(c.id, { costPerVideo: e.target.value });
+                        setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          skipCreatorCellBlurRef.current = true;
+                          setEditingCell(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCell({ creatorId: c.id, column: "cost" });
+                      }}
+                      title="Double-click to edit"
+                      style={{ color: rawCost ? t.textMuted : t.textFaint }}
+                    >
+                      {costShow}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+            if (col.key === "notes") {
+              const n = (c.notes || "").trim();
+              const isEditing = editingCell?.creatorId === c.id && editingCell?.column === "notes";
+              return (
+                <div key={col.key} style={{ ...base, ...stopNav }} title={n}>
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      defaultValue={n}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        outline: "none",
+                        background: t.green + "10",
+                        color: t.text,
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        padding: "2px 4px",
+                        borderRadius: 3,
+                        boxSizing: "border-box",
+                      }}
+                      onBlur={(e) => {
+                        if (skipCreatorCellBlurRef.current) {
+                          skipCreatorCellBlurRef.current = false;
+                          return;
+                        }
+                        updateCreator(c.id, { notes: e.target.value });
+                        setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          skipCreatorCellBlurRef.current = true;
+                          setEditingCell(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCell({ creatorId: c.id, column: "notes" });
+                      }}
+                      title="Double-click to edit"
+                      style={{ fontSize: 11, color: t.textFaint }}
+                    >
+                      {n || "—"}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+            return <div key={col.key} style={base} />;
           };
+
           return (
           <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-              <div style={{ ...S.formTitle, marginBottom: 0 }}>UGC Army — Creators</div>
-              <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20, background: t.green + (t.isLight ? "18" : "15"), color: t.green }}>{creators.length}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <input
+                type="text"
+                value={creatorSearch}
+                onChange={(e) => setCreatorSearch(e.target.value)}
+                placeholder="Search creators..."
+                style={{ flex: 1, maxWidth: 300, height: 34, padding: "0 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddCreatorPanel((prev) => {
+                    if (!prev) setTimeout(() => addHandleInputRef.current?.focus(), 0);
+                    return !prev;
+                  });
+                }}
+                style={{ ...S.btnP, height: 34, padding: "0 16px", fontSize: 13, display: "inline-flex", alignItems: "center" }}
+              >
+                + Add Creator
+              </button>
+              <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, opacity: bulkEnrichProgress ? 0.6 : 1, display: "inline-flex", alignItems: "center" }}>
+                Enrich All
+              </button>
+              <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, height: 34, padding: "0 14px", fontSize: 13, display: "inline-flex", alignItems: "center" }}>Import CSV</button>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleCsvImport(f);
+                  e.target.value = "";
+                }}
+              />
+              <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 12, color: t.textFaint }}>
+                {sortedCreators.length} of {creators.length}
+              </span>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 8 }}>Add a Creator</div>
+            {showAddCreatorPanel ? (
+            <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                 <input
+                  ref={addHandleInputRef}
                   type="text"
                   value={addHandleInput}
                   onChange={(e) => setAddHandleInput(e.target.value)}
@@ -5897,62 +6253,8 @@ export default function App() {
                 </div>
               ) : null}
             </div>
+            ) : null}
 
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, padding: "0 0 12px 0", borderBottom: `1px solid ${t.border}`, flexWrap: "wrap" }}>
-              <input
-                type="text"
-                value={creatorSearch}
-                onChange={(e) => setCreatorSearch(e.target.value)}
-                placeholder="Search creators..."
-                style={{ flex: 1, minWidth: 200, padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-              />
-              <select
-                value={filters.niche}
-                onChange={(e) => setFilters((f) => ({ ...f, niche: e.target.value }))}
-                style={filterSelect(filters.niche !== "All Niches" && filters.niche !== "All")}
-              >
-                {allNiches.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                style={filterSelect(filters.status !== "All Statuses" && filters.status !== "All")}
-              >
-                <option value="All Statuses">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="One-time">One-time</option>
-                <option value="Off-boarded">Off-boarded</option>
-              </select>
-              <select
-                value={filters.quality}
-                onChange={(e) => setFilters((f) => ({ ...f, quality: e.target.value }))}
-                style={filterSelect(filters.quality !== "All Quality" && filters.quality !== "All")}
-              >
-                <option value="All Quality">All Quality</option>
-                <option value="High">★ High</option>
-                <option value="Standard">Standard</option>
-              </select>
-              <button type="button" disabled={bulkEnrichProgress} onClick={runBulkEnrichAll} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12, opacity: bulkEnrichProgress ? 0.6 : 1 }}>
-                Enrich All
-              </button>
-              <button type="button" onClick={() => csvInputRef.current?.click()} style={{ ...S.btnS, padding: "8px 14px", fontSize: 12 }}>Import CSV</button>
-              <input
-                ref={csvInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleCsvImport(f);
-                  e.target.value = "";
-                }}
-              />
-              <span style={{ marginLeft: "auto", fontSize: 12, color: t.textFaint }}>
-                {sortedCreators.length} of {creators.length} creators
-              </span>
-            </div>
             {bulkEnrichProgress ? (
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>
                 Enriching {bulkEnrichProgress.cur} of {bulkEnrichProgress.total} — {bulkEnrichProgress.handle}
@@ -5961,196 +6263,72 @@ export default function App() {
               </div>
             ) : null}
 
-            <div style={{ overflowX: "auto", border: `1px solid ${t.border}`, borderRadius: 12, background: t.card }}>
-              <div style={{ position: "relative" }}>
-                <div style={headCell}>
-                  {hdr("status", "Status", "status")}
-                  {hdr("fitScore", "Fit", null)}
-                  {hdr("handle", "Handle", null)}
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: t.textFaint, display: "flex", alignItems: "center", justifyContent: "center" }}>Av</div>
-                  {hdr("niche", "Niche", "niche")}
-                  {hdr("followers", "Followers", null)}
-                  {hdr("hearts", "Hearts", null)}
-                  {hdr("engagement", "Eng%", null)}
-                  {hdr("videos", "Videos", null)}
-                  {hdr("email", "Email", null)}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0 }}>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleCreatorSort("tiktok")}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCreatorSort("tiktok"); } }}
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        color: t.textFaint,
-                        cursor: "pointer",
-                        userSelect: "none",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      TT
-                      <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow("tiktok")}</span>
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0 }}>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleCreatorSort("instagram")}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCreatorSort("instagram"); } }}
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        color: t.textFaint,
-                        cursor: "pointer",
-                        userSelect: "none",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      IG
-                      <span style={{ fontSize: 9, opacity: 0.85 }}>{sortArrow("instagram")}</span>
-                    </span>
-                  </div>
-                  {hdr("quality", "Quality", "quality")}
-                  {hdr("cost", "Cost", null)}
-                  {hdr("notes", "Notes", null)}
+            <div
+              style={{
+                overflowX: "auto",
+                overflowY: "auto",
+                maxHeight: "calc(100vh - 160px)",
+                border: `1px solid ${t.border}`,
+                borderRadius: 10,
+                background: t.card,
+              }}
+            >
+              <div style={{ minWidth: 1100 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: CREATOR_GRID_TEMPLATE,
+                    background: t.cardAlt,
+                    borderBottom: `2px solid ${t.border}`,
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 10,
+                  }}
+                >
+                  {CREATOR_COLUMNS.map((col) => renderHeaderCell(col))}
                 </div>
-
-                <div style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto", overflowX: "auto" }}>
-                  {sortedCreators.length === 0 ? (
-                    <div style={{ padding: 48, textAlign: "center", color: t.textMuted, fontSize: 14 }}>
+                {sortedCreators.length === 0 ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: CREATOR_GRID_TEMPLATE,
+                      padding: "40px 16px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ gridColumn: "1 / -1", color: t.textMuted, fontSize: 14 }}>
                       <div style={{ marginBottom: 12 }}>No creators match your filters</div>
                       <button type="button" onClick={clearCreatorFilters} style={{ ...S.btnS, padding: "8px 16px", fontSize: 13 }}>Clear filters</button>
                     </div>
-                  ) : (
-                    sortedCreators.map((c) => {
-                      const dotBg = c.status === "Active" ? t.green : c.status === "One-time" ? t.orange : t.textFaint;
-                      const stLabel = c.status === "Off-boarded" ? "Off" : c.status === "One-time" ? "One-time" : "Active";
-                      const vc = creatorDisplayVideoCount(c);
-                      const ttUrl = (c.tiktokUrl || "").trim();
-                      const igUrl = (c.instagramUrl || "").trim();
-                      const rawCost = String(c.costPerVideo || "").trim();
-                      const costShow = rawCost ? (rawCost.startsWith("$") ? rawCost : `$${rawCost}`) : "—";
-                      const hDisp = fmtHandle(c.handle);
-                      const ttD = c.tiktokData || {};
-                      const engV = parseFloat(c.engagementRate);
-                      const engColor = !Number.isFinite(engV)
-                        ? t.textFaint
-                        : engV > 50
-                          ? t.green
-                          : engV >= 10
-                            ? t.blue
-                            : t.textMuted;
-                      const avLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
-                      const fs = c.aiAnalysis?.fitScore;
-                      const fsSt = fitScoreBadgeStyle(fs, t);
-                      return (
-                        <div
-                          key={c.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => navigate("creatorDetail", { creatorId: c.id })}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("creatorDetail", { creatorId: c.id }); } }}
-                          style={rowCell}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 4, background: dotBg, flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, color: dotBg, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stLabel}</span>
-                          </div>
-                          <div style={{ textAlign: "center", fontSize: 12, fontWeight: 800, color: Number.isFinite(Number(fs)) ? fsSt.color : t.textFaint }}>
-                            {Number.isFinite(Number(fs)) ? fs : "—"}
-                          </div>
-                          <div style={{ ...ellip, fontWeight: 600, color: t.text }} title={hDisp}>{hDisp}</div>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
-                            {ttD.avatarUrl ? (
-                              <img src={ttD.avatarUrl} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }} />
-                            ) : (
-                              <div style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.textFaint }}>
-                                {avLetter}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ ...ellip, fontSize: 11, color: t.textMuted }} title={c.niche || ""}>{c.niche || "—"}</div>
-                          <div style={{ textAlign: "right", fontWeight: 600, color: ttD.followers != null ? t.text : t.textFaint, fontSize: 12 }}>{ttD.followers != null ? formatMetricShort(ttD.followers) : "—"}</div>
-                          <div style={{ textAlign: "right", fontWeight: 600, color: ttD.hearts != null ? t.text : t.textFaint, fontSize: 12 }}>{ttD.hearts != null ? formatMetricShort(ttD.hearts) : "—"}</div>
-                          <div style={{ textAlign: "right", fontWeight: 600, fontSize: 11, color: engColor }}>{c.engagementRate != null ? `${c.engagementRate}%` : "—"}</div>
-                          <div style={{ textAlign: "right", fontWeight: 600, color: vc ? t.text : t.textFaint, fontSize: 12 }}>{vc}</div>
-                          <div style={ellip}>
-                            {c.email?.trim() ? (
-                              <a href={`mailto:${c.email.trim()}`} onClick={(e) => e.stopPropagation()} style={{ color: t.blue, textDecoration: "none", fontSize: 11 }} onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }} onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }} title={c.email}>
-                                {c.email}
-                              </a>
-                            ) : (
-                              <span style={{ color: t.textFaint }}>—</span>
-                            )}
-                          </div>
-                          <div style={{ textAlign: "center" }}>
-                            {ttUrl ? (
-                              <a
-                                href={ttUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                style={ttLinkStyle}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = t.green + "20";
-                                  e.currentTarget.style.color = t.green;
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = t.cardAlt;
-                                  e.currentTarget.style.color = t.textMuted;
-                                }}
-                              >
-                                TT
-                              </a>
-                            ) : (
-                              <span style={{ color: t.textFaint }}>—</span>
-                            )}
-                          </div>
-                          <div style={{ textAlign: "center" }}>
-                            {igUrl ? (
-                              <a
-                                href={igUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                style={ttLinkStyle}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = "rgba(225, 48, 108, 0.15)";
-                                  e.currentTarget.style.color = "#E1306C";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = t.cardAlt;
-                                  e.currentTarget.style.color = t.textMuted;
-                                }}
-                              >
-                                IG
-                              </a>
-                            ) : (
-                              <span style={{ color: t.textFaint }}>—</span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: 11 }}>
-                            {c.quality === "High" ? <span style={{ color: "#f59e0b", fontWeight: 600 }}>★ High</span> : <span style={{ color: t.textFaint }}>Standard</span>}
-                          </div>
-                          <div style={{ fontSize: 11, color: rawCost ? t.textMuted : t.textFaint }}>{costShow}</div>
-                          <div style={{ ...ellip, fontSize: 11, color: t.textFaint, whiteSpace: "nowrap" }} title={c.notes || ""}>{c.notes?.trim() ? c.notes.trim() : "—"}</div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  sortedCreators.map((c, rowIdx) => (
+                    <div
+                      key={c.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate("creatorDetail", { creatorId: c.id })}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("creatorDetail", { creatorId: c.id }); } }}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: CREATOR_GRID_TEMPLATE,
+                        padding: 0,
+                        borderBottom: `1px solid ${t.border}30`,
+                        cursor: "pointer",
+                        transition: "background 0.1s",
+                        background: rowIdx % 2 === 1 ? t.cardAlt + "30" : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = t.cardAlt + "80";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = rowIdx % 2 === 1 ? t.cardAlt + "30" : "transparent";
+                      }}
+                    >
+                      {CREATOR_COLUMNS.map((col) => renderBodyCell(c, col))}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
