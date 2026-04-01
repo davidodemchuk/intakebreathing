@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.2";
 const CHANGELOG = [
+  { version: "1.3.2", date: "2025-04-01", changes: [
+    "Added Manager Info section above Product & Campaign — who is submitting + content quantity",
+    "Manager names: Summer, Mike Max, David, Chris, Alex, Other with custom input",
+    "Content quantity field — how many pieces of UGC are needed",
+    "Moved Platform selection from Format section up to Manager Info section",
+    "Fixed Other platform bug — added Enter key and + button to submit custom platform name",
+  ]},
   { version: "1.3.1", date: "2025-04-01", changes: [
     "Rebranded AI Generate to IB-Ai across the entire app",
   ]},
@@ -284,10 +291,13 @@ function escapeHtml(str) {
 }
 
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
+
+const MANAGERS = ["Summer", "Mike Max", "David", "Chris", "Alex", "Other"];
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
 const DEFAULTS = {
+  manager: "Summer", customManager: "", contentQuantity: "1",
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
   ageRange: "25-34", gender: "Men & Women", problem: "",
   selectedStats: ["snoring", "sleep", "sinus", "customers", "fda"],
@@ -296,6 +306,8 @@ const DEFAULTS = {
   approvedClaims: [...APPROVED_CLAIMS.slice(0, 5)],
   bannedClaims: [...BANNED_CLAIMS.slice(0, 5)],
 };
+
+const PREFILL = { ...DEFAULTS };
 
 // ═══════════════════════════════════════════════════════════
 // BRIEF GENERATOR
@@ -339,7 +351,13 @@ function normalizePlatforms(d) {
 
 function formatPlatformsDisplay(fd) {
   const plats = normalizePlatforms(fd);
-  return plats.map(p => p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p).join(", ");
+  return plats.map((p) => (p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p)).join(", ");
+}
+
+function managerDisplayName(d) {
+  if (!d) return "";
+  if (d.manager === "Other" && (d.customManager || "").trim()) return (d.customManager || "").trim();
+  return d.manager || "Summer";
 }
 
 function formatToneDisplay(fd) {
@@ -384,18 +402,27 @@ function generateBrief(d) {
   const vibePrefix = d.vibe === "Other" && vibeLabel ? `Campaign vibe: ${vibeLabel}\n\n` : "";
   const tonePrefix = toneResolved ? `Tone / voice: ${toneResolved}\n\n` : "";
   const platformsArr = normalizePlatforms(d);
-  const noteBlocks = platformsArr.map(p => {
+  const noteBlocks = platformsArr.map((p) => {
     const base = (PLATFORM_NOTES[p] || "").trim();
-    if (p === "Other" && (d.customPlatform || "").trim()) {
-      const o = (d.customPlatform || "").trim();
-      return base ? `${base}\nNamed platform: ${o}` : `Platform: ${o}`;
+    if (PLATFORM_NOTES[p]) {
+      if (p === "Other" && (d.customPlatform || "").trim()) {
+        const o = (d.customPlatform || "").trim();
+        return base ? `${base}\nNamed platform: ${o}` : `Platform: ${o}`;
+      }
+      return base;
     }
-    return base;
+    const otherBase = (PLATFORM_NOTES["Other"] || "").trim();
+    return otherBase ? `${otherBase}\nNamed platform: ${p}` : `Platform: ${p}`;
   }).filter(Boolean);
   const lg = LENGTH_GUIDE[d.videoLength] || "";
   const platNotes = vibePrefix + tonePrefix + noteBlocks.join("\n\n—\n\n") + (noteBlocks.length && lg ? "\n\n" : "") + lg;
-  const platLabel = (p) => p === "Other" && (d.customPlatform || "").trim() ? (d.customPlatform || "").trim() : p;
-  const deliverables = `Submit for: ${platformsArr.map(platLabel).join(", ")}. (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
+  const platLabel = (p) => {
+    if (p === "Other" && (d.customPlatform || "").trim()) return (d.customPlatform || "").trim();
+    return p;
+  };
+  const mgr = managerDisplayName(d);
+  const qty = String(d.contentQuantity ?? "1").trim() || "1";
+  const deliverables = `Submitted by: ${mgr}. Content requested: ${qty} videos. Submit for: ${platformsArr.map(platLabel).join(", ")}. (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
   const rejections = buildRejectionsArray(d);
   const approvedForBrief = Array.isArray(d.approvedClaims) && d.approvedClaims.length ? [...d.approvedClaims] : [...APPROVED_CLAIMS.slice(0, 5)];
   const bannedForBrief = Array.isArray(d.bannedClaims) && d.bannedClaims.length ? [...d.bannedClaims] : [...BANNED_CLAIMS.slice(0, 5)];
@@ -408,20 +435,25 @@ function generateBrief(d) {
 
 const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const { t, S } = useContext(ThemeContext);
-  const [ageRange, setAgeRange] = useState(prefill?.ageRange ?? DEFAULTS.ageRange);
-  const [gender, setGender] = useState(prefill?.gender ?? DEFAULTS.gender);
-  const [selectedStats, setSelectedStats] = useState(prefill ? [...prefill.selectedStats] : [...DEFAULTS.selectedStats]);
-  const [showCustomProduct, setShowCustomProduct] = useState((prefill?.productName || DEFAULTS.productName) === "Other");
-  const [showCustomVibe, setShowCustomVibe] = useState((prefill?.vibe || DEFAULTS.vibe) === "Other");
-  const [showCustomTone, setShowCustomTone] = useState((prefill?.tone || DEFAULTS.tone) === "Other");
+  const pf = prefill || PREFILL;
+  const [ageRange, setAgeRange] = useState(pf.ageRange ?? DEFAULTS.ageRange);
+  const [gender, setGender] = useState(pf.gender ?? DEFAULTS.gender);
+  const [selectedStats, setSelectedStats] = useState([...(pf.selectedStats ?? DEFAULTS.selectedStats)]);
+  const [showCustomProduct, setShowCustomProduct] = useState((pf.productName || DEFAULTS.productName) === "Other");
+  const [showCustomVibe, setShowCustomVibe] = useState((pf.vibe || DEFAULTS.vibe) === "Other");
+  const [showCustomTone, setShowCustomTone] = useState((pf.tone || DEFAULTS.tone) === "Other");
+  const [showCustomManager, setShowCustomManager] = useState((pf.manager || DEFAULTS.manager) === "Other");
+  const [managerSel, setManagerSel] = useState(pf.manager ?? DEFAULTS.manager);
+  const [contentQty, setContentQty] = useState(pf.contentQuantity ?? DEFAULTS.contentQuantity);
+  const [otherPlatformDraft, setOtherPlatformDraft] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState(() => {
-    const p = prefill?.platforms ?? DEFAULTS.platforms;
+    const p = pf.platforms ?? DEFAULTS.platforms;
     if (Array.isArray(p) && p.length) return [...p];
-    if (prefill?.platform) return [prefill.platform];
+    if (pf.platform) return [pf.platform];
     return ["TikTok"];
   });
-  const [selectedApproved, setSelectedApproved] = useState(() => [...(prefill?.approvedClaims ?? DEFAULTS.approvedClaims)]);
-  const [selectedBanned, setSelectedBanned] = useState(() => [...(prefill?.bannedClaims ?? DEFAULTS.bannedClaims)]);
+  const [selectedApproved, setSelectedApproved] = useState(() => [...(pf.approvedClaims ?? DEFAULTS.approvedClaims)]);
+  const [selectedBanned, setSelectedBanned] = useState(() => [...(pf.bannedClaims ?? DEFAULTS.bannedClaims)]);
   const [complianceLoading, setComplianceLoading] = useState(false);
   const complianceTimer = useRef(null);
   const [addApprovedDraft, setAddApprovedDraft] = useState("");
@@ -429,21 +461,24 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const [statsLoading, setStatsLoading] = useState(false);
   const debounceTimer = useRef(null);
   const vals = useRef({
-    productName: prefill?.productName || DEFAULTS.productName,
-    customProductName: prefill?.customProductName ?? DEFAULTS.customProductName,
-    campaignName: prefill?.campaignName || DEFAULTS.campaignName,
-    vibe: prefill?.vibe || DEFAULTS.vibe,
-    customVibe: prefill?.customVibe ?? DEFAULTS.customVibe,
-    mission: prefill?.mission || "",
-    problem: prefill?.problem ?? DEFAULTS.problem,
-    ageRange: prefill?.ageRange ?? DEFAULTS.ageRange,
-    gender: prefill?.gender ?? DEFAULTS.gender,
-    customPlatform: prefill?.customPlatform ?? DEFAULTS.customPlatform,
-    videoLength: prefill?.videoLength || DEFAULTS.videoLength,
-    tone: prefill?.tone || DEFAULTS.tone,
-    customTone: prefill?.customTone ?? DEFAULTS.customTone,
-    notes: prefill?.notes || "",
-    customRejections: prefill?.customRejections ?? DEFAULTS.customRejections,
+    manager: pf.manager ?? DEFAULTS.manager,
+    customManager: pf.customManager ?? DEFAULTS.customManager,
+    contentQuantity: pf.contentQuantity ?? DEFAULTS.contentQuantity,
+    productName: pf.productName || DEFAULTS.productName,
+    customProductName: pf.customProductName ?? DEFAULTS.customProductName,
+    campaignName: pf.campaignName || DEFAULTS.campaignName,
+    vibe: pf.vibe || DEFAULTS.vibe,
+    customVibe: pf.customVibe ?? DEFAULTS.customVibe,
+    mission: pf.mission || "",
+    problem: pf.problem ?? DEFAULTS.problem,
+    ageRange: pf.ageRange ?? DEFAULTS.ageRange,
+    gender: pf.gender ?? DEFAULTS.gender,
+    customPlatform: pf.customPlatform ?? DEFAULTS.customPlatform,
+    videoLength: pf.videoLength || DEFAULTS.videoLength,
+    tone: pf.tone || DEFAULTS.tone,
+    customTone: pf.customTone ?? DEFAULTS.customTone,
+    notes: pf.notes || "",
+    customRejections: pf.customRejections ?? DEFAULTS.customRejections,
   });
   const toggleStat = (id) => setSelectedStats(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
 
@@ -568,19 +603,37 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
   }, []);
 
   const togglePlatform = (name) => {
-    setSelectedPlatforms(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
+    setSelectedPlatforms((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
   };
+
+  const addCustomPlatform = useCallback(() => {
+    const name = otherPlatformDraft.trim();
+    if (!name) return;
+    setSelectedPlatforms((prev) => {
+      let next = prev.filter((x) => x !== "Other");
+      if (!next.includes(name)) next = [...next, name];
+      return next;
+    });
+    setOtherPlatformDraft("");
+  }, [otherPlatformDraft]);
 
   const go = useCallback((mode) => {
     const v = vals.current;
+    v.manager = managerSel;
+    v.contentQuantity = String(contentQty || "1");
+    if (v.manager === "Other" && !v.customManager.trim()) { alert("Please enter your name."); return; }
     if (!v.problem.trim()) { alert("Please describe the core problem."); return; }
     if (v.productName === "Other" && !v.customProductName.trim()) { alert("Please enter a product name."); return; }
     if (v.vibe === "Other" && !v.customVibe.trim()) { alert("Please describe your campaign vibe."); return; }
     if (v.tone === "Other" && !v.customTone.trim()) { alert("Please describe your tone."); return; }
     if (selectedPlatforms.length === 0) { alert("Please select at least one platform."); return; }
     const problemTrim = v.problem.trim();
+    const qtyStr = String(Math.max(1, parseInt(String(contentQty || "1"), 10) || 1));
     onGenerate({
       mode,
+      manager: managerSel,
+      customManager: (v.customManager || "").trim(),
+      contentQuantity: qtyStr,
       productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
       selectedStats, platforms: [...selectedPlatforms], customPlatform: (v.customPlatform || "").trim(), videoLength: v.videoLength, tone: v.tone, customTone: (v.customTone || "").trim(), notes: v.notes,
@@ -595,7 +648,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       _disclosure: DISCLOSURE,
       _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }),
     });
-  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms, selectedApproved, selectedBanned]);
+  }, [onGenerate, ageRange, gender, selectedStats, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty]);
   const mkSel = (key, label, opts) => (
     <div style={S.fg}><label style={S.label}>{label}</label>
       <select style={S.select} defaultValue={vals.current[key]} onChange={e=>{vals.current[key]=e.target.value}}>
@@ -609,6 +662,96 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       <div style={{ marginBottom: 36 }}>
         <div style={S.formTitle}>Create New Brief</div>
         <div style={S.formSub}>Select options below. Brief generates instantly.</div>
+      </div>
+      <div style={S.section}>
+        <div style={S.secLabel}>👤 Brief Details</div>
+        <div style={S.r3}>
+          <div style={S.fg}>
+            <label style={S.label}>Submitted By</label>
+            <select
+              style={S.select}
+              value={managerSel}
+              onChange={(e) => {
+                const v = e.target.value;
+                vals.current.manager = v;
+                setManagerSel(v);
+                setShowCustomManager(v === "Other");
+              }}
+            >
+              {MANAGERS.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            {showCustomManager && (
+              <div style={{ ...S.fg, marginBottom: 0 }}>
+                <input
+                  style={S.input}
+                  defaultValue={vals.current.customManager}
+                  onChange={(e) => { vals.current.customManager = e.target.value; }}
+                  onFocus={(e) => { e.target.style.borderColor = t.green; }}
+                  onBlur={(e) => { e.target.style.borderColor = t.border; }}
+                  placeholder="Enter your name"
+                />
+              </div>
+            )}
+          </div>
+          <div style={S.fg}>
+            <label style={S.label}># of Videos Needed</label>
+            <input
+              type="number"
+              min={1}
+              style={S.input}
+              value={contentQty}
+              onChange={(e) => {
+                const v = e.target.value;
+                setContentQty(v);
+                vals.current.contentQuantity = v;
+              }}
+              onFocus={(e) => { e.target.style.borderColor = t.green; }}
+              onBlur={(e) => { e.target.style.borderColor = t.border; }}
+              placeholder="e.g. 6"
+            />
+          </div>
+          <div style={{ ...S.fg, minWidth: 0 }}>
+            <label style={S.label}>Platform</label>
+            <div style={S.chipGrid}>
+              {PLATFORMS.map((p) => (
+                <div key={p} style={S.chip(selectedPlatforms.includes(p))} onClick={() => togglePlatform(p)}>
+                  {selectedPlatforms.includes(p) ? "✓ " : ""}{p}
+                </div>
+              ))}
+              {selectedPlatforms.filter((p) => !PLATFORMS.includes(p)).map((p) => (
+                <div key={`c-${p}`} style={S.chip(true)} onClick={() => togglePlatform(p)}>
+                  ✓ {p}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {selectedPlatforms.includes("Other") && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+            <input
+              style={{ ...S.input, flex: 1, minWidth: 160, marginBottom: 0 }}
+              value={otherPlatformDraft}
+              onChange={(e) => setOtherPlatformDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                addCustomPlatform();
+              }}
+              onFocus={(e) => { e.target.style.borderColor = t.green; }}
+              onBlur={(e) => { e.target.style.borderColor = t.border; }}
+              placeholder="e.g. Snapchat, Twitter/X, Pinterest..."
+            />
+            <button
+              type="button"
+              onClick={addCustomPlatform}
+              style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+            >
+              Add
+            </button>
+          </div>
+        )}
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>🎯 Product & Campaign</div>
@@ -750,15 +893,6 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
             </div>}
           </div>
         </div>
-      </div>
-      <div style={S.section}>
-        <div style={S.secLabel}>📱 Platform</div>
-        <div style={S.chipGrid}>
-          {PLATFORMS.map(p => <div key={p} style={S.chip(selectedPlatforms.includes(p))} onClick={() => togglePlatform(p)}>{selectedPlatforms.includes(p) ? "✓ " : ""}{p}</div>)}
-        </div>
-        {selectedPlatforms.includes("Other") && <div style={S.fg}><label style={S.label}>Other platform</label>
-          <input style={S.input} defaultValue={vals.current.customPlatform} onChange={e => { vals.current.customPlatform = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="e.g. Snapchat, Twitter/X, Pinterest..." />
-        </div>}
       </div>
       <div style={S.section}>
         <div style={S.secLabel}>📝 Creative Direction</div>
@@ -947,6 +1081,10 @@ function buildBriefPrintHtml(b, fd) {
     <h1>${title}</h1>
     <div class="mission">"${escapeHtml(b.mission)}"</div>
     <div class="badges">${badges}</div>
+    <div style="margin-top:12px;font-size:13px;color:#555;line-height:1.65;text-align:center">
+      <div>Submitted by: ${escapeHtml(managerDisplayName(fd))}</div>
+      <div>Videos requested: ${escapeHtml(String(fd.contentQuantity ?? "1"))}</div>
+    </div>
   </div>
 
   <h2>👤 Who You're Talking To</h2>
@@ -1080,6 +1218,10 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
           <span style={S.badge(t.orange)}>{fd.videoLength}</span>
           <span style={S.badge(t.green)}>{fd.tone === "Other" && fd.customTone?.trim() ? fd.customTone.trim() : fd.tone}</span>
         </div>
+        <div style={{ fontSize: 13, color: t.textMuted, marginTop: 14, lineHeight: 1.65 }}>
+          <div>Submitted by: {managerDisplayName(fd)}</div>
+          <div>Videos requested: {fd.contentQuantity ?? "1"}</div>
+        </div>
         {isManager && <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>}
       </div>
       <div style={S.bSec}>
@@ -1161,17 +1303,24 @@ function buildAIPrompt(d) {
   const audienceCompact = `${gen} ${ageR}`;
   const audienceForm = d._audience || `Ages ${ageR} — ${gen}`;
   const plats = normalizePlatforms(d);
-  const platLine = plats.map(p => p === "Other" && (d.customPlatform || "").trim() ? `Other (${(d.customPlatform || "").trim()})` : p).join(", ");
+  const platLine = plats.map((p) => {
+    if (p === "Other" && (d.customPlatform || "").trim()) return `Other (${(d.customPlatform || "").trim()})`;
+    return p;
+  }).join(", ");
   const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
   const rejectionsLine = Array.isArray(d._rejections) && d._rejections.length
     ? d._rejections.join(". ")
     : buildRejectionsArray(d).join(". ");
+  const mgrName = managerDisplayName(d);
+  const qtyVideos = String(d.contentQuantity ?? "1").trim() || "1";
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
 PRODUCT: ${productResolved} by Intake Breathing
 CAMPAIGN NAME: ${d.campaignName || "Untitled"}
 CAMPAIGN VIBE: ${vibeResolved}
 MISSION: ${d.mission || "N/A"}
+SUBMITTED BY: ${mgrName}
+CONTENT QUANTITY: ${qtyVideos} videos needed
 TARGET AUDIENCE: ${audienceCompact}
 AUDIENCE (form selection, ageRange + gender): ${audienceForm}
 CORE PROBLEM: ${prob}
@@ -1189,6 +1338,8 @@ TONE: ${toneResolved}
 CREATIVE NOTES: ${d.notes || "None"}
 
 TONE DIRECTION: The creative tone for this brief is "${toneResolved}". Match this voice consistently in hooks, on-camera delivery, pacing, overlay text, and every line of copy — do not default to a generic influencer voice.
+
+The deliverables JSON field must clearly state that ${qtyVideos} video(s) are requested for this campaign, in addition to format and upload requirements.
 
 Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
 
@@ -1546,7 +1697,7 @@ export default function App() {
                 {library.slice(0,5).map(item => (
                   <div key={item.id} style={S.listItem} onClick={()=>openLibraryItem(item)}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
-                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div></div>
+                    <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{managerDisplayName(item.formData)} · {item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div></div>
                     <div style={{ fontSize: 12, color: t.textFaint }}>→</div>
                   </div>
                 ))}
@@ -1683,7 +1834,7 @@ export default function App() {
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
                 <div style={{ cursor: "pointer", flex: 1 }} onClick={()=>openLibraryItem(item)}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
-                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{managerDisplayName(item.formData)} · {item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ fontSize: 12, color: t.textFaint }}>{item.date}</div>
