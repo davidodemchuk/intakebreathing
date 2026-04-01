@@ -4,8 +4,13 @@ import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext,
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "2.0.3";
+const APP_VERSION = "2.0.4";
 const CHANGELOG = [
+  { version: "2.0.4", date: "2025-04-01", changes: [
+    "URL-based routing — each section has its own URL path",
+    "Browser back/forward buttons now work correctly",
+    "Direct links to sections work (e.g. /tools, /ugc-army/new)",
+  ]},
   { version: "2.0.3", date: "2025-04-01", changes: [
     "Nav bar is now dynamic — shows relevant links based on which section you're in",
     "Dashboard home shows minimal nav, UGC Army shows brief-related links, Tools shows tools links",
@@ -170,6 +175,36 @@ const NAV_SUB_LABELS = {
   influencer: "Influencer Buys",
   settings: "Settings",
 };
+
+const ROUTES = {
+  "/": "home",
+  "/ugc-army": "library",
+  "/ugc-army/new": "create",
+  "/ugc-army/brief": "display",
+  "/ugc-army/library": "library",
+  "/channel-pipeline": "pipeline",
+  "/influencer-buys": "influencer",
+  "/tools": "tools",
+  "/tools/video-reformatter": "videotool",
+  "/settings": "settings",
+};
+
+const VIEW_TO_PATH = {
+  home: "/",
+  create: "/ugc-army/new",
+  display: "/ugc-army/brief",
+  library: "/ugc-army/library",
+  pipeline: "/channel-pipeline",
+  influencer: "/influencer-buys",
+  tools: "/tools",
+  videotool: "/tools/video-reformatter",
+  settings: "/settings",
+};
+
+function getViewFromPath() {
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  return ROUTES[path] || "home";
+}
 
 // ═══════════════════════════════════════════════════════════
 // DYNAMIC STYLES — generated per theme
@@ -2258,7 +2293,27 @@ export default function App() {
 
   const [isDark, setIsDark] = useState(true);
   const [currentRole, setCurrentRole] = useState(ROLES.MANAGER);
-  const [view, setView] = useState("home");
+  const [view, setView] = useState(() => getViewFromPath());
+
+  const navigate = useCallback((newView) => {
+    const path = VIEW_TO_PATH[newView] || "/";
+    window.history.pushState({ view: newView }, "", path);
+    setView(newView);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (event.state && event.state.view) {
+        setView(event.state.view);
+      } else {
+        setView(getViewFromPath());
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    window.history.replaceState({ view: getViewFromPath() }, "", window.location.pathname);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const [currentBrief, setCurrentBrief] = useState(null);
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
@@ -2322,7 +2377,7 @@ export default function App() {
   const S = getS(t);
   const ctx = { t, S };
 
-  const saveBrief = (brief, formData) => {
+  const saveBrief = useCallback((brief, formData) => {
     const existing = formData.shareId != null && String(formData.shareId).trim() !== "";
     const shareId = existing ? String(formData.shareId).trim() : genShareId();
     const fd = { ...formData, shareId };
@@ -2330,8 +2385,8 @@ export default function App() {
     setCurrentFormData(fd);
     setLibrary(prev => [{ id: Date.now(), shareId, name: fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName), brief, formData: fd, date: new Date().toLocaleDateString() }, ...prev]);
     setFormKey(k => k + 1);
-    setView("display");
-  };
+    navigate("display");
+  }, [navigate]);
 
   const openLibraryItem = useCallback((item) => {
     let fd = item.formData;
@@ -2342,8 +2397,8 @@ export default function App() {
     }
     setCurrentBrief(item.brief);
     setCurrentFormData(fd);
-    setView("display");
-  }, []);
+    navigate("display");
+  }, [navigate]);
 
   const deleteBrief = useCallback((id) => {
     setLibrary(prev => prev.filter(item => item.id !== id));
@@ -2568,7 +2623,7 @@ export default function App() {
         setAiLoading(false);
       }
     }
-  }, [startStepAnimation, stopStepAnimation]);
+  }, [startStepAnimation, stopStepAnimation, saveBrief]);
 
   const handleCancel = () => {
     cancelledRef.current = true;
@@ -2580,7 +2635,7 @@ export default function App() {
 
   const handleRegenTemplate = useCallback(() => {
     if (currentFormData) saveBrief(generateBrief(currentFormData), { ...currentFormData, mode: "template" });
-  }, [currentFormData]);
+  }, [currentFormData, saveBrief]);
 
   const handleRegenAI = useCallback(() => {
     if (currentFormData) handleGenerate({ ...currentFormData, mode: "ai" });
@@ -2629,35 +2684,35 @@ export default function App() {
           const dashBtn = { ...S.navBtn(false), color: t.textFaint, fontWeight: 600 };
           return (
             <div className="no-print" style={S.nav}>
-              <div style={S.navLogo} onClick={() => setView("home")}>
+              <div style={S.navLogo} onClick={() => navigate("home")}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill={t.green}/><path d="M7 12h10M12 7v10" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
                 <div><div style={S.navTitle}>Intake Breathing</div><div style={S.navSub}>{navSubText}</div></div>
               </div>
               <div style={S.navLinks}>
                 {section !== "dashboard" && (
-                  <button type="button" style={dashBtn} onClick={() => setView("home")}>← Dashboard</button>
+                  <button type="button" style={dashBtn} onClick={() => navigate("home")}>← Dashboard</button>
                 )}
                 {section === "ugcArmy" && (
                   <>
-                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { setView("create"); setFormKey((k) => k + 1); }}>New Brief</button>
-                    <button type="button" style={S.navBtn(view === "library")} onClick={() => setView("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
-                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
+                    <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
+                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                   </>
                 )}
                 {section === "tools" && (
                   <>
-                    <button type="button" style={S.navBtn(view === "tools" || view === "videotool")} onClick={() => setView("tools")}>All Tools</button>
-                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                    <button type="button" style={S.navBtn(view === "tools" || view === "videotool")} onClick={() => navigate("tools")}>All Tools</button>
+                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                   </>
                 )}
                 {section === "pipeline" && (
-                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                 )}
                 {section === "influencer" && (
-                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                 )}
                 {section === "dashboard" && (
-                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => setView("settings")}>Settings</button>
+                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                 )}
                 <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
                 <button type="button" onClick={() => setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
@@ -2767,7 +2822,7 @@ export default function App() {
                   badge: "Active",
                   badgeColor: t.green,
                   sub: `${library.length} brief${library.length === 1 ? "" : "s"} created`,
-                  onClick: () => { setView("create"); setFormKey((k) => k + 1); },
+                  onClick: () => { navigate("create"); setFormKey((k) => k + 1); },
                 },
                 {
                   id: "pipeline",
@@ -2776,7 +2831,7 @@ export default function App() {
                   desc: "Track creator outreach and partnerships",
                   badge: "Coming Soon",
                   badgeColor: t.orange,
-                  onClick: () => setView("pipeline"),
+                  onClick: () => navigate("pipeline"),
                 },
                 {
                   id: "influencer",
@@ -2785,7 +2840,7 @@ export default function App() {
                   desc: "Manage influencer campaigns and spend",
                   badge: "Coming Soon",
                   badgeColor: t.orange,
-                  onClick: () => setView("influencer"),
+                  onClick: () => navigate("influencer"),
                 },
                 {
                   id: "tools",
@@ -2794,7 +2849,7 @@ export default function App() {
                   desc: "Video reformatter, analytics, and more",
                   badge: "1 tool",
                   badgeColor: t.blue,
-                  onClick: () => setView("tools"),
+                  onClick: () => navigate("tools"),
                 },
               ].map((card) => (
                 <div
@@ -2837,7 +2892,7 @@ export default function App() {
             {!apiKey && (
               <div style={{ marginTop: 28, fontSize: 13, color: t.textFaint }}>
                 Want IB-Ai-powered briefs?{" "}
-                <span onClick={() => setView("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
+                <span onClick={() => navigate("settings")} style={{ color: t.green, cursor: "pointer", fontWeight: 600 }}>Add your API key in Settings</span>
               </div>
             )}
             {apiKey && apiStatus === "ok" && (
@@ -2850,18 +2905,18 @@ export default function App() {
           <ComingSoonPage
             title="Channel Pipeline"
             message="Channel Pipeline — Coming Soon. Track creator outreach, responses, and partnership status."
-            onBack={() => setView("home")}
+            onBack={() => navigate("home")}
           />
         )}
         {!aiLoading && view === "influencer" && (
           <ComingSoonPage
             title="Influencer Buys"
             message="Influencer Buys — Coming Soon. Manage influencer campaigns and spend in one place."
-            onBack={() => setView("home")}
+            onBack={() => navigate("home")}
           />
         )}
-        {!aiLoading && view === "tools" && <ToolsPage onBack={() => setView("home")} onOpenVideo={() => setView("videotool")} />}
-        {!aiLoading && view === "videotool" && <VideoReformatter onBack={() => setView("tools")} />}
+        {!aiLoading && view === "tools" && <ToolsPage onBack={() => navigate("home")} onOpenVideo={() => navigate("videotool")} />}
+        {!aiLoading && view === "videotool" && <VideoReformatter onBack={() => navigate("tools")} />}
 
         {/* SETTINGS */}
         {!aiLoading && view === "settings" && (
@@ -3036,13 +3091,13 @@ export default function App() {
         )}
 
         {!aiLoading && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
-        {!aiLoading && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={()=>setView("home")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
+        {!aiLoading && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {!aiLoading && view === "library" && (
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ ...S.formTitle, marginBottom: 24 }}>Brief Library</div>
             {library.length === 0 ? (
-              <div style={S.empty}><div style={{ fontSize: 32, marginBottom: 12 }}>📁</div><div style={{ fontSize: 15, marginBottom: 8 }}>No briefs yet</div><div style={{ fontSize: 13, marginBottom: 24 }}>Generated briefs will appear here.</div><button style={S.btnP} onClick={()=>setView("create")}>Create Your First Brief</button></div>
+              <div style={S.empty}><div style={{ fontSize: 32, marginBottom: 12 }}>📁</div><div style={{ fontSize: 15, marginBottom: 8 }}>No briefs yet</div><div style={{ fontSize: 13, marginBottom: 24 }}>Generated briefs will appear here.</div><button style={S.btnP} onClick={()=>navigate("create")}>Create Your First Brief</button></div>
             ) : library.map(item => (
               <div key={item.id} style={S.listItem}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
