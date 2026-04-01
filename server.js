@@ -134,26 +134,34 @@ app.post("/api/reformat", async (req, res) => {
     const inputSize = fs.statSync(inputPath).size;
     console.log(`[reformat] Downloaded: ${(inputSize / 1024 / 1024).toFixed(1)}MB`);
 
-    console.log(`[reformat] Running ffprobe...`);
-    const probeResult = await new Promise((resolve, reject) => {
-      execFile(
-        "ffprobe",
-        ["-v", "quiet", "-print_format", "json", "-show_streams", inputPath],
-        { timeout: 60000, maxBuffer: 1024 * 1024 },
-        (error, stdout) => {
-          if (error) return reject(error);
-          try {
-            resolve(JSON.parse(stdout));
-          } catch (e) {
-            reject(e);
-          }
-        }
-      );
-    });
+    let srcW = 1080;
+    let srcH = 1920; // Safe defaults (assume vertical video)
 
-    const videoStream = probeResult.streams.find((s) => s.codec_type === "video");
-    const srcW = videoStream ? videoStream.width : 1080;
-    const srcH = videoStream ? videoStream.height : 1920;
+    try {
+      const probeResult = await new Promise((resolve, reject) => {
+        execFile(
+          "ffprobe",
+          ["-v", "quiet", "-print_format", "json", "-show_streams", inputPath],
+          { timeout: 15000, maxBuffer: 1024 * 1024 },
+          (error, stdout) => {
+            if (error) return reject(error);
+            try {
+              resolve(JSON.parse(stdout));
+            } catch (e) {
+              reject(e);
+            }
+          }
+        );
+      });
+      const videoStream = probeResult.streams?.find((s) => s.codec_type === "video");
+      if (videoStream) {
+        srcW = videoStream.width || 1080;
+        srcH = videoStream.height || 1920;
+      }
+    } catch (probeErr) {
+      console.log("[reformat] ffprobe failed, using defaults:", probeErr.message);
+      // Continue with defaults — FFmpeg can still process without knowing exact dimensions
+    }
 
     const w = Number(width);
     const h = Number(height);
