@@ -27,8 +27,14 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "3.9.0";
+const APP_VERSION = "3.10.0";
 const CHANGELOG = [
+  { version: "3.10.0", date: "2026-04-01", changes: [
+    "Per-platform editable handles — Instagram, TikTok, YouTube, Twitter each get their own handle",
+    "PlatformCard component — clickable to open profile, editable handle with save/cancel",
+    "UGC Army dashboard — hub page at /ugc-army with Creators, New Brief, Library, Campaigns cards",
+    "Homepage UGC Army card now goes to the UGC dashboard instead of straight to Library",
+  ]},
   { version: "3.9.0", date: "2026-04-01", changes: [
     "UGC Army now has its own dashboard with navigation to Creators, New Brief, Library",
   ]},
@@ -4310,87 +4316,73 @@ function ExpandableInsight({ t, label, value, valueColor, valueFontSize = 14, ex
   );
 }
 
-function PlatformCard({ t, platform, brandColor, handle, url, followers, followerLabel = "followers", secondaryText, extraInfo, onHandleChange, onSearch }) {
+function PlatformCard({ t, platform, brandColor, handle, url, followers, followerLabel = "followers", secondaryText, extraInfo, onHandleChange }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(handle || "");
 
   useEffect(() => { setDraft(handle || ""); }, [handle]);
 
-  const hasData = followers != null && followers > 0;
+  const hasFollowers = followers != null && followers > 0;
 
   return (
     <div
       style={{
-        flex: "1 1 160px",
-        minWidth: 160,
-        background: t.card,
-        border: `1px solid ${t.border}`,
-        borderRadius: 10,
-        padding: 14,
+        flex: "1 1 160px", minWidth: 160,
+        background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14,
         cursor: url && !editing ? "pointer" : "default",
         transition: "border-color 0.15s",
       }}
-      onClick={() => {
-        if (url && !editing) window.open(url, "_blank");
-      }}
+      onClick={() => { if (url && !editing) window.open(url, "_blank"); }}
       onMouseEnter={(e) => { if (url && !editing) e.currentTarget.style.borderColor = brandColor + "50"; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
     >
+      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: brandColor }}>{platform}</span>
         <div style={{ display: "flex", gap: 4 }}>
           {url && !editing ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
-          {onHandleChange ? (
-            <span
-              onClick={(e) => { e.stopPropagation(); setEditing(!editing); }}
-              style={{ fontSize: 10, color: t.textFaint, cursor: "pointer", padding: "0 2px" }}
-              title="Edit handle"
-            >
-              ✎
-            </span>
-          ) : null}
+          <span
+            onClick={(e) => { e.stopPropagation(); setEditing(!editing); if (editing) setDraft(handle || ""); }}
+            style={{ fontSize: 10, color: t.textFaint, cursor: "pointer", padding: "0 2px" }}
+            title="Edit handle"
+          >✎</span>
         </div>
       </div>
 
+      {/* Handle display or edit */}
       {!editing ? (
-        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 4 }}>@{handle || "not set"}</div>
+        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 6 }}>@{handle || "not set"}</div>
       ) : (
         <div style={{ marginBottom: 6 }} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: "flex", gap: 4 }}>
             <input
               autoFocus
               value={draft}
-              onChange={(e) => setDraft(e.target.value.replace("@", "").trim())}
+              onChange={(e) => setDraft(e.target.value.replace(/^@/, "").trim())}
               placeholder="handle"
-              style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: `1px solid ${brandColor}40`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+              style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: `1px solid ${brandColor}40`, background: t.inputBg, color: t.inputText, fontSize: 11, outline: "none" }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") { onHandleChange?.(draft); setEditing(false); }
                 if (e.key === "Escape") { setDraft(handle || ""); setEditing(false); }
               }}
             />
             <button
-              onClick={() => { onHandleChange?.(draft); setEditing(false); }}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onHandleChange?.(draft); setEditing(false); }}
               style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: brandColor, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
-            >
-              Save
-            </button>
-            {onSearch ? (
-              <button
-                onClick={() => onSearch(draft || handle || "")}
-                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.textMuted, fontSize: 10, fontWeight: 700, cursor: "pointer" }}
-              >
-                Search
-              </button>
-            ) : null}
+            >Save</button>
           </div>
-          <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>Enter save, Esc cancel</div>
+          <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>Enter to save · Esc to cancel</div>
         </div>
       )}
 
+      {/* Followers */}
       <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 2 }}>
-        {hasData ? formatMetricShort(followers) : "—"}
+        {hasFollowers ? formatMetricShort(followers) : "—"}
       </div>
       <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>{followerLabel}</div>
+
+      {/* Secondary */}
       {secondaryText ? <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.4 }}>{secondaryText}</div> : null}
       {extraInfo ? <div style={{ fontSize: 11, color: brandColor, marginTop: 4, fontWeight: 600 }}>{extraInfo}</div> : null}
     </div>
@@ -4440,14 +4432,21 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const igFollowers = Number(c.instagramData?.followers) || 0;
   const ttFollowers = Number(c.tiktokData?.followers) || 0;
   const primaryPlatform = igFollowers >= ttFollowers ? "instagram" : "tiktok";
-  const platformLinks = buildPlatformUrls(c);
+  const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
+  const ttH = String(c.tiktokHandle || cleanHandle).replace(/^@/, "").trim();
+  const igH = String(c.instagramHandle || cleanHandle).replace(/^@/, "").trim();
+  const platformLinks = {
+    instagram: igH ? `https://www.instagram.com/${igH}/` : "",
+    tiktok: ttH ? `https://www.tiktok.com/@${ttH}` : "",
+    youtube: c.youtubeData?.channelUrl || (c.youtubeHandle ? `https://youtube.com/@${c.youtubeHandle}` : ""),
+    twitter: c.twitterData?.handle ? `https://x.com/${c.twitterData.handle}` : (c.twitterHandle ? `https://x.com/${c.twitterHandle}` : ""),
+    facebook: c.facebookData?.profileUrl || "",
+    linkedin: c.linkedinData?.profileUrl || "",
+  };
   const primaryUrl = primaryPlatform === "instagram" ? platformLinks.instagram : platformLinks.tiktok;
   const primaryLabel = primaryPlatform === "instagram" ? "IG" : "TT";
-  const clean = String(c.handle || "").replace("@", "").trim();
-  const showEngRate = (rate) => rate != null && rate >= 0.1 && rate <= 50;
   const lastEnriched = ttD.lastEnriched || igD.lastEnriched;
   const handleLetter = String(c.handle || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
-  const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
   const hasTTEnrichment = !!ttD.lastEnriched;
   const lastEnrichDateLabel = hasTTEnrichment
     ? new Date(ttD.lastEnriched).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
@@ -4510,7 +4509,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     try {
       const payload = await runScrapeAndAiPipeline(cleanHandle, key.trim(), ak, onStep, {
         tiktokHandle: c.tiktokHandle || cleanHandle,
-        instagramHandle: c.instagramHandle,
+        instagramHandle: c.instagramHandle || cleanHandle,
         youtubeHandle: c.youtubeHandle || "",
         twitterHandle: c.twitterHandle || "",
         existingInstagramData: c.instagramData,
@@ -4773,100 +4772,95 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginBottom: 14 }}>{enrichMsg}</div> : null}
 
       <div id="creator-detail-content" style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Platforms</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <PlatformCard
-            t={t}
-            platform="Instagram"
-            brandColor="#E1306C"
-            handle={c.instagramHandle || cleanHandle}
-            url={platformLinks.instagram}
-            followers={c.instagramData?.followers}
-            secondaryText={[
-              c.instagramData?.posts ? `${c.instagramData.posts} posts` : null,
-              c.instagramEngRate != null && c.instagramEngRate >= 0.1 && c.instagramEngRate <= 50 ? `${Number(c.instagramEngRate).toFixed(2)}% eng` : null,
-              c.instagramData?.category || null,
-            ].filter(Boolean).join(" · ")}
-            onHandleChange={(newHandle) => {
-              updateCreator(c.id, {
-                instagramHandle: newHandle,
-                instagramUrl: newHandle ? `https://www.instagram.com/${newHandle}/` : "",
-              });
-            }}
-            onSearch={async (query) => {
-              window.open(`https://www.instagram.com/${query}/`, "_blank");
-            }}
-          />
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Platforms</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 
-          <PlatformCard
-            t={t}
-            platform="TikTok"
-            brandColor={t.green}
-            handle={c.tiktokHandle || cleanHandle}
-            url={platformLinks.tiktok}
-            followers={c.tiktokData?.followers}
-            secondaryText={[
-              c.tiktokData?.hearts ? `${formatMetricShort(c.tiktokData.hearts)} hearts` : null,
-              c.tiktokData?.videoCount ? `${c.tiktokData.videoCount} videos` : null,
-              c.tiktokEngRate != null && c.tiktokEngRate >= 0.1 && c.tiktokEngRate <= 50 ? `${Number(c.tiktokEngRate).toFixed(2)}% eng` : null,
-            ].filter(Boolean).join(" · ")}
-            extraInfo={shop.hasShop ? `TikTok Shop (${shop.productCount || 0})` : null}
-            onHandleChange={(newHandle) => {
-              updateCreator(c.id, {
-                tiktokHandle: newHandle,
-                tiktokUrl: newHandle ? `https://www.tiktok.com/@${newHandle}` : "",
-              });
-            }}
-            onSearch={(query) => {
-              window.open(`https://www.tiktok.com/@${query}`, "_blank");
-            }}
-          />
-
-          {(c.youtubeData || c.youtubeHandle) ? (
+            {/* Instagram */}
             <PlatformCard
               t={t}
-              platform="YouTube"
-              brandColor="#FF0000"
-              handle={c.youtubeHandle || ""}
-              url={platformLinks.youtube}
-              followers={c.youtubeData?.subscribers}
-              followerLabel="subscribers"
+              platform="Instagram"
+              brandColor="#E1306C"
+              handle={c.instagramHandle || (c.handle || "").replace("@", "")}
+              url={platformLinks.instagram}
+              followers={c.instagramData?.followers}
               secondaryText={[
-                c.youtubeData?.videoCount ? `${c.youtubeData.videoCount} videos` : null,
+                c.instagramData?.posts ? `${c.instagramData.posts} posts` : null,
+                c.instagramEngRate != null && c.instagramEngRate >= 0.1 && c.instagramEngRate <= 50 ? `${c.instagramEngRate}% eng` : null,
+                c.instagramData?.category || null,
               ].filter(Boolean).join(" · ")}
-              onHandleChange={(newHandle) => {
-                updateCreator(c.id, { youtubeHandle: newHandle });
-              }}
-              onSearch={(query) => {
-                window.open(`https://www.youtube.com/@${query}`, "_blank");
-              }}
+              onHandleChange={(h) => updateCreator(c.id, { instagramHandle: h, instagramUrl: h ? `https://www.instagram.com/${h}/` : "" })}
             />
-          ) : null}
 
-          {(c.twitterData || c.twitterHandle) ? (
+            {/* TikTok */}
             <PlatformCard
               t={t}
-              platform="X / Twitter"
-              brandColor="#1DA1F2"
-              handle={c.twitterHandle || ""}
-              url={platformLinks.twitter}
-              followers={c.twitterData?.followers}
-              secondaryText={c.twitterData?.tweets ? `${formatMetricShort(c.twitterData.tweets)} tweets` : ""}
-              onHandleChange={(newHandle) => {
-                updateCreator(c.id, { twitterHandle: newHandle });
-              }}
-              onSearch={(query) => {
-                window.open(`https://x.com/${query}`, "_blank");
-              }}
+              platform="TikTok"
+              brandColor={t.green}
+              handle={c.tiktokHandle || (c.handle || "").replace("@", "")}
+              url={platformLinks.tiktok}
+              followers={c.tiktokData?.followers}
+              secondaryText={[
+                c.tiktokData?.hearts ? `${formatMetricShort(c.tiktokData.hearts)} hearts` : null,
+                c.tiktokData?.videoCount ? `${c.tiktokData.videoCount} videos` : null,
+                c.tiktokEngRate != null && c.tiktokEngRate >= 0.1 && c.tiktokEngRate <= 50 ? `${c.tiktokEngRate}% eng` : null,
+              ].filter(Boolean).join(" · ")}
+              extraInfo={shop.hasShop ? `TikTok Shop (${shop.productCount ?? 0})` : null}
+              onHandleChange={(h) => updateCreator(c.id, { tiktokHandle: h, tiktokUrl: h ? `https://www.tiktok.com/@${h}` : "" })}
             />
-          ) : null}
 
-          {c.snapchatData ? (
-            <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#FFFC00", marginBottom: 6 }}>Snapchat</div>
-              <div style={{ fontSize: 13, color: t.text }}>{c.snapchatData.displayName || "Present"}</div>
-            </div>
-          ) : null}
+            {/* YouTube — only if data or handle */}
+            {(c.youtubeData || c.youtubeHandle) ? (
+              <PlatformCard
+                t={t}
+                platform="YouTube"
+                brandColor="#FF0000"
+                handle={c.youtubeHandle || ""}
+                url={c.youtubeData?.channelUrl || (c.youtubeHandle ? `https://youtube.com/@${c.youtubeHandle}` : "")}
+                followers={c.youtubeData?.subscribers}
+                followerLabel="subscribers"
+                secondaryText={c.youtubeData?.videoCount ? `${c.youtubeData.videoCount} videos` : ""}
+                onHandleChange={(h) => updateCreator(c.id, { youtubeHandle: h })}
+              />
+            ) : null}
+
+            {/* Twitter — only if data or handle */}
+            {(c.twitterData || c.twitterHandle) ? (
+              <PlatformCard
+                t={t}
+                platform="X / Twitter"
+                brandColor="#1DA1F2"
+                handle={c.twitterHandle || ""}
+                url={c.twitterData?.handle ? `https://x.com/${c.twitterData.handle}` : (c.twitterHandle ? `https://x.com/${c.twitterHandle}` : "")}
+                followers={c.twitterData?.followers}
+                secondaryText={c.twitterData?.tweets ? `${formatMetricShort(c.twitterData.tweets)} tweets` : ""}
+                onHandleChange={(h) => updateCreator(c.id, { twitterHandle: h })}
+              />
+            ) : null}
+
+            {/* Facebook — only if data */}
+            {c.facebookData ? (
+              <PlatformCard
+                t={t}
+                platform="Facebook"
+                brandColor="#1877F2"
+                handle=""
+                url={c.facebookData?.profileUrl || ""}
+                followers={c.facebookData?.followers}
+                secondaryText={c.facebookData?.category || ""}
+                onHandleChange={() => {}}
+              />
+            ) : null}
+
+            {/* Snapchat — minimal */}
+            {c.snapchatData ? (
+              <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#FFFC00", marginBottom: 6 }}>Snapchat</div>
+                <div style={{ fontSize: 13, color: t.text }}>{c.snapchatData.displayName || "Present"}</div>
+              </div>
+            ) : null}
+
+          </div>
         </div>
       </div>
 
@@ -5311,109 +5305,64 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 // ═══════════════════════════════════════════════════════════
 
 function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBrief }) {
-  const activeCreators = creators.filter(c => c.status === "Active").length;
-  const totalVideos = creators.reduce((sum, c) => sum + (Math.max((c.videoLog || []).length, c.totalVideos || 0)), 0);
-  const enrichedCreators = creators.filter(c => c.ibScore != null).length;
+  const active = creators.filter((c) => c.status === "Active").length;
+  const scored = creators.filter((c) => c.ibScore != null).length;
+  const vids = creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0);
+
+  const cardStyle = (accent) => ({
+    background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24,
+    cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s",
+  });
+  const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${accent}08`; };
+  const hoverOut = (e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; };
+
+  const goNewBrief = () => (onNewBrief ? onNewBrief() : navigate("create"));
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+      <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>UGC Army</div>
+      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 28 }}>Manage creators, build briefs, and track your UGC pipeline</div>
 
-      {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>UGC Army</div>
-        <div style={{ fontSize: 13, color: t.textMuted }}>Manage creators, build briefs, and track your UGC pipeline</div>
-      </div>
-
-      {/* Stats row */}
       <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
         {[
-          { value: activeCreators, label: "Active Creators", color: t.green },
-          { value: library.length, label: "Briefs Created", color: t.blue },
-          { value: totalVideos, label: "Videos Tracked", color: t.orange },
-          { value: enrichedCreators, label: "Creators Scored", color: t.purple },
-        ].map((stat, i) => (
+          { v: active, l: "Active Creators", c: t.green },
+          { v: library.length, l: "Briefs Created", c: t.blue },
+          { v: vids, l: "Videos Tracked", c: t.orange },
+          { v: scored, l: "Creators Scored", c: t.purple },
+        ].map((s, i) => (
           <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: stat.color }}>{stat.value}</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{stat.label}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: s.c }}>{s.v}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{s.l}</div>
           </div>
         ))}
       </div>
 
-      {/* Main navigation cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 32 }}>
-
-        {/* Creators */}
-        <div
-          onClick={() => navigate("creators")}
-          style={{
-            background: t.card,
-            border: `1px solid ${t.border}`,
-            borderRadius: 14,
-            padding: 24,
-            cursor: "pointer",
-            transition: "border-color 0.2s, box-shadow 0.2s",
-            position: "relative",
-            overflow: "hidden",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${t.green}08`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; }}
-        >
+        <div style={cardStyle(t.green)} onClick={() => navigate("creators")}
+          onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={hoverOut}>
           <div style={{ height: 3, width: 40, borderRadius: 2, background: t.green, marginBottom: 16 }} />
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creators</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>View, search, and manage your creator roster. Enrich profiles with live data.</div>
-          <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{activeCreators} active · {enrichedCreators} scored</div>
+          <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{active} active · {scored} scored</div>
         </div>
 
-        {/* New Brief */}
-        <div
-          onClick={() => onNewBrief()}
-          style={{
-            background: t.card,
-            border: `1px solid ${t.border}`,
-            borderRadius: 14,
-            padding: 24,
-            cursor: "pointer",
-            transition: "border-color 0.2s, box-shadow 0.2s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${t.blue}08`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; }}
-        >
+        <div style={cardStyle(t.blue)} onClick={goNewBrief}
+          onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={hoverOut}>
           <div style={{ height: 3, width: 40, borderRadius: 2, background: t.blue, marginBottom: 16 }} />
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>New Brief</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create a new UGC creator brief with IB-Ai or Instant Draft templates.</div>
           <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>✦ IB-Ai powered</div>
         </div>
 
-        {/* Brief Library */}
-        <div
-          onClick={() => navigate("library")}
-          style={{
-            background: t.card,
-            border: `1px solid ${t.border}`,
-            borderRadius: 14,
-            padding: 24,
-            cursor: "pointer",
-            transition: "border-color 0.2s, box-shadow 0.2s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${t.orange}08`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; }}
-        >
+        <div style={cardStyle(t.orange)} onClick={() => navigate("library")}
+          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={hoverOut}>
           <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Library</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Browse, edit, and regenerate your saved briefs.</div>
-          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""} saved</div>
+          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
         </div>
 
-        {/* Campaign Overview — coming soon */}
-        <div
-          style={{
-            background: t.card,
-            border: `1px solid ${t.border}`,
-            borderRadius: 14,
-            padding: 24,
-            opacity: 0.6,
-          }}
-        >
+        <div style={{ ...cardStyle(t.textFaint), cursor: "default", opacity: 0.6 }}>
           <div style={{ height: 3, width: 40, borderRadius: 2, background: t.textFaint, marginBottom: 16 }} />
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Track active campaigns, assign creators, and monitor performance.</div>
@@ -5421,26 +5370,20 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
         </div>
       </div>
 
-      {/* Recent activity — show last 5 briefs */}
       {library.length > 0 ? (
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent Briefs</div>
           {library.slice(0, 5).map((item) => (
             <div
               key={item.id}
-              onClick={() => onOpenBrief(item)}
-              style={{
-                ...S.listItem,
-                marginBottom: 6,
-              }}
+              onClick={() => onOpenBrief?.(item)}
+              style={{ ...S.listItem, marginBottom: 6, cursor: onOpenBrief ? "pointer" : "default" }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.name}</div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>
-                  {item.formData?.manager || ""} · {item.formData?.vibe || ""} · {item.date}
-                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.formData?.manager || ""} · {item.date}</div>
               </div>
               <span style={{ fontSize: 11, color: t.textFaint }}>→</span>
             </div>
