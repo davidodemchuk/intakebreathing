@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect, memo, createContext, useConte
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "1.2.4";
+const APP_VERSION = "1.3.0";
 const CHANGELOG = [
+  { version: "1.3.0", date: "2025-04-01", changes: [
+    "PDF download button on generated briefs — prints all sections including rejection criteria",
+    "Foundation for role-based access: Manager vs Creator roles",
+    "Managers can edit briefs, Creators get read-only view (creator login coming later)",
+    "Share link concept: briefs get a unique ID for future creator-facing URLs",
+    "Brief display shows Download PDF and Copy Share Link buttons",
+  ]},
   { version: "1.2.4", date: "2025-03-31", changes: [
     "Compliance section now AI-powered — auto-selects approved and banned claims based on form inputs",
     "Managers can remove individual approved/banned claims by clicking ✕",
@@ -254,6 +261,23 @@ function parseCustomRejections(text) {
 function buildRejectionsArray(d) {
   const custom = parseCustomRejections(d?.customRejections);
   return [...DEFAULT_REJECTIONS, ...custom];
+}
+
+const ROLES = { MANAGER: "manager", CREATOR: "creator" };
+
+function genShareId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `share-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
@@ -753,11 +777,14 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
 // BRIEF DISPLAY
 // ═══════════════════════════════════════════════════════════
 
-function EditableField({ value, style, t }) {
+function EditableField({ value, style, t, editable = true }) {
   const ref = useRef(null);
   useEffect(() => {
     if (ref.current && ref.current.textContent !== value) ref.current.textContent = value ?? "";
   }, [value]);
+  if (!editable) {
+    return <div style={{ ...style, cursor: "default" }}>{value}</div>;
+  }
   return (
     <div
       ref={ref}
@@ -770,11 +797,19 @@ function EditableField({ value, style, t }) {
   );
 }
 
-function EditableRejectionLine({ value, t }) {
+function EditableRejectionLine({ value, t, editable = true }) {
   const ref = useRef(null);
   useEffect(() => {
     if (ref.current && ref.current.textContent !== value) ref.current.textContent = value ?? "";
   }, [value]);
+  if (!editable) {
+    return (
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+        <span style={{ color: t.red, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
+        <div style={{ fontSize: 14, color: t.text, lineHeight: 1.7, flex: 1, minWidth: 0 }}>{value}</div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
       <span style={{ color: t.red, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✕</span>
@@ -790,11 +825,12 @@ function EditableRejectionLine({ value, t }) {
   );
 }
 
-function RejectionAddRow({ t, onCommit }) {
+function RejectionAddRow({ t, onCommit, editable = true }) {
   const ref = useRef(null);
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
   const showHint = !focused && !draft.trim();
+  if (!editable) return null;
   return (
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${t.red}30` }}>
       <div style={{ position: "relative" }}>
@@ -824,7 +860,137 @@ function RejectionAddRow({ t, onCommit }) {
   );
 }
 
-function RejectionSection({ brief, formData, t, S }) {
+function buildBriefPrintHtml(b, fd) {
+  const title = escapeHtml(fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName) || "Brief");
+  const plats = normalizePlatforms(fd).map(p => (p === "Other" && fd.customPlatform?.trim() ? fd.customPlatform.trim() : p));
+  const toneDisp = fd.tone === "Other" && fd.customTone?.trim() ? fd.customTone.trim() : fd.tone;
+  const vibeDisp = fd.vibe === "Other" && fd.customVibe?.trim() ? fd.customVibe.trim() : fd.vibe;
+  const prodDisp = fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName;
+  const badges = [prodDisp, vibeDisp, ...plats, fd.videoLength, toneDisp].map(escapeHtml).map((x) => `<span class="badge">${x}</span>`).join("");
+  const theyAreHtml = (b.theyAre || []).map((x) => `<div class="item"><span class="marker" style="color:#008c56">✓</span>${escapeHtml(x)}</div>`).join("");
+  const theyNotHtml = (b.theyAreNot || []).map((x) => `<div class="item"><span class="marker" style="color:#c62828">✗</span>${escapeHtml(x)}</div>`).join("");
+  const beatDefs = [
+    { label: "PROBLEM", cls: "problem", inst: b.probInst, lines: b.probLines || [], overlays: b.probOverlays || [] },
+    { label: "AGITATE", cls: "agitate", inst: b.agInst, lines: b.agLines || [], overlays: b.agOverlays || [] },
+    { label: "SOLUTION", cls: "solution", inst: b.solInst, lines: b.solLines || [], overlays: b.solOverlays || [] },
+  ];
+  const beatsHtml = beatDefs.map((bt) => {
+    const lines = (bt.lines || []).map((l) => `<div class="riff">"${escapeHtml(l)}"</div>`).join("");
+    const ovs = (bt.overlays || []).map((o) => `<div class="riff">${escapeHtml(o)}</div>`).join("");
+    return `<div class="beat ${bt.cls}"><div class="beat-label">${bt.label}</div><p>${escapeHtml(bt.inst)}</p><div class="sub">Lines to riff on</div>${lines}<div class="sub" style="margin-top:8px">Overlay ideas</div>${ovs}</div>`;
+  }).join("");
+  const hooksHtml = (b.hooks || []).map((h, i) => `<div class="hook-item"><div class="hook-num">${i + 1}</div><div class="hook-text">${escapeHtml(h)}</div></div>`).join("");
+  const sayHtml = (b.sayThis || []).map((s) => `<div class="item"><span class="marker">✓</span>${escapeHtml(s)}</div>`).join("");
+  const notHtml = (b.notThis || []).map((s) => `<div class="item"><span class="marker">✗</span>${escapeHtml(s)}</div>`).join("");
+  const rejList = Array.isArray(b.rejections) && b.rejections.length ? b.rejections : buildRejectionsArray(fd);
+  const rejHtml = rejList.map((r) => `<div class="rejection-item"><span class="rx">✕</span>${escapeHtml(r)}</div>`).join("");
+  const proofHtml = (b.proof || []).map((p) => `<div class="proof-card">${escapeHtml(p)}</div>`).join("");
+  const platNotes = escapeHtml(b.platNotes || "").replace(/\n/g, "<br>");
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; color: #111; padding: 40px; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+  h2 { font-size: 18px; font-weight: 700; margin-top: 28px; margin-bottom: 10px; color: #333; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
+  h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  p, li { font-size: 13px; line-height: 1.7; color: #333; }
+  .header { text-align: center; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 24px; }
+  .header .brand { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #888; text-transform: uppercase; margin-bottom: 8px; }
+  .header .mission { font-size: 15px; color: #666; font-style: italic; margin-top: 6px; }
+  .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  .badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: #f0f0f0; color: #555; }
+  .beat { border-left: 4px solid #ccc; padding: 14px 16px; margin-bottom: 12px; background: #fafafa; border-radius: 0 8px 8px 0; }
+  .beat.problem { border-left-color: #c62828; }
+  .beat.agitate { border-left-color: #b86e00; }
+  .beat.solution { border-left-color: #008c56; }
+  .beat-label { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .beat.problem .beat-label { color: #c62828; }
+  .beat.agitate .beat-label { color: #b86e00; }
+  .beat.solution .beat-label { color: #008c56; }
+  .riff { padding-left: 12px; border-left: 2px solid #ddd; margin: 4px 0; font-size: 13px; color: #444; }
+  .sub { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 10px; margin-bottom: 4px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .col-green { border: 1px solid #008c5630; border-radius: 8px; padding: 12px; }
+  .col-red { border: 1px solid #c6282830; border-radius: 8px; padding: 12px; }
+  .col-header { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; }
+  .col-green .col-header { color: #008c56; }
+  .col-red .col-header { color: #c62828; }
+  .item { font-size: 12px; color: #333; line-height: 1.7; margin-bottom: 4px; }
+  .item .marker { font-weight: 700; margin-right: 6px; }
+  .col-green .marker { color: #008c56; }
+  .col-red .marker { color: #c62828; }
+  .rejection-box { background: #fef2f2; border: 2px solid #c6282850; border-radius: 8px; padding: 16px; margin-top: 8px; }
+  .rejection-title { font-size: 12px; font-weight: 800; color: #c62828; text-transform: uppercase; margin-bottom: 8px; }
+  .rejection-sub { font-size: 12px; color: #c62828; font-weight: 600; margin-bottom: 10px; }
+  .rejection-item { font-size: 13px; color: #333; line-height: 1.7; margin-bottom: 6px; }
+  .rejection-item .rx { color: #c62828; font-weight: 700; margin-right: 6px; }
+  .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .proof-card { border: 1px solid #4a9a9d30; border-left: 3px solid #4a9a9d; border-radius: 6px; padding: 10px; font-size: 12px; color: #333; }
+  .disclosure { background: #fef2f2; border: 2px solid #c6282850; border-radius: 8px; padding: 16px; margin-top: 8px; }
+  .disclosure-label { font-size: 11px; font-weight: 800; color: #c62828; text-transform: uppercase; margin-bottom: 6px; }
+  .disclosure-text { font-size: 12px; font-family: monospace; color: #333; }
+  .hook-item { display: flex; gap: 8px; margin-bottom: 8px; }
+  .hook-num { min-width: 22px; height: 22px; border-radius: 6px; background: #b86e0020; color: #b86e00; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+  .hook-text { font-size: 13px; color: #333; }
+  .footer { text-align: center; margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
+  @media print { body { padding: 20px; } }
+</style>
+</head><body>
+  <div class="header">
+    <div class="brand">Intake Breathing — Creator Partnerships</div>
+    <h1>${title}</h1>
+    <div class="mission">"${escapeHtml(b.mission)}"</div>
+    <div class="badges">${badges}</div>
+  </div>
+
+  <h2>👤 Who You're Talking To</h2>
+  <h3>${escapeHtml(b.persona)}</h3>
+  <p style="color:#4a9a9d;font-weight:600;font-size:12px;margin-bottom:6px">${escapeHtml(b.age)}</p>
+  <p>${escapeHtml(b.psycho)}</p>
+  <div class="two-col" style="margin-top:12px">
+    <div><div class="col-header" style="color:#008c56">They Are ✓</div>${theyAreHtml}</div>
+    <div><div class="col-header" style="color:#c62828">They Are Not ✗</div>${theyNotHtml}</div>
+  </div>
+
+  <h2>🎬 Story Arc — Problem · Agitate · Solution</h2>
+  ${beatsHtml}
+
+  <h2>🪝 Hook Options — First 3 Seconds</h2>
+  <p style="font-size:11px;color:#888;font-style:italic;margin-bottom:10px">If they don't feel it here, they scroll.</p>
+  ${hooksHtml}
+
+  <h2>✅ Say This / 🚫 Not This</h2>
+  <div class="two-col">
+    <div class="col-green"><div class="col-header">✅ Say This</div>${sayHtml}</div>
+    <div class="col-red"><div class="col-header">🚫 Not This</div>${notHtml}</div>
+  </div>
+
+  <h2>🚫 Instant Rejection — Content Will Be Declined If:</h2>
+  <div class="rejection-box">
+    <div class="rejection-sub">The following will result in your content being immediately rejected. No exceptions.</div>
+    ${rejHtml}
+  </div>
+
+  <h2>📊 Proof Points</h2>
+  <div class="proof-grid">${proofHtml}</div>
+
+  <h2>⚠️ Required Disclosure</h2>
+  <div class="disclosure"><div class="disclosure-label">Must appear when any stat is referenced</div><div class="disclosure-text">${escapeHtml(b.disclosure)}</div></div>
+
+  <h2>📱 Platform Notes</h2>
+  <p>${platNotes}</p>
+
+  <h2>📦 Deliverables</h2>
+  <p>${escapeHtml(b.deliverables)}</p>
+
+  <div class="footer">Confidential — For Creator Use Only · Intake Breathing Technology LLC</div>
+</body></html>`;
+}
+
+function RejectionSection({ brief, formData, t, S, editable = true }) {
   const syncKey = `${(brief.rejections && brief.rejections.join?.("¦")) || ""}|${formData?.customRejections || ""}`;
   const [items, setItems] = useState(() =>
     Array.isArray(brief.rejections) && brief.rejections.length ? [...brief.rejections] : buildRejectionsArray(formData),
@@ -839,31 +1005,69 @@ function RejectionSection({ brief, formData, t, S }) {
       <div className="brief-rejection-block" style={{ background: t.red + "08", border: `2px solid ${t.red}40`, borderRadius: 12, padding: 20 }}>
         <div style={{ fontSize: 13, color: t.red, fontWeight: 600, marginBottom: 14 }}>The following will result in your content being immediately rejected. No exceptions.</div>
         {items.map((line, i) => (
-          <EditableRejectionLine key={`rej-${i}-${line.slice(0, 24)}`} value={line} t={t} />
+          <EditableRejectionLine key={`rej-${i}-${line.slice(0, 24)}`} value={line} t={t} editable={editable} />
         ))}
-        <RejectionAddRow t={t} onCommit={(text) => setItems((prev) => [...prev, text])} />
+        <RejectionAddRow t={t} editable={editable} onCommit={(text) => setItems((prev) => [...prev, text])} />
       </div>
     </div>
   );
 }
 
-function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenerateAI }) {
+function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenerateAI, currentRole }) {
   const { t, S } = useContext(ThemeContext);
   const wasAI = fd.mode === "ai";
+  const isManager = currentRole === ROLES.MANAGER;
+  const [shareToast, setShareToast] = useState(null);
+
+  const downloadPDF = () => {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(buildBriefPrintHtml(b, fd));
+    doc.close();
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+    }, 500);
+  };
+
+  const copyShareLink = () => {
+    const id = fd.shareId || "";
+    navigator.clipboard.writeText(id).then(() => {
+      setShareToast("Share link copied — creator view coming soon");
+      setTimeout(() => setShareToast(null), 3500);
+    }).catch(() => setShareToast("Could not copy to clipboard"));
+  };
+
   return (
     <div style={S.bWrap} className="brief-print-root">
+      {shareToast && (
+        <div className="no-print" style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 200, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 20px", fontSize: 13, color: t.textSecondary, boxShadow: t.shadow }}>
+          {shareToast}
+        </div>
+      )}
       <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>← Back</button>
-        <button onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>✦ AI Regenerate</button>
-        <button onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>⚡ Quick Regen</button>
-        <button type="button" onClick={() => window.print()} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.red + "45", color: t.red }}>Print / Save PDF</button>
+        <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>← Back</button>
+        {isManager && <>
+          <button type="button" onClick={onRegenerateAI} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.green+"50", color: t.green }}>✦ AI Regenerate</button>
+          <button type="button" onClick={onRegenerate} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px" }}>⚡ Quick Regen</button>
+          <button type="button" onClick={downloadPDF} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.blue + "55", color: t.blue }}>Download PDF</button>
+          <button type="button" onClick={copyShareLink} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", borderColor: t.border, color: t.textMuted }}>Copy Share Link</button>
+        </>}
       </div>
       <div style={{ marginBottom: 24 }}>
         <span style={{ ...S.badge(wasAI ? t.green : t.textFaint), fontSize: 11 }}>{wasAI ? "✦ AI Generated" : "⚡ Template Draft"}</span>
       </div>
       <div style={S.bHeader}>
         <div style={S.bCampaign}>{fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName)}</div>
-        <EditableField value={`"${b.mission}"`} style={S.bMission} t={t} />
+        <EditableField editable={isManager} value={`"${b.mission}"`} style={S.bMission} t={t} />
         <div style={S.badges}>
           <span style={S.badge(t.text)}>{fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName}</span>
           <span style={S.badge(t.purple)}>{fd.vibe === "Other" && fd.customVibe?.trim() ? fd.customVibe.trim() : fd.vibe}</span>
@@ -873,17 +1077,17 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
           <span style={S.badge(t.orange)}>{fd.videoLength}</span>
           <span style={S.badge(t.green)}>{fd.tone === "Other" && fd.customTone?.trim() ? fd.customTone.trim() : fd.tone}</span>
         </div>
-        <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>
+        {isManager && <div style={{ fontSize: 12, color: t.textFaint, marginTop: 14, fontStyle: "italic" }}>Click any text to edit</div>}
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>👤 Who You're Talking To</div>
         <div style={S.card}>
-          <EditableField value={b.persona} style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: t.text }} t={t} />
-          <EditableField value={b.age} style={{ fontSize: 13, color: t.blue, fontWeight: 600, marginBottom: 10 }} t={t} />
-          <EditableField value={b.psycho} style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 16 }} t={t} />
+          <EditableField editable={isManager} value={b.persona} style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: t.text }} t={t} />
+          <EditableField editable={isManager} value={b.age} style={{ fontSize: 13, color: t.blue, fontWeight: 600, marginBottom: 10 }} t={t} />
+          <EditableField editable={isManager} value={b.psycho} style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 16 }} t={t} />
           <div style={S.cols2}>
-            <div><div style={S.sayH(t.green)}>They Are ✓</div>{b.theyAre.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
-            <div><div style={S.sayH(t.red)}>They Are Not ✗</div>{b.theyAreNot.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+            <div><div style={S.sayH(t.green)}>They Are ✓</div>{b.theyAre.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField editable={isManager} value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+            <div><div style={S.sayH(t.red)}>They Are Not ✗</div>{b.theyAreNot.map((x,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField editable={isManager} value={x} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
           </div>
         </div>
       </div>
@@ -896,42 +1100,42 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         ].map(bt=>(
           <div key={bt.label} style={S.beat(bt.color)}>
             <div style={S.beatLabel(bt.color)}>{bt.label}</div>
-            <EditableField value={bt.inst} style={S.beatInst} t={t} />
+            <EditableField editable={isManager} value={bt.inst} style={S.beatInst} t={t} />
             <div style={S.beatSub}>Lines to riff on</div>
-            {bt.lines.map((l,i)=><EditableField key={i} value={`"${l}"`} style={S.beatLine} t={t} />)}
+            {bt.lines.map((l,i)=><EditableField key={i} editable={isManager} value={`"${l}"`} style={S.beatLine} t={t} />)}
             <div style={{ ...S.beatSub, marginTop: 12 }}>Overlay ideas</div>
-            {bt.overlays.map((o,i)=><div key={i} style={{ marginBottom: 4 }}><EditableField value={o} style={{ ...S.beatLine, borderLeftColor: bt.color+"40" }} t={t} /></div>)}
+            {bt.overlays.map((o,i)=><div key={i} style={{ marginBottom: 4 }}><EditableField editable={isManager} value={o} style={{ ...S.beatLine, borderLeftColor: bt.color+"40" }} t={t} /></div>)}
           </div>
         ))}
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>🪝 Hook Options — First 3 Seconds</div>
         <div style={{ fontSize: 12, color: t.textFaint, fontStyle: "italic", marginBottom: 14 }}>If they don't feel it here, they scroll.</div>
-        <div style={S.card}>{b.hooks.map((h,i)=>(<div key={i} style={S.hookItem}><div style={S.hookNum}>{i+1}</div><EditableField value={h} style={S.hookText} t={t} /></div>))}</div>
+        <div style={S.card}>{b.hooks.map((h,i)=>(<div key={i} style={S.hookItem}><div style={S.hookNum}>{i+1}</div><EditableField editable={isManager} value={h} style={S.hookText} t={t} /></div>))}</div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>✅ Say This / 🚫 Not This</div>
         <div style={S.cols2}>
-          <div style={S.sayCol}><div style={S.sayH(t.green)}>✅ Say This</div>{b.sayThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
-          <div style={S.dontCol}><div style={S.sayH(t.red)}>🚫 Not This</div>{b.notThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+          <div style={S.sayCol}><div style={S.sayH(t.green)}>✅ Say This</div>{b.sayThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.green)}>✓</span><EditableField editable={isManager} value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
+          <div style={S.dontCol}><div style={S.sayH(t.red)}>🚫 Not This</div>{b.notThis.map((s,i)=><div key={i} style={{ ...S.li, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={S.mk(t.red)}>✗</span><EditableField editable={isManager} value={s} style={{ flex: 1, fontSize: 13, color: t.textSecondary, lineHeight: 1.7, minWidth: 0 }} t={t} /></div>)}</div>
         </div>
       </div>
-      <RejectionSection brief={b} formData={fd} t={t} S={S} />
+      <RejectionSection brief={b} formData={fd} t={t} S={S} editable={isManager} />
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📊 Proof Points</div>
-        <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}><EditableField value={p} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5, width: "100%" }} t={t} /></div>)}</div>
+        <div style={S.proofGrid}>{b.proof.map((p,i)=><div key={i} style={S.proofCard}><EditableField editable={isManager} value={p} style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5, width: "100%" }} t={t} /></div>)}</div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>⚠️ Required Disclosure — Non-Negotiable</div>
-        <div style={S.discBox}><div style={S.discLabel}>Must appear when any stat is referenced</div><EditableField value={b.disclosure} style={S.discText} t={t} /></div>
+        <div style={S.discBox}><div style={S.discLabel}>Must appear when any stat is referenced</div><EditableField editable={isManager} value={b.disclosure} style={S.discText} t={t} /></div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📱 Platform Notes</div>
-        <div style={S.card}><EditableField value={b.platNotes} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }} t={t} /></div>
+        <div style={S.card}><EditableField editable={isManager} value={b.platNotes} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }} t={t} /></div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📦 Deliverables</div>
-        <div style={S.card}><EditableField value={b.deliverables} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6 }} t={t} /></div>
+        <div style={S.card}><EditableField editable={isManager} value={b.deliverables} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6 }} t={t} /></div>
       </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}>📤 Creator Submissions</div>
@@ -994,7 +1198,14 @@ Return ONLY this JSON (no other text):
 // ═══════════════════════════════════════════════════════════
 
 export default function App() {
+  // ═══ ROLE-BASED ACCESS (Phase 1 — foundation) ═══
+  // currentRole defaults to "manager" — full edit access
+  // Future: creator login will set role to "creator" — read-only brief view
+  // Future: share links will load a specific brief in creator mode
+  // Future: manager login with email/password or SSO
+
   const [isDark, setIsDark] = useState(true);
+  const [currentRole, setCurrentRole] = useState(ROLES.MANAGER);
   const [view, setView] = useState("home");
   const [currentBrief, setCurrentBrief] = useState(null);
   const [currentFormData, setCurrentFormData] = useState(null);
@@ -1054,12 +1265,26 @@ export default function App() {
   const ctx = { t, S };
 
   const saveBrief = (brief, formData) => {
+    const shareId = formData.shareId || genShareId();
+    const fd = { ...formData, shareId };
     setCurrentBrief(brief);
-    setCurrentFormData(formData);
-    setLibrary(prev => [{ id: Date.now(), name: formData.campaignName || (formData.productName === "Other" && formData.customProductName?.trim() ? formData.customProductName.trim() : formData.productName), brief, formData, date: new Date().toLocaleDateString() }, ...prev]);
+    setCurrentFormData(fd);
+    setLibrary(prev => [{ id: Date.now(), shareId, name: fd.campaignName || (fd.productName === "Other" && fd.customProductName?.trim() ? fd.customProductName.trim() : fd.productName), brief, formData: fd, date: new Date().toLocaleDateString() }, ...prev]);
     setFormKey(k => k + 1);
     setView("display");
   };
+
+  const openLibraryItem = useCallback((item) => {
+    let fd = item.formData;
+    if (!fd.shareId) {
+      const shareId = genShareId();
+      fd = { ...fd, shareId };
+      setLibrary((prev) => prev.map((x) => (x.id === item.id ? { ...x, formData: fd, shareId } : x)));
+    }
+    setCurrentBrief(item.brief);
+    setCurrentFormData(fd);
+    setView("display");
+  }, []);
 
   const deleteBrief = useCallback((id) => {
     setLibrary(prev => prev.filter(item => item.id !== id));
@@ -1257,6 +1482,13 @@ export default function App() {
           </div>
         </div>
 
+        {currentRole === ROLES.CREATOR && (
+          <div className="no-print" style={{ background: t.orange + (t.isLight ? "18" : "15"), borderBottom: `1px solid ${t.orange}35`, padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap", fontSize: 13, color: t.text }}>
+            <span>👁 Viewing as Creator — read-only mode</span>
+            <button type="button" onClick={() => setCurrentRole(ROLES.MANAGER)} style={{ ...S.btnS, fontSize: 12, padding: "6px 14px", borderColor: t.orange + "50", color: t.orange }}>Switch to Manager</button>
+          </div>
+        )}
+
         {/* AI LOADING */}
         {aiLoading && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "120px 24px", textAlign: "center", animation: "fadeIn 0.3s ease" }}>
@@ -1309,7 +1541,7 @@ export default function App() {
               <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 60px" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 14 }}>Recent Briefs</div>
                 {library.slice(0,5).map(item => (
-                  <div key={item.id} style={S.listItem} onClick={()=>{setCurrentBrief(item.brief);setCurrentFormData(item.formData);setView("display")}}
+                  <div key={item.id} style={S.listItem} onClick={()=>openLibraryItem(item)}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
                     <div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div><div style={{ fontSize: 12, color: t.textFaint }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div></div>
                     <div style={{ fontSize: 12, color: t.textFaint }}>→</div>
@@ -1398,6 +1630,25 @@ export default function App() {
               </div>
             </div>
 
+            {/* Preview Mode — developer testing */}
+            <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginTop: 20, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 6 }}>Preview Mode</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.6 }}>Switch to Creator view to see what creators will see (read-only)</div>
+              <button
+                type="button"
+                onClick={() => setCurrentRole((r) => (r === ROLES.MANAGER ? ROLES.CREATOR : ROLES.MANAGER))}
+                style={{
+                  padding: "10px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${currentRole === ROLES.CREATOR ? t.green + "50" : t.border}`,
+                  background: currentRole === ROLES.CREATOR ? t.green + "15" : t.cardAlt,
+                  color: currentRole === ROLES.CREATOR ? t.green : t.text,
+                  cursor: "pointer",
+                }}
+              >
+                {currentRole === ROLES.CREATOR ? "← Back to Manager view" : "View as Creator"}
+              </button>
+            </div>
+
             {/* Version History */}
             <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginTop: 20, boxShadow: t.shadow }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 16 }}>Version History</div>
@@ -1417,7 +1668,7 @@ export default function App() {
         )}
 
         {!aiLoading && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
-        {!aiLoading && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} onBack={()=>setView("home")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
+        {!aiLoading && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} onBack={()=>setView("home")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {!aiLoading && view === "library" && (
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
@@ -1427,7 +1678,7 @@ export default function App() {
             ) : library.map(item => (
               <div key={item.id} style={S.listItem}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=t.green+"50"}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border}}>
-                <div style={{ cursor: "pointer", flex: 1 }} onClick={()=>{setCurrentBrief(item.brief);setCurrentFormData(item.formData);setView("display")}}>
+                <div style={{ cursor: "pointer", flex: 1 }} onClick={()=>openLibraryItem(item)}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{item.formData.vibe === "Other" && item.formData.customVibe?.trim() ? item.formData.customVibe.trim() : item.formData.vibe} · {formatPlatformsDisplay(item.formData)} · {formatToneDisplay(item.formData)} · {item.formData.videoLength}</div>
                 </div>
