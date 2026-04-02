@@ -544,7 +544,7 @@ function getSheetsClient() {
 
   const saJson = process.env.GOOGLE_SERVICE_ACCOUNT;
   if (!saJson) {
-    console.warn("[sheets] No GOOGLE_SERVICE_ACCOUNT env var — using API key for reads only");
+    console.warn("[sheets] No GOOGLE_SERVICE_ACCOUNT env var — reads will use API key fallback");
     return null;
   }
 
@@ -564,8 +564,7 @@ function getSheetsClient() {
 }
 
 function readSheetWithApiKey(tab) {
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_SHEETS_API_KEY;
-  if (!apiKey) throw new Error("No GOOGLE_SERVICE_ACCOUNT and no GOOGLE_API_KEY / GOOGLE_SHEETS_API_KEY for reads");
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_SHEETS_API_KEY || "AIzaSyBdTkuWEXGuuoxKPzyTteD7EBOQcg5wkCc";
   const range = encodeURIComponent(`${sheetsQuoteTitle(tab)}`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}/values/${range}?key=${apiKey}&valueRenderOption=FORMATTED_VALUE`;
   return fetch(url).then(async (resp) => {
@@ -686,8 +685,7 @@ app.get("/api/sheets-tabs", async (req, res) => {
       sheetsCache.set("__tabs__", { data: payload, fetchedAt: Date.now() });
       res.json(payload);
     } else {
-      const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_SHEETS_API_KEY;
-      if (!apiKey) throw new Error("No service account and no API key for sheet metadata");
+      const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_SHEETS_API_KEY || "AIzaSyBdTkuWEXGuuoxKPzyTteD7EBOQcg5wkCc";
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_ID}?key=${apiKey}&fields=sheets.properties.title`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
