@@ -615,6 +615,23 @@ function readSheetWithApiKey(tab) {
   });
 }
 
+/** Google Sheets RGB (0–1 float) → hex; null/whitespace skips default white/black */
+function rgbToHex(rgb) {
+  if (!rgb) return null;
+  const r = Math.round((rgb.red || 0) * 255);
+  const g = Math.round((rgb.green || 0) * 255);
+  const b = Math.round((rgb.blue || 0) * 255);
+  if (r > 245 && g > 245 && b > 245) return null;
+  if (r < 10 && g < 10 && b < 10) return null;
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
+function emptyFormatsForRows(rows) {
+  return (rows || []).map((row) =>
+    (Array.isArray(row) ? row : []).map(() => ({ bg: null, fg: null, bold: false, align: null })),
+  );
+}
+
 app.get("/api/sheets/:tab", async (req, res) => {
   const tab = decodeURIComponent(req.params.tab);
 
@@ -649,6 +666,83 @@ app.get("/api/sheets/:tab", async (req, res) => {
   }
 });
 
+app.get("/api/sheets-formatted/:tab", async (req, res) => {
+  const tab = decodeURIComponent(req.params.tab);
+
+  const cacheKey = `fmt_${tab}`;
+  const cached = sheetsCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const client = getSheetsClient();
+    if (!client) {
+      const data = await readSheetWithApiKey(tab);
+      const rows = data.values || [];
+      const formats = emptyFormatsForRows(rows);
+      const result = {
+        tab,
+        rows,
+        formats,
+        rowCount: rows.length,
+        fetchedAt: new Date().toISOString(),
+      };
+      sheetsCache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+      console.log(`[sheets] Formatted fallback (values-only) "${tab}": ${rows.length} rows`);
+      return res.json(result);
+    }
+
+    const response = await client.spreadsheets.get({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      ranges: [sheetsQuoteTitle(tab)],
+      includeGridData: true,
+      fields:
+        "sheets.data.rowData.values(formattedValue,effectiveFormat(backgroundColor,textFormat(bold,foregroundColor),horizontalAlignment))",
+    });
+
+    const sheetData = response.data.sheets?.[0]?.data?.[0];
+    if (!sheetData) {
+      return res.status(404).json({ error: "Tab not found" });
+    }
+
+    const rows = [];
+    const formats = [];
+
+    for (const rowData of sheetData.rowData || []) {
+      const rowValues = [];
+      const rowFormats = [];
+
+      for (const cell of rowData.values || []) {
+        rowValues.push(cell.formattedValue ?? cell.userEnteredValue?.stringValue ?? "");
+
+        const bg = cell.effectiveFormat?.backgroundColor;
+        const fg = cell.effectiveFormat?.textFormat?.foregroundColor;
+        const bold = cell.effectiveFormat?.textFormat?.bold || false;
+        const align = cell.effectiveFormat?.horizontalAlignment || null;
+
+        rowFormats.push({
+          bg: bg ? rgbToHex(bg) : null,
+          fg: fg ? rgbToHex(fg) : null,
+          bold,
+          align: align ? String(align).toLowerCase() : null,
+        });
+      }
+
+      rows.push(rowValues);
+      formats.push(rowFormats);
+    }
+
+    const result = { tab, rows, formats, rowCount: rows.length, fetchedAt: new Date().toISOString() };
+    sheetsCache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+    console.log(`[sheets] Formatted read "${tab}": ${rows.length} rows`);
+    res.json(result);
+  } catch (e) {
+    console.error("[sheets] Formatted read error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/sheets/update", async (req, res) => {
   const { tab, cell, value } = req.body || {};
   if (!tab || !cell) return res.status(400).json({ error: "Missing tab or cell" });
@@ -666,6 +760,7 @@ app.post("/api/sheets/update", async (req, res) => {
     });
 
     sheetsCache.delete(tab);
+    sheetsCache.delete(`fmt_${tab}`);
     console.log(`[sheets] Wrote "${tab}"!${cell}`);
     res.json({ status: "ok", tab, cell, value });
   } catch (e) {
@@ -698,6 +793,7 @@ app.post("/api/sheets/batch-update", async (req, res) => {
     });
 
     sheetsCache.delete(tab);
+    sheetsCache.delete(`fmt_${tab}`);
     console.log(`[sheets] Batch wrote ${updates.length} cells to "${tab}"`);
     res.json({ status: "ok", count: updates.length });
   } catch (e) {

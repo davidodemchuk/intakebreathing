@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.36.0";
+const APP_VERSION = "5.37.0";
 const CHANGELOG = [
+  { version: "5.37.0", date: "2026-04-02", changes: [
+    "Channel Pipeline now matches Google Sheet formatting — cell colors, bold, backgrounds all preserved",
+  ]},
   { version: "5.36.0", date: "2026-04-02", changes: [
     "Channel Pipeline tables — sticky header row while scrolling",
   ]},
@@ -8348,7 +8351,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
           const results = {};
           for (const sopTab of PIPELINE_SOP_TABS) {
             try {
-              const res = await fetch(`/api/sheets/${encodeURIComponent(sopTab)}`);
+              const res = await fetch(`/api/sheets-formatted/${encodeURIComponent(sopTab)}`);
               if (res.ok) results[sopTab] = await res.json();
             } catch {
               /* skip failed SOP tab */
@@ -8361,7 +8364,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
         if (!sheetTab) {
           return;
         }
-        const res = await fetch(`/api/sheets/${encodeURIComponent(sheetTab)}`);
+        const res = await fetch(`/api/sheets-formatted/${encodeURIComponent(sheetTab)}`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || `HTTP ${res.status}`);
@@ -8388,14 +8391,14 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
       if (tab === "sops") {
         const results = {};
         for (const sopTab of PIPELINE_SOP_TABS) {
-          const res = await fetch(`/api/sheets/${encodeURIComponent(sopTab)}`);
+          const res = await fetch(`/api/sheets-formatted/${encodeURIComponent(sopTab)}`);
           if (res.ok) results[sopTab] = await res.json();
         }
         setSheetData(results);
       } else {
         const sheetTab = PIPELINE_TAB_MAP[tab];
         if (sheetTab) {
-          const res = await fetch(`/api/sheets/${encodeURIComponent(sheetTab)}`);
+          const res = await fetch(`/api/sheets-formatted/${encodeURIComponent(sheetTab)}`);
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.error || `HTTP ${res.status}`);
@@ -8454,47 +8457,54 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
     }
 
     const rows = data.rows;
-    const headerRow = rows[opts.headerRowIndex || 0] || [];
-    const dataRows = rows.slice((opts.headerRowIndex || 0) + 1);
-    const maxCols = Math.max(
-      1,
-      ...rows.map((r) => (Array.isArray(r) ? r.length : 0)),
-      headerRow.length,
-    );
+    const formats = data.formats || [];
+    const headerIdx = opts.headerRowIndex || 0;
+    const headerRow = rows[headerIdx] || [];
+    const headerFmt = formats[headerIdx] || [];
+    const dataRows = rows.slice(headerIdx + 1);
+    const dataFormats = formats.slice(headerIdx + 1);
+    const maxCols = Math.max(1, ...rows.map((r) => (Array.isArray(r) ? r.length : 0)), headerRow.length);
 
     return (
       <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "75vh", borderRadius: 10, border: `1px solid ${t.border}` }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: Math.min(maxCols * 80, 3000) }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: Math.min(maxCols * 85, 3000) }}>
           <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
             <tr>
-              {Array.from({ length: maxCols }, (_, i) => headerRow[i]).map((cell, i) => (
-                <th
-                  key={i}
-                  style={{
-                    padding: "6px 8px",
-                    textAlign: i === 0 ? "left" : "right",
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: t.text,
-                    textTransform: "uppercase",
-                    whiteSpace: "nowrap",
-                    position: i === 0 ? "sticky" : "static",
-                    left: i === 0 ? 0 : "auto",
-                    background: t.cardAlt,
-                    zIndex: i === 0 ? 12 : 10,
-                    minWidth: i === 0 ? 140 : 70,
-                    borderBottom: `2px solid ${t.border}`,
-                    borderRight: `1px solid ${t.border}30`,
-                  }}
-                >
-                  {String(cell ?? "").replace(/\n/g, " ")}
-                </th>
-              ))}
+              {Array.from({ length: maxCols }, (_, i) => {
+                const cell = headerRow[i];
+                const fmt = headerFmt[i] || {};
+                return (
+                  <th
+                    key={i}
+                    style={{
+                      padding: "7px 8px",
+                      textAlign: fmt.align || (i === 0 ? "left" : "center"),
+                      fontSize: 10,
+                      fontWeight: fmt.bold ? 800 : 700,
+                      color: fmt.fg || t.text,
+                      whiteSpace: "nowrap",
+                      position: i === 0 ? "sticky" : "static",
+                      left: i === 0 ? 0 : "auto",
+                      background: fmt.bg || t.cardAlt,
+                      zIndex: i === 0 ? 12 : 10,
+                      minWidth: i === 0 ? 130 : 65,
+                      borderBottom: `2px solid ${t.border}`,
+                      borderRight: `1px solid ${t.border}25`,
+                    }}
+                  >
+                    {String(cell ?? "").replace(/\n/g, " ")}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {dataRows.map((row, ri) => {
+              const rowFmt = dataFormats[ri] || [];
               const firstCell = String(row?.[0] ?? "").trim();
+              const isEmpty = !row || row.every((c) => !c || String(c).trim() === "");
+              if (isEmpty) return null;
+
               const isTotal = /total/i.test(firstCell) || /^Q\d/i.test(firstCell);
               const isMilestone =
                 /join/i.test(firstCell) ||
@@ -8505,49 +8515,45 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                 /^\d{4}-\d{2}/.test(firstCell) ||
                 /^(January|February|March|April|May|June|July|August|September|October|November|December)/i.test(firstCell);
               const isSectionHeader = (row || []).filter((c) => c && String(c).trim()).length <= 2 && firstCell.length > 2;
-              const isEmpty = !row || row.every((c) => !c || String(c).trim() === "");
 
-              if (isEmpty) return null;
-
-              let rowStyle = {};
-              const isEvenRow = ri % 2 === 0;
-              if (isTotal || isMonthHeader) {
-                rowStyle = { background: t.cardAlt, fontWeight: 700 };
-              } else if (isMilestone) {
-                rowStyle = { background: (t.purple || "#a78bfa") + "10", fontStyle: "italic" };
-              } else if (isSectionHeader) {
-                rowStyle = { background: (t.green || "#00e0b4") + "10" };
-              } else {
-                rowStyle = { background: isEvenRow ? "transparent" : t.cardAlt + "40" };
-              }
+              const rowBg = rowFmt[0]?.bg || rowFmt[1]?.bg || null;
+              const hasSheetBg = rowBg && rowBg !== "#ffffff";
 
               return (
-                <tr key={ri} style={rowStyle}>
+                <tr key={ri} style={{ background: hasSheetBg ? rowBg : isTotal || isMonthHeader ? t.cardAlt : "transparent" }}>
                   {Array.from({ length: maxCols }, (_, ci) => {
                     const val = row?.[ci] ?? "";
+                    const fmt = rowFmt[ci] || {};
                     const isFirst = ci === 0;
-                    let color = t.text;
                     const s = String(val).trim();
-                    if (s === "—" || s === "" || s === "#REF!" || s === "#DIV/0!") color = t.textFaint;
-                    else if (s === "0" || s === "$0" || s === "$0.00" || s === "0.00" || s === "$-") color = t.textFaint;
-                    else if (s.startsWith("-$") || (s.startsWith("-") && /\d/.test(s) && !s.includes("%"))) color = "#ef4444";
-                    else if (s.endsWith("%")) {
-                      const pctVal = parseFloat(s);
-                      color = pctVal < 0 ? "#ef4444" : t.textMuted;
-                    } else if (s.startsWith("$")) color = t.text;
 
-                    if (ci === 0 && /^(Active|Pause|Under Review|Complete)$/i.test(s)) {
-                      const sc = { active: t.green, pause: t.orange, "under review": t.blue, complete: t.green };
-                      color = sc[s.toLowerCase()] || t.textFaint;
+                    let cellColor = fmt.fg || t.text;
+                    let cellBg = fmt.bg || null;
+                    let cellBold = fmt.bold || false;
+
+                    if (!fmt.fg) {
+                      if (s === "—" || s === "" || s === "#REF!" || s === "#DIV/0!" || s === "0" || s === "$0" || s === "$0.00") {
+                        cellColor = t.textFaint;
+                      } else if (s.startsWith("-$") || (s.startsWith("-") && /\d/.test(s) && !s.includes("%"))) {
+                        cellColor = "#ef4444";
+                      } else if (s.endsWith("%")) {
+                        const pctVal = parseFloat(s.replace(/%/g, ""));
+                        cellColor = Number.isFinite(pctVal) && pctVal < 0 ? "#ef4444" : t.textMuted;
+                      }
                     }
 
+                    if (!fmt.fg && isFirst && /^(Active|Pause|Under Review|Complete)$/i.test(s)) {
+                      const sc = { active: t.green, pause: t.orange, "under review": t.blue, complete: t.green };
+                      cellColor = sc[s.toLowerCase()] || t.textFaint;
+                    }
+
+                    if (isTotal) cellBold = true;
+                    if (isFirst) cellBold = true;
+
                     const display = s === "#REF!" || s === "#DIV/0!" ? "—" : val;
-                    const rowIdxInRows = (opts.headerRowIndex || 0) + 1 + ri;
-                    const isEditing =
-                      editingCell?.tabName === tabName &&
-                      editingCell?.rowIdxInRows === rowIdxInRows &&
-                      editingCell?.col === ci;
-                    const canEdit = ci > 0 && !isTotal && !isMilestone && !isMonthHeader && !isSectionHeader;
+                    const rowIdxInRows = headerIdx + 1 + ri;
+                    const isEditing = editingCell?.tabName === tabName && editingCell?.rowIdxInRows === rowIdxInRows && editingCell?.col === ci;
+                    const canEdit = ci > 0 && !isTotal && !isMonthHeader && !isMilestone && !isSectionHeader;
 
                     return (
                       <td
@@ -8560,9 +8566,9 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                         }}
                         style={{
                           padding: "5px 8px",
-                          textAlign: isFirst ? "left" : "right",
-                          color: isTotal ? t.text : color,
-                          fontWeight: isTotal || isFirst ? (isTotal ? 700 : 600) : 400,
+                          textAlign: fmt.align || (isFirst ? "left" : "right"),
+                          color: cellColor,
+                          fontWeight: cellBold ? 700 : 400,
                           fontSize: isMilestone ? 10 : 11,
                           whiteSpace: "nowrap",
                           maxWidth: ci > 0 ? 120 : 200,
@@ -8571,18 +8577,14 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                           position: isFirst ? "sticky" : "static",
                           left: isFirst ? 0 : "auto",
                           background: isFirst
-                            ? isTotal || isMonthHeader
-                              ? t.cardAlt
-                              : t.card
-                            : isTotal || isMonthHeader
-                              ? t.cardAlt
-                              : "transparent",
+                            ? cellBg || (isTotal || isMonthHeader ? t.cardAlt : t.card)
+                            : cellBg || (isTotal || isMonthHeader || hasSheetBg ? (hasSheetBg ? rowBg : t.cardAlt) : "transparent"),
                           zIndex: isFirst ? 1 : 0,
                           fontVariantNumeric: "tabular-nums",
                           cursor: canEdit ? "pointer" : "default",
                           outline: isEditing ? `2px solid ${t.green}` : "none",
-                          borderBottom: `1px solid ${t.border}40`,
-                          borderRight: `1px solid ${t.border}20`,
+                          borderBottom: `1px solid ${t.border}20`,
+                          borderRight: `1px solid ${t.border}15`,
                           borderTop: isTotal || isMonthHeader ? `2px solid ${t.border}` : "none",
                         }}
                       >
@@ -8614,20 +8616,16 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                             }}
                             style={{
                               width: "100%",
-                              minWidth: 0,
                               padding: "2px 4px",
                               border: `1px solid ${t.green}`,
-                              borderRadius: 3,
+                              borderRadius: 4,
+                              fontSize: 11,
                               background: t.inputBg,
                               color: t.inputText,
-                              fontSize: 11,
-                              textAlign: isFirst ? "left" : "right",
                               outline: "none",
                               boxSizing: "border-box",
                             }}
                           />
-                        ) : s === "#REF!" || s === "#DIV/0!" ? (
-                          "—"
                         ) : (
                           display
                         )}
