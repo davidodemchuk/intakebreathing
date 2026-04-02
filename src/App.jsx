@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.28.0";
+const APP_VERSION = "5.29.0";
 const CHANGELOG = [
+  { version: "5.29.0", date: "2026-04-02", changes: [
+    "Upload Old Brief — drop any PDF, image, or text file and AI rewrites it into Intake's brief format",
+  ]},
   { version: "5.28.0", date: "2026-04-02", changes: [
     "Change request system — floating button on every page for managers and creators to request updates",
     "Request includes: who's requesting, page, description, priority",
@@ -2909,6 +2912,39 @@ const SUPERVISION_FORM_HINTS = {
   handsoff: "Submit and done — no back and forth",
 };
 
+const BRIEF_EXTRACTION_PROMPT = `You are reading an old creator/UGC brief. Extract the key information and map it to Intake Breathing's brief format.
+
+Intake Breathing makes nasal breathing strips for athletes and sleep. Return ONLY a JSON object with these fields (string values unless noted):
+
+{
+  "productName": "<one of: ${PRODUCTS.join("', '")}>",
+  "customProductName": "<if productName is Other, the specific product name; else empty string>",
+  "campaignName": "<campaign name or empty string>",
+  "vibe": "<one of: ${VIBES.join("', '")}>",
+  "customVibe": "<if vibe is Other, describe; else empty string>",
+  "mission": "<the core message or goal in 1-2 sentences — do not quote the source verbatim>",
+  "problem": "<audience problem from the brief's perspective>",
+  "ageRange": "<one of: ${AGE_RANGES.join("', '")}>",
+  "gender": "<one of: ${GENDERS.join("', '")}>",
+  "platforms": <JSON array of strings, each one of: ${PLATFORMS.join(", ")} — use multiple if needed>,
+  "videoLength": "<one of: ${LENGTHS.join("', '")}>",
+  "tone": "<one of: ${TONES.join("', '")}>",
+  "customTone": "<if tone is Other, describe; else empty string>",
+  "notes": "<extra instructions, talking points, or requirements that do not fit other fields>",
+  "contentQuantity": "<number of videos as string, default '1'>",
+  "budgetPerVideo": "<digits only, no $; default '100' if unknown>",
+  "manager": "<one of: ${MANAGERS.join("', '")} — if a specific person is named who is not listed, use Other and put their name in customManager>",
+  "customManager": "<if manager is Other, the person's name; else empty string>"
+}
+
+Rules:
+- Map concepts to Intake's enums; pick the closest option when unsure.
+- If the old brief mentions a competitor product, still map to the closest Intake product or Other with a sensible custom name.
+- Extract the SPIRIT of the brief; paraphrase — do not paste verbatim phrases from the source.
+- If a field cannot be determined, use sensible defaults aligned with a nasal dilator brand.
+- notes should hold unique requirements that do not fit elsewhere.
+- Return ONLY the JSON object, no markdown fences or commentary.`;
+
 const DEFAULTS = {
   manager: "Summer", customManager: "", contentQuantity: "1",
   budgetPerVideo: "100",
@@ -3050,6 +3086,207 @@ function generateBrief(d) {
 // ═══════════════════════════════════════════════════════════
 // FORM
 // ═══════════════════════════════════════════════════════════
+
+function mergeExtractedBriefToPrefill(extracted) {
+  const base = {
+    ...DEFAULTS,
+    approvedClaims: [...DEFAULTS.approvedClaims],
+    bannedClaims: [...DEFAULTS.bannedClaims],
+  };
+  if (!extracted || typeof extracted !== "object") return base;
+
+  const out = { ...base };
+
+  const pName = extracted.productName;
+  if (typeof pName === "string" && PRODUCTS.includes(pName)) {
+    out.productName = pName;
+    out.customProductName = pName === "Other" ? String(extracted.customProductName ?? "").trim() : "";
+  } else if (typeof pName === "string" && pName.trim()) {
+    out.productName = "Other";
+    out.customProductName = pName.trim();
+  }
+
+  if (extracted.campaignName != null) out.campaignName = String(extracted.campaignName);
+
+  const vibe = extracted.vibe;
+  if (typeof vibe === "string" && VIBES.includes(vibe)) {
+    out.vibe = vibe;
+    out.customVibe = vibe === "Other" ? String(extracted.customVibe ?? "").trim() : "";
+  } else if (typeof vibe === "string" && vibe.trim()) {
+    out.vibe = "Other";
+    out.customVibe = vibe.trim();
+  }
+
+  if (extracted.mission != null) out.mission = String(extracted.mission);
+  if (extracted.problem != null) out.problem = String(extracted.problem);
+
+  const ar = extracted.ageRange;
+  if (typeof ar === "string" && AGE_RANGES.includes(ar)) out.ageRange = ar;
+
+  const g = extracted.gender;
+  if (typeof g === "string" && GENDERS.includes(g)) out.gender = g;
+
+  if (Array.isArray(extracted.platforms) && extracted.platforms.length) {
+    const mapPlat = (p) => {
+      if (typeof p !== "string") return null;
+      const s = p.trim();
+      if (!s) return null;
+      if (PLATFORMS.includes(s)) return s;
+      if (/instagram/i.test(s)) return "Instagram Reels";
+      if (/youtube/i.test(s) && /short/i.test(s)) return "YouTube Shorts";
+      if (/^tiktok$/i.test(s) || /^tik tok$/i.test(s)) return "TikTok";
+      if (/facebook/i.test(s)) return "Facebook";
+      return s;
+    };
+    const pl = extracted.platforms.map(mapPlat).filter(Boolean);
+    if (pl.length) out.platforms = pl;
+  }
+
+  const vl = extracted.videoLength;
+  if (typeof vl === "string" && LENGTHS.includes(vl)) out.videoLength = vl;
+
+  const tone = extracted.tone;
+  if (typeof tone === "string") {
+    if (TONES.includes(tone)) {
+      out.tone = tone;
+      out.customTone = tone === "Other" ? String(extracted.customTone ?? "").trim() : "";
+    } else if (tone.trim()) {
+      out.tone = "Other";
+      out.customTone = tone.trim();
+    }
+  }
+
+  if (extracted.notes != null) out.notes = String(extracted.notes);
+
+  if (extracted.contentQuantity != null) {
+    const q = String(extracted.contentQuantity).replace(/\D/g, "") || "1";
+    out.contentQuantity = String(Math.max(1, parseInt(q, 10) || 1));
+  }
+  if (extracted.budgetPerVideo != null) {
+    out.budgetPerVideo = String(extracted.budgetPerVideo).replace(/^\$/, "").replace(/[^\d.]/g, "") || DEFAULTS.budgetPerVideo;
+  }
+
+  const mgr = extracted.manager;
+  if (typeof mgr === "string" && MANAGERS.includes(mgr)) {
+    out.manager = mgr;
+    out.customManager = mgr === "Other" ? String(extracted.customManager ?? "").trim() : "";
+  } else if (typeof mgr === "string" && mgr.trim()) {
+    out.manager = "Other";
+    out.customManager = mgr.trim();
+  } else if (typeof extracted.customManager === "string" && extracted.customManager.trim()) {
+    out.manager = "Other";
+    out.customManager = extracted.customManager.trim();
+  }
+
+  return out;
+}
+
+function UploadOldBrief({ onExtracted, t }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const apiKey = localStorage.getItem("intake-apikey") || "";
+      if (!apiKey.trim()) throw new Error("Add your Anthropic API key in Settings first");
+
+      const lower = file.name.toLowerCase();
+      const ext = lower.includes(".") ? lower.slice(lower.lastIndexOf(".") + 1) : "";
+      if (/^(doc|docx)$/.test(ext) || file.type.includes("wordprocessingml") || file.type === "application/msword") {
+        throw new Error("Word files aren't supported. Export as PDF or plain text (.txt).");
+      }
+
+      const isPdf = file.type === "application/pdf" || ext === "pdf";
+      const isImage =
+        (file.type && file.type.startsWith("image/")) ||
+        ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(ext);
+
+      let content;
+      if (isImage || isPdf) {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const mediaType = isPdf ? "application/pdf" : file.type || "image/jpeg";
+        content = [
+          { type: isPdf ? "document" : "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: BRIEF_EXTRACTION_PROMPT },
+        ];
+      } else {
+        const text = await file.text();
+        content = [
+          { type: "text", text: `Here is the old brief content:\n\n---\n${text}\n---\n\n${BRIEF_EXTRACTION_PROMPT}` },
+        ];
+      }
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [{ role: "user", content }],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `API error ${res.status}`);
+      }
+
+      const data = await res.json();
+      const aiText = (data.content || []).map((b) => b.text || "").join("") || "";
+      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("AI couldn't parse the brief. Try a clearer PDF, image, or text file.");
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch {
+        throw new Error("AI returned invalid JSON. Try again.");
+      }
+
+      onExtracted(mergeExtractedBriefToPrefill(parsed));
+      alert("Brief imported! Review the fields below and click Generate to create your Intake brief.");
+    } catch (err) {
+      setError(err.message || "Failed to process brief");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 24, padding: 16, border: `2px dashed ${t.border}`, borderRadius: 12, textAlign: "center", background: t.cardAlt }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Import an Existing Brief</div>
+      <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
+        Upload any old brief (PDF, image, or text) and our AI will rewrite it into Intake's format
+      </div>
+      {uploading ? (
+        <div style={{ fontSize: 13, color: t.green }}>Reading brief and extracting fields...</div>
+      ) : (
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          Upload Brief
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.txt,.md,.doc,.docx" style={{ display: "none" }} onChange={handleUpload} />
+        </label>
+      )}
+      {error ? <div style={{ fontSize: 12, color: "#ef4444", marginTop: 8 }}>{error}</div> : null}
+    </div>
+  );
+}
 
 const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
   const { t, S } = useContext(ThemeContext);
@@ -8380,6 +8617,7 @@ export default function App() {
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
   const [formKey, setFormKey] = useState(0);
+  const [briefPrefill, setBriefPrefill] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -9708,7 +9946,7 @@ export default function App() {
                   <>
                     <button type="button" style={S.navBtn(view === "ugcDashboard")} onClick={() => navigate("ugcDashboard")}>UGC Army</button>
                     <button type="button" style={S.navBtn(view === "creators" || view === "creatorDetail")} onClick={() => navigate("creators")}>Creators</button>
-                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
+                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
                     <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
                     <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                   </>
@@ -9929,7 +10167,7 @@ export default function App() {
             t={t}
             S={S}
             onOpenBrief={openLibraryItem}
-            onNewBrief={() => { navigate("create"); setFormKey((k) => k + 1); }}
+            onNewBrief={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}
           />
         )}
 
@@ -10221,7 +10459,20 @@ export default function App() {
           </div>
         )}
 
-        {!aiLoading && isCreatorViewAllowed && view === "create" && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefForm key={`b-${formKey}`} onGenerate={handleGenerate} /></div>}
+        {!aiLoading && isCreatorViewAllowed && view === "create" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px" }}>
+              <UploadOldBrief
+                onExtracted={(fields) => {
+                  setBriefPrefill(fields);
+                  setFormKey((k) => k + 1);
+                }}
+                t={t}
+              />
+            </div>
+            <BriefForm key={`b-${formKey}`} prefill={briefPrefill || undefined} onGenerate={handleGenerate} />
+          </div>
+        )}
         {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} creators={creators} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {creatorImportToast && (
@@ -11267,7 +11518,7 @@ export default function App() {
                 <div style={{ fontSize: 13, marginBottom: currentRole === ROLES.CREATOR ? 0 : 24 }}>
                   {currentRole === ROLES.CREATOR ? "Briefs shared with you will appear here." : "Generated briefs will appear here."}
                 </div>
-                {currentRole !== ROLES.CREATOR && <button style={S.btnP} onClick={()=>navigate("create")}>Create Your First Brief</button>}
+                {currentRole !== ROLES.CREATOR && <button style={S.btnP} onClick={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}>Create Your First Brief</button>}
               </div>
             ) : library.map(item => (
               <div
