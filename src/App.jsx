@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.33.0";
+const APP_VERSION = "5.34.0";
 const CHANGELOG = [
+  { version: "5.34.0", date: "2026-04-02", changes: [
+    "Change Request widget — button reads \"Request Changes\"; scope toggle defaults to this page with clear labels",
+  ]},
   { version: "5.33.0", date: "2026-04-02", changes: [
     "YouTube data displays correctly — better response parsing",
     "Content thumbnails — graceful fallback when CDN URLs expire",
@@ -8847,30 +8850,26 @@ function ChangeRequestWidget({ currentPage, t }) {
           position: "fixed",
           bottom: 24,
           right: 24,
-          width: 48,
-          height: 48,
-          borderRadius: 24,
+          padding: open ? "10px 16px" : "10px 18px",
+          borderRadius: 10,
           background: open ? t.text : t.green,
           color: open ? t.bg : "#000",
           border: "none",
           cursor: "pointer",
-          fontSize: 20,
+          fontSize: 12,
           fontWeight: 700,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
+          gap: 6,
           boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
           zIndex: 1000,
           transition: "all 0.2s",
         }}
       >
-        {open ? "✕" : "✎"}
+        {open ? "✕ Close" : "✎ Request Changes"}
         {!open && openCount > 0 ? (
           <span
             style={{
-              position: "absolute",
-              top: -4,
-              right: -4,
               width: 18,
               height: 18,
               borderRadius: 9,
@@ -8881,6 +8880,7 @@ function ChangeRequestWidget({ currentPage, t }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              marginLeft: 2,
             }}
           >
             {openCount}
@@ -8906,26 +8906,48 @@ function ChangeRequestWidget({ currentPage, t }) {
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Change Requests</div>
-              <div style={{ fontSize: 10, color: t.textFaint }}>{currentPage}</div>
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}` }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Change Requests</div>
+            <div style={{ fontSize: 10, color: t.textFaint }}>{currentPage}</div>
+          </div>
+
+          <div style={{ padding: "12px 16px", borderBottom: `1px solid ${t.border}` }}>
+            <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowAll(false)}
+                style={{
+                  flex: 1,
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: `1px solid ${!showAll ? t.green : t.border}`,
+                  background: !showAll ? t.green + "15" : "transparent",
+                  color: !showAll ? t.green : t.textFaint,
+                  cursor: "pointer",
+                }}
+              >
+                This Page ({currentPage})
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                style={{
+                  flex: 1,
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: `1px solid ${showAll ? t.green : t.border}`,
+                  background: showAll ? t.green + "15" : "transparent",
+                  color: showAll ? t.green : t.textFaint,
+                  cursor: "pointer",
+                }}
+              >
+                All Pages
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowAll(!showAll)}
-              style={{
-                fontSize: 10,
-                padding: "3px 8px",
-                borderRadius: 4,
-                border: `1px solid ${t.border}`,
-                background: showAll ? t.green + "15" : "transparent",
-                color: showAll ? t.green : t.textFaint,
-                cursor: "pointer",
-              }}
-            >
-              {showAll ? "This Page" : "All Pages"}
-            </button>
           </div>
 
           {toast ? (
