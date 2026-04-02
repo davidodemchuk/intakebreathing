@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.37.0";
+const APP_VERSION = "5.38.0";
 const CHANGELOG = [
+  { version: "5.38.0", date: "2026-04-02", changes: [
+    "IB-Ai Source of Truth expanded — now covers IB Score, rate calculator, outreach, competitor detection, and creator analysis",
+  ]},
   { version: "5.37.0", date: "2026-04-02", changes: [
     "Channel Pipeline now matches Google Sheet formatting — cell colors, bold, backgrounds all preserved",
   ]},
@@ -1360,7 +1363,29 @@ function buildViewsSparklinePercents(videos, max = 15) {
  * 4. × Engagement quality multiplier (0.7 - 1.3)
  * 5. Floor at $50, cap at $500 per video (UGC range)
  */
-function calculateCreatorCPM(creator) {
+function pickCpmTierFromKnowledge(totalFollowers, tiers) {
+  const list = Array.isArray(tiers) && tiers.length ? tiers : getDefaultAiKnowledge().cpmTiers;
+  const tf = Number(totalFollowers) || 0;
+  for (const tier of list) {
+    let max = tier.maxFollowers;
+    if (max == null || max === Infinity || (typeof max === "number" && max > 1e14)) max = Infinity;
+    else max = Number(max);
+    if (tf < max) {
+      return { label: tier.label || "Tier", cpm: Number(tier.cpm) || 0 };
+    }
+  }
+  const last = list[list.length - 1];
+  return { label: last?.label || "Tier", cpm: Number(last?.cpm) || 0 };
+}
+
+function calculateCreatorCPM(creator, knowledge) {
+  const k = mergeAiKnowledge(knowledge);
+  const cpmCap = k.cpmCap ?? 25;
+  const rateFloor = k.rateFloor ?? 50;
+  const rateCeiling = k.rateCeiling ?? 500;
+  const intakeKeywords = Array.isArray(k.alignmentKeywords) && k.alignmentKeywords.length ? k.alignmentKeywords.map((x) => String(x).toLowerCase()) : getDefaultAiKnowledge().alignmentKeywords.map((x) => x.toLowerCase());
+  const competitorKeywords = Array.isArray(k.competitorKeywords) && k.competitorKeywords.length ? k.competitorKeywords.map((x) => String(x).toLowerCase()) : getDefaultAiKnowledge().competitorKeywords.map((x) => x.toLowerCase());
+
   // ─── Step 1: Get actual view data ───
   const ttAvgViews = creator.tiktokData?.avgViews || creator.tiktokAvgViews || 0;
   const igRecentPosts = creator.instagramRecentPosts || [];
@@ -1397,32 +1422,13 @@ function calculateCreatorCPM(creator) {
     return null; // No view data — can't calculate
   }
 
-  // ─── Step 2: Base CPM by tier (CAPPED AT $25) ───
+  // ─── Step 2: Base CPM by tier (from Source of Truth) ───
   const totalFollowers = Math.max(creator.instagramData?.followers || 0, creator.tiktokData?.followers || 0);
 
-  let cpmBase;
-  let tier;
-  if (totalFollowers < 5000) {
-    cpmBase = 5;
-    tier = "Nano (<5K)";
-  } else if (totalFollowers < 15000) {
-    cpmBase = 8;
-    tier = "Micro (5-15K)";
-  } else if (totalFollowers < 50000) {
-    cpmBase = 12;
-    tier = "Rising (15-50K)";
-  } else if (totalFollowers < 150000) {
-    cpmBase = 16;
-    tier = "Mid (50-150K)";
-  } else if (totalFollowers < 500000) {
-    cpmBase = 20;
-    tier = "Established (150-500K)";
-  } else {
-    cpmBase = 25;
-    tier = "Major (500K+)";
-  }
-  // CPM never exceeds $25
-  const cpmFinal = Math.min(cpmBase, 25);
+  const picked = pickCpmTierFromKnowledge(totalFollowers, k.cpmTiers);
+  const cpmBase = picked.cpm;
+  const tier = picked.label;
+  const cpmFinal = Math.min(cpmBase, cpmCap);
 
   // ─── Step 3: Content alignment multiplier ───
   // Check if creator's content aligns with Intake's categories
@@ -1431,37 +1437,6 @@ function calculateCreatorCPM(creator) {
   const igBio = (creator.instagramData?.bio || "").toLowerCase();
   const allBios = `${niche} ${ttBio} ${igBio}`;
   const aiAnalysis = creator.aiAnalysis || {};
-
-  // Intake-aligned keywords
-  const intakeKeywords = [
-    "breath",
-    "nasal",
-    "sleep",
-    "running",
-    "fitness",
-    "athlete",
-    "sports",
-    "wellness",
-    "health",
-    "gym",
-    "workout",
-    "exercise",
-    "recovery",
-    "performance",
-    "endurance",
-    "cardio",
-    "mma",
-    "boxing",
-    "cycling",
-    "triathlon",
-    "crossfit",
-    "yoga",
-    "meditation",
-    "airway",
-    "snoring",
-    "cpap",
-  ];
-  const competitorKeywords = ["breathe right", "rhinomed", "mute snoring", "airmax", "intake competitor"];
 
   let alignmentMultiplier = 1.0;
   const alignmentReasons = [];
@@ -1563,17 +1538,11 @@ function calculateCreatorCPM(creator) {
   let rateLow = Math.round(rawRate * 0.8);
   let rateHigh = Math.round(rawRate * 1.2);
 
-  // Floor: $50 minimum (beginner UGC rate)
-  rateLow = Math.max(50, rateLow);
-  rateHigh = Math.max(75, rateHigh);
-
-  // Cap: $500 max per video (Intake's UGC budget range)
-  // Anything above $500 is influencer territory, not UGC
-  rateLow = Math.min(rateLow, 400);
-  rateHigh = Math.min(rateHigh, 500);
-
-  // Make sure low < high
-  if (rateLow >= rateHigh) rateHigh = rateLow + 25;
+  rateLow = Math.max(rateFloor, rateLow);
+  rateHigh = Math.max(rateHigh, rateLow + 25);
+  rateLow = Math.min(rateLow, rateCeiling);
+  rateHigh = Math.min(rateHigh, rateCeiling);
+  if (rateLow >= rateHigh) rateHigh = Math.min(rateLow + 25, rateCeiling);
 
   const rateDisplay = `$${rateLow}-${rateHigh}`;
 
@@ -1612,14 +1581,14 @@ function calculateCreatorCPM(creator) {
 }
 
 /** After enrichment, attach cpmData and optionally auto-fill costPerVideo from CPM (or legacy AI rate). */
-function enrichPatchWithCpm(creatorBefore, patch, mergedCreator) {
+function enrichPatchWithCpm(creatorBefore, patch, mergedCreator, aiKnowledge) {
   const prevAf =
     creatorBefore && creatorBefore.aiAutoFilled && typeof creatorBefore.aiAutoFilled === "object"
       ? creatorBefore.aiAutoFilled
       : { niche: false, quality: false, costPerVideo: false };
   const baseAf = patch && patch.aiAutoFilled && typeof patch.aiAutoFilled === "object" ? patch.aiAutoFilled : {};
   const emptyCost = !String((creatorBefore && creatorBefore.costPerVideo) || "").trim();
-  const cpmCalc = calculateCreatorCPM(mergedCreator);
+  const cpmCalc = calculateCreatorCPM(mergedCreator, aiKnowledge);
   const updates = { ...(patch || {}) };
 
   if (cpmCalc) updates.cpmData = cpmCalc;
@@ -2431,16 +2400,37 @@ async function runIbScoreClaude(ctx) {
   const safeNum = (val) => (val != null && Number(val) > 0 ? String(val) : "unknown");
   const safeRate = (val) => (val != null && Number(val) >= 0 && Number(val) <= 100 ? `${val}%` : "unknown");
 
-  const brandBlock = (ctx.brandContext && String(ctx.brandContext).trim())
-    ? `BRAND / COMPANY CONTEXT (use for content alignment, outreach tone, and "why Intake"):\n${String(ctx.brandContext).trim()}\n\n`
+  const k = mergeAiKnowledge(ctx.aiKnowledge);
+  const w = k.ibScoreWeights || getDefaultAiKnowledge().ibScoreWeights;
+  const wi = Number(w.instagram) || 45;
+  const wt = Number(w.tiktok) || 30;
+  const wc = Number(w.crossPlatform) || 10;
+  const wa = Number(w.contentAlignment) || 15;
+  const wSum = wi + wt + wc + wa;
+  const labelOpts = Object.values(k.ibScoreLabels || getDefaultAiKnowledge().ibScoreLabels).join(" | ");
+
+  const brandLine = (ctx.brandContext && String(ctx.brandContext).trim()) || (k.brandContext && String(k.brandContext).trim());
+  const brandBlock = brandLine
+    ? `BRAND / COMPANY CONTEXT (use for content alignment, outreach tone, and "why Intake"):\n${brandLine}\n\n`
     : `BRAND / COMPANY CONTEXT: Intake Breathing — magnetic external nasal dilator for better breathing, sleep, and athletic performance. FDA registered, made in USA.\n\n`;
+
+  const analysisBlock =
+    k.creatorAnalysisPrompt && String(k.creatorAnalysisPrompt).trim()
+      ? `CREATOR ANALYSIS FOCUS (evaluate with this lens):\n${String(k.creatorAnalysisPrompt).trim()}\n\n`
+      : "";
+  const outreachBlock =
+    k.outreachStyle && String(k.outreachStyle).trim()
+      ? `OUTREACH STYLE (DM + email must follow — tone, formality, what to avoid):\n${String(k.outreachStyle).trim()}\n\n`
+      : "";
 
   const prompt = `You are the IB Score calculator for Intake Breathing, a magnetic nasal dilator company for better breathing, sleep, and athletic performance.
 
-${brandBlock}CREATOR: @${cleanHandle}
+${brandBlock}${analysisBlock}${outreachBlock}SCORING WEIGHTS (from managers — sub-scores must sum to ibScore; category maxima must match): Instagram ${wi}%, TikTok ${wt}%, Cross-platform ${wc}%, Content alignment ${wa}% (total ${wSum}%). If total ≠ 100%, normalize mentally.
+
+CREATOR: @${cleanHandle}
 NAME: ${tiktokData?.displayName || instagramData?.fullName || "Unknown"}
 
-INSTAGRAM (primary platform — weight 45%):
+INSTAGRAM (primary platform — weight ${wi}%):
   Followers: ${safeNum(instagramData?.followers)}
   Posts: ${safeNum(instagramData?.posts)}
   IG Engagement Rate: ${safeRate(igEngRate)}
@@ -2453,7 +2443,7 @@ INSTAGRAM (primary platform — weight 45%):
   Recent post captions: ${igCaptions || "none"}
   Reels count pulled: ${Array.isArray(igRecentReels) ? igRecentReels.length : 0}
 
-TIKTOK (weight 30%):
+TIKTOK (weight ${wt}%):
   Followers: ${safeNum(tiktokData?.followers)}
   Total Hearts: ${safeNum(tiktokData?.hearts)}
   TT Videos: ${safeNum(tiktokData?.videoCount)}
@@ -2464,7 +2454,7 @@ TIKTOK (weight 30%):
   Has TikTok Shop: ${tiktokShopData?.hasShop || false} (${tiktokShopData?.productCount || 0} products)
   Recent video captions: ${ttCaptions || "none"}
 
-CROSS-PLATFORM PRESENCE (weight 10%):
+CROSS-PLATFORM PRESENCE (weight ${wc}%):
   YouTube: ${youtubeData ? `${safeNum(youtubeData.subscribers)} subscribers` : "not found"}
   Twitter/X: ${twitterData ? `${safeNum(twitterData.followers)} followers` : "not found"}
   LinkedIn: ${linkedinData ? "present" : "not found"}
@@ -2475,16 +2465,16 @@ Return ONLY a JSON object:
 {
   "ibScore": <number 1-100>,
   "scoreBreakdown": {
-    "instagramScore": <0-45>,
+    "instagramScore": <0-${wi}>,
     "instagramReason": "<1 sentence explaining the Instagram score>",
-    "tiktokScore": <0-30>,
+    "tiktokScore": <0-${wt}>,
     "tiktokReason": "<1 sentence explaining the TikTok score>",
-    "crossPlatform": <0-10>,
+    "crossPlatform": <0-${wc}>,
     "crossPlatformReason": "<1 sentence explaining cross-platform score>",
-    "contentAlignment": <0-15>,
+    "contentAlignment": <0-${wa}>,
     "contentAlignmentReason": "<1 sentence explaining content alignment score>"
   },
-  "scoreLabel": <"Elite" | "Excellent" | "Strong" | "Promising" | "Low Fit">,
+  "scoreLabel": <one of: ${labelOpts}>,
   "oneSentence": "<one sentence summary>",
   "contentStyle": "<2 sentences>",
   "whyIntake": "<2-3 sentences. Be specific about WHY this creator's content aligns with Intake Breathing. Reference specific content themes, audience overlap, or unique strengths.>",
@@ -2500,8 +2490,8 @@ Return ONLY a JSON object:
   "suggestedNiche": "<comma-separated>",
   "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>",
   "partnershipNotes": "<3-4 bullet points: (1) what makes this creator valuable or risky for Intake, (2) what content type they'd be best for (UGC, collab reel, TTS, etc), (3) rate context based on their metrics, (4) specific outreach angle to use>",
-  "outreachDM": "<2-3 sentence Instagram DM personalized to this creator's content. Mention Intake Breathing, reference something specific about their content, keep it casual and authentic. Do not mention payment.>",
-  "outreachEmail": "<3-4 sentence email for partnership proposal. Professional but warm. Mention their specific content themes and why Intake is a fit.>",
+  "outreachDM": "<2-3 sentence Instagram DM. Follow OUTREACH STYLE above. Mention Intake Breathing, reference something specific about their content. Do not mention payment.>",
+  "outreachEmail": "<3-4 sentence email. Follow OUTREACH STYLE above. Professional but warm.>",
   "competitorMentions": "<list any competing nasal strips, breathing products, or sleep products mentioned in their bios or content. Say 'None detected' if clean.>",
   "brandSafety": "<'Safe' | 'Review' | 'Concern'> — Safe if no issues, Review if borderline content, Concern if explicit/controversial content or competitor partnerships"
 }
@@ -2710,6 +2700,7 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     aiAnalysis = await runIbScoreClaude({
       apiKey: ak,
       brandContext: opts?.brandContext,
+      aiKnowledge: opts?.aiKnowledge,
       cleanHandle,
       tiktokData: processed.tiktokData,
       instagramData: processed.instagramData,
@@ -3073,6 +3064,78 @@ function getDefaultAiKnowledge() {
     personas: [...PERSONAS],
     brandContext:
       "Intake Breathing Technology makes magnetic external nasal dilators. Originally designed for motocross athletes. Opens wider, holds stronger, never collapses. FDA registered, made in USA. Medical grade, hypoallergenic, latex-free. 90-day risk-free trial. Starter Kit includes 4 sizes (S, M, L, XL) + 15 tab sets.",
+    ibScoreWeights: {
+      instagram: 45,
+      tiktok: 30,
+      crossPlatform: 10,
+      contentAlignment: 15,
+    },
+    ibScoreLabels: {
+      "80-100": "Elite",
+      "65-79": "Excellent",
+      "50-64": "Strong",
+      "35-49": "Promising",
+      "1-34": "Low Fit",
+    },
+    creatorAnalysisPrompt:
+      "Analyze this creator for UGC partnership potential with Intake Breathing. Evaluate content quality, audience fit, engagement authenticity, and brand safety. Flag any competitor product mentions (Breathe Right, Rhinomed, Mute, AirMax). Assess if their content style matches Intake's authentic, creator-led approach.",
+    outreachStyle:
+      "Casual, authentic, personalized. Reference something specific about their content. Mention Intake Breathing by name. Don't mention payment in DMs — keep it about the product and partnership potential. Emails can be slightly more formal but still warm.",
+    cpmTiers: [
+      { maxFollowers: 5000, cpm: 5, label: "Nano (<5K)" },
+      { maxFollowers: 15000, cpm: 8, label: "Micro (5-15K)" },
+      { maxFollowers: 50000, cpm: 12, label: "Rising (15-50K)" },
+      { maxFollowers: 150000, cpm: 16, label: "Mid (50-150K)" },
+      { maxFollowers: 500000, cpm: 20, label: "Established (150-500K)" },
+      { maxFollowers: 1e15, cpm: 25, label: "Major (500K+)" },
+    ],
+    cpmCap: 25,
+    rateFloor: 50,
+    rateCeiling: 500,
+    alignmentKeywords: [
+      "breath",
+      "nasal",
+      "sleep",
+      "running",
+      "fitness",
+      "athlete",
+      "sports",
+      "wellness",
+      "health",
+      "gym",
+      "workout",
+      "exercise",
+      "recovery",
+      "performance",
+      "endurance",
+      "cardio",
+      "mma",
+      "boxing",
+      "cycling",
+      "triathlon",
+      "crossfit",
+      "yoga",
+      "meditation",
+      "airway",
+      "snoring",
+      "cpap",
+    ],
+    competitorKeywords: ["breathe right", "rhinomed", "mute snoring", "airmax"],
+  };
+}
+
+/** Merge Supabase-loaded slices with defaults (nested weights/labels). */
+function mergeAiKnowledge(partial) {
+  const d = getDefaultAiKnowledge();
+  if (!partial || typeof partial !== "object") return d;
+  return {
+    ...d,
+    ...partial,
+    ibScoreWeights: { ...d.ibScoreWeights, ...(partial.ibScoreWeights && typeof partial.ibScoreWeights === "object" ? partial.ibScoreWeights : {}) },
+    ibScoreLabels: { ...d.ibScoreLabels, ...(partial.ibScoreLabels && typeof partial.ibScoreLabels === "object" ? partial.ibScoreLabels : {}) },
+    cpmTiers: Array.isArray(partial.cpmTiers) && partial.cpmTiers.length ? partial.cpmTiers : d.cpmTiers,
+    alignmentKeywords: Array.isArray(partial.alignmentKeywords) ? partial.alignmentKeywords : d.alignmentKeywords,
+    competitorKeywords: Array.isArray(partial.competitorKeywords) ? partial.competitorKeywords : d.competitorKeywords,
   };
 }
 
@@ -3400,21 +3463,25 @@ function UploadOldBrief({ onExtracted, t, extractionPrompt, aiKnowledge }) {
 function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
   const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : getDefaultAiKnowledge();
   const [open, setOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState("products");
+  const [activeSection, setActiveSection] = useState("brand");
   const [editing, setEditing] = useState(null);
   const [editDraft, setEditDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
   const sections = [
+    { id: "brand", label: "Brand Context" },
     { id: "products", label: "Products" },
+    { id: "scoring", label: "IB Score" },
+    { id: "rates", label: "Rate Calculator" },
+    { id: "outreach", label: "Outreach Style" },
+    { id: "competitors", label: "Competitors" },
+    { id: "alignment", label: "Content Alignment" },
     { id: "approved", label: "Approved Claims" },
     { id: "banned", label: "Banned Claims" },
     { id: "rejections", label: "Revision Criteria" },
     { id: "tones", label: "Tone & Hooks" },
     { id: "platforms", label: "Platform Specs" },
-    { id: "lengths", label: "Video Length Guides" },
-    { id: "scoring", label: "IB Score Weighting" },
-    { id: "brand", label: "Brand Context" },
+    { id: "lengths", label: "Video Lengths" },
   ];
 
   const startEdit = (field, currentValue) => {
@@ -3423,6 +3490,8 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
       setEditDraft(currentValue.join("\n"));
     } else if (typeof currentValue === "object" && currentValue !== null) {
       setEditDraft(JSON.stringify(currentValue, null, 2));
+    } else if (typeof currentValue === "number" && Number.isFinite(currentValue)) {
+      setEditDraft(String(currentValue));
     } else {
       setEditDraft(String(currentValue || ""));
     }
@@ -3432,10 +3501,21 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
     setSaving(true);
     try {
       let value;
-      if (field === "brandContext") {
+      if (field === "brandContext" || field === "creatorAnalysisPrompt" || field === "outreachStyle") {
         value = editDraft;
-      } else if (field === "toneHooks" || field === "platformNotes" || field === "lengthGuide") {
+      } else if (
+        field === "toneHooks" ||
+        field === "platformNotes" ||
+        field === "lengthGuide" ||
+        field === "ibScoreWeights" ||
+        field === "ibScoreLabels" ||
+        field === "cpmTiers"
+      ) {
         value = JSON.parse(editDraft);
+      } else if (field === "cpmCap" || field === "rateFloor" || field === "rateCeiling") {
+        const n = Number(editDraft);
+        if (!Number.isFinite(n)) throw new Error("Enter a valid number");
+        value = n;
       } else {
         value = editDraft.split("\n").map((s) => s.trim()).filter(Boolean);
       }
@@ -3627,6 +3707,13 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
             ))}
           </div>
 
+          {activeSection === "brand" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Brand Context Given to IB-Ai</div>
+              {renderEditableText("brandContext", ak.brandContext || "")}
+            </div>
+          )}
+
           {activeSection === "products" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Intake Breathing Products</div>
@@ -3723,44 +3810,140 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
           {activeSection === "scoring" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>IB Score Calculation (1-100)</div>
-              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7 }}>
-                {[
-                  { label: "Instagram", weight: "45%", detail: "Followers, engagement rate, post quality, bio relevance, business account, category alignment" },
-                  { label: "TikTok", weight: "30%", detail: "Followers, hearts, video count, engagement rate, avg views, bio, TikTok Shop status" },
-                  { label: "Cross-Platform Presence", weight: "10%", detail: "YouTube subscribers, Twitter followers, LinkedIn, Facebook, Snapchat presence" },
-                  { label: "Content Alignment", weight: "15%", detail: "How well their content themes match Intake's mission (fitness, sleep, breathing, wellness, sports)" },
-                ].map((item, i) => (
-                  <div key={i} style={{ padding: "8px 0", borderBottom: `1px solid ${t.border}10` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <strong style={{ color: t.text }}>{item.label}</strong>
-                      <span style={{ fontSize: 14, fontWeight: 800, color: t.green }}>{item.weight}</span>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>These weights determine how creators are scored. Total should equal 100%.</div>
+              {editing === "ibScoreWeights" ? renderEditableJSON("ibScoreWeights", ak.ibScoreWeights) : (
+                <div>
+                  {Object.entries(ak.ibScoreWeights || {}).map(([key, val]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${t.border}10` }}>
+                      <span style={{ fontSize: 12, color: t.text, textTransform: "capitalize" }}>{key.replace(/([A-Z])/g, " $1")}</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: t.green }}>{val}%</span>
                     </div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.detail}</div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                  <button type="button" onClick={() => startEdit("ibScoreWeights", ak.ibScoreWeights)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Weights</button>
+                </div>
+              )}
+              <div style={{ marginTop: 16, fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Score Labels</div>
+              {editing === "ibScoreLabels" ? renderEditableJSON("ibScoreLabels", ak.ibScoreLabels) : (
+                <div>
+                  {Object.entries(ak.ibScoreLabels || {}).map(([range, label]) => (
+                    <div key={range} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
+                      <span style={{ color: t.textMuted }}>{range}</span>
+                      <span style={{ fontWeight: 700, color: t.text }}>{label}</span>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => startEdit("ibScoreLabels", ak.ibScoreLabels)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Labels</button>
+                </div>
+              )}
               <div style={{ marginTop: 12, padding: 10, background: t.cardAlt, borderRadius: 8, fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>
-                <strong>Score Labels:</strong>
-                <br />
-                80-100 = Elite · 65-79 = Excellent · 50-64 = Strong · 35-49 = Promising · 1-34 = Low Fit
-                <br />
-                <br />
-                <strong>Also generated per creator:</strong>
-                <br />
-                One-sentence summary · Content style · Why Intake · Risk assessment · Suggested campaigns · Best platform analysis · Partnership notes · Outreach DM/Email · Competitor check · Brand safety
+                <strong>Generated per creator:</strong> One-sentence summary, content style, partnership notes, outreach DM + email, competitor check, brand safety rating, suggested campaigns, best platform
               </div>
             </div>
           )}
 
-          {activeSection === "brand" && (
+          {activeSection === "rates" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Brand Context Given to IB-Ai</div>
-              {renderEditableText("brandContext", ak.brandContext || "")}
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Rate Calculator Parameters</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Controls how estimated rates per video are calculated.</div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <div style={{ background: t.cardAlt, borderRadius: 8, padding: 10, textAlign: "center" }}>
+                  <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>CPM Cap</div>
+                  {editing === "cpmCap" ? (
+                    <div style={{ marginTop: 6 }}>
+                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 800 }} />
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
+                        <button type="button" onClick={() => saveEdit("cpmCap")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
+                        <button type="button" onClick={() => setEditing(null)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>${ak.cpmCap ?? 25}</div>
+                      <button type="button" onClick={() => startEdit("cpmCap", ak.cpmCap ?? 25)} style={{ marginTop: 6, padding: "2px 8px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 10, cursor: "pointer" }}>✎</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ background: t.cardAlt, borderRadius: 8, padding: 10, textAlign: "center" }}>
+                  <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>Rate Floor</div>
+                  {editing === "rateFloor" ? (
+                    <div style={{ marginTop: 6 }}>
+                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 800 }} />
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
+                        <button type="button" onClick={() => saveEdit("rateFloor")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
+                        <button type="button" onClick={() => setEditing(null)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>${ak.rateFloor ?? 50}</div>
+                      <button type="button" onClick={() => startEdit("rateFloor", ak.rateFloor ?? 50)} style={{ marginTop: 6, padding: "2px 8px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 10, cursor: "pointer" }}>✎</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ background: t.cardAlt, borderRadius: 8, padding: 10, textAlign: "center" }}>
+                  <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>Rate Ceiling</div>
+                  {editing === "rateCeiling" ? (
+                    <div style={{ marginTop: 6 }}>
+                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 800 }} />
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
+                        <button type="button" onClick={() => saveEdit("rateCeiling")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
+                        <button type="button" onClick={() => setEditing(null)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>${ak.rateCeiling ?? 500}</div>
+                      <button type="button" onClick={() => startEdit("rateCeiling", ak.rateCeiling ?? 500)} style={{ marginTop: 6, padding: "2px 8px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 10, cursor: "pointer" }}>✎</button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>CPM Tiers (by follower count)</div>
+              {(ak.cpmTiers || []).map((tier, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${t.border}10`, fontSize: 12 }}>
+                  <span style={{ color: t.textMuted }}>{tier.label}</span>
+                  <span style={{ fontWeight: 700, color: t.green }}>${tier.cpm} CPM</span>
+                </div>
+              ))}
+              <button type="button" onClick={() => startEdit("cpmTiers", ak.cpmTiers)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Tiers</button>
+
+              <div style={{ marginTop: 12, padding: 10, background: t.cardAlt, borderRadius: 8, fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>
+                <strong>Formula:</strong> (Avg Views ÷ 1,000) × CPM × Content Alignment × Engagement Quality<br />
+                <strong>Industry avg (2026):</strong> $150-300/video for UGC
+              </div>
+            </div>
+          )}
+
+          {activeSection === "outreach" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>AI Outreach Message Guidelines</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>This guides how IB-Ai writes Instagram DMs and outreach emails for each creator.</div>
+              {renderEditableText("outreachStyle", ak.outreachStyle || "")}
+              <div style={{ marginTop: 16, fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Creator Analysis Prompt</div>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>What IB-Ai evaluates when analyzing a creator for partnership potential.</div>
+              {renderEditableText("creatorAnalysisPrompt", ak.creatorAnalysisPrompt || "")}
+            </div>
+          )}
+
+          {activeSection === "competitors" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Competitor Detection</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>IB-Ai flags creators who mention these competitor brands. Detection reduces their Content Alignment score by 15%.</div>
+              {renderEditableList("competitorKeywords", ak.competitorKeywords || [], "#ef4444", "•")}
+            </div>
+          )}
+
+          {activeSection === "alignment" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Content Alignment Keywords</div>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Creators whose bios or content match these keywords get a higher alignment score in the rate calculator and IB Score.</div>
+              {renderEditableList("alignmentKeywords", ak.alignmentKeywords || [], t.green, "•")}
             </div>
           )}
 
           <div style={{ marginTop: 16, fontSize: 10, color: t.textFaint, textAlign: "center" }}>
-            Edits save to Supabase and apply to IB-Ai brief generation, compliance, templates, uploads, and scoring context immediately.
+            Edits save to Supabase and apply to IB-Ai briefs, creator scoring, rate estimates, outreach, and compliance immediately.
           </div>
         </div>
       )}
@@ -6489,7 +6672,8 @@ class CreatorDetailErrorBoundary extends React.Component {
   }
 }
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiBrandContext }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge }) {
+  const ak = mergeAiKnowledge(aiKnowledge);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
     url: "",
@@ -6615,7 +6799,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         twitterHandle: c.twitterHandle || "",
         existingInstagramData: c.instagramData,
         onCreditUsed: onScrapeCreditUsed,
-        brandContext: aiBrandContext,
+        brandContext: aiKnowledge?.brandContext,
+        aiKnowledge,
       });
       const patch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(c, payload.aiAnalysis) : {};
       const platformUpdate = {
@@ -6638,7 +6823,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         lastEnriched: new Date().toISOString(),
       };
       const mergedCreator = { ...c, ...platformUpdate, ...patch };
-      const cpmExtra = enrichPatchWithCpm(c, patch, mergedCreator);
+      const cpmExtra = enrichPatchWithCpm(c, patch, mergedCreator, ak);
       const nameExtra = !c.name?.trim() && payload.nickname ? { name: payload.nickname } : {};
       const fullUpdate = {
         ...platformUpdate,
@@ -6726,8 +6911,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   };
 
   const reanalyzeOnly = async () => {
-    const ak = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
-    if (!ak.trim()) {
+    const liveKey = (apiKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-apikey") : "") || "";
+    if (!liveKey.trim()) {
       alert("Add your Anthropic API key in Settings to enable IB Score");
       return;
     }
@@ -6737,8 +6922,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       const tt = c.tiktokData || {};
       const ig = c.instagramData || {};
       const ai = await runIbScoreClaude({
-        apiKey: ak.trim(),
-        brandContext: aiBrandContext,
+        apiKey: liveKey.trim(),
+        brandContext: ak.brandContext,
+        aiKnowledge: ak,
         cleanHandle,
         tiktokData: tt,
         instagramData: ig,
@@ -6759,7 +6945,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       if (ai) {
         const patch = mergeAiFieldsIntoExisting(c, ai);
         const mergedCreator = { ...c, ...patch };
-        const row = { ...patch, ...enrichPatchWithCpm(c, patch, mergedCreator) };
+        const row = { ...patch, ...enrichPatchWithCpm(c, patch, mergedCreator, ak) };
         updateCreator(c.id, row);
         const hasNotesAfter = String(row.notes ?? c.notes ?? "").trim();
         if (!hasNotesAfter) {
@@ -6960,7 +7146,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         const totalReach = igF + ttF + ytF;
         const avgViews = c.tiktokData?.avgViews || c.tiktokAvgViews || null;
         const engRate = c.engagementRate ?? c.tiktokEngRate ?? c.instagramEngRate ?? null;
-        const cpmD = calculateCreatorCPM(c);
+        const cpmD = calculateCreatorCPM(c, ak);
         const costDisplay = (String(c.costPerVideo || "").trim() || cpmD?.rateDisplay || "").trim() || null;
         const recentVids = c.tiktokData?.recentVideos || c.tiktokRecentVideos || [];
         let postFreq = null;
@@ -7658,7 +7844,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 16 }}>Rate & platform</div>
           {(() => {
-            const cpmData = calculateCreatorCPM(c);
+            const cpmData = calculateCreatorCPM(c, ak);
             const aiRate = ai.estimatedRate;
 
             if (!cpmData && !aiRate) return null;
@@ -9651,13 +9837,23 @@ export default function App() {
         ["ai_length_guide", "lengthGuide"],
         ["ai_personas", "personas"],
         ["ai_brand_context", "brandContext"],
+        ["ai_ib_score_weights", "ibScoreWeights"],
+        ["ai_ib_score_labels", "ibScoreLabels"],
+        ["ai_creator_analysis_prompt", "creatorAnalysisPrompt"],
+        ["ai_outreach_style", "outreachStyle"],
+        ["ai_cpm_tiers", "cpmTiers"],
+        ["ai_cpm_cap", "cpmCap"],
+        ["ai_rate_floor", "rateFloor"],
+        ["ai_rate_ceiling", "rateCeiling"],
+        ["ai_alignment_keywords", "alignmentKeywords"],
+        ["ai_competitor_keywords", "competitorKeywords"],
       ];
       const aiUpdates = {};
       for (const [dbKey, field] of aiSettingPairs) {
         const val = await dbGetSetting(dbKey);
         if (val == null) continue;
         try {
-          if (field === "brandContext") {
+          if (field === "brandContext" || field === "creatorAnalysisPrompt" || field === "outreachStyle") {
             aiUpdates[field] = typeof val === "string" ? val : String(val);
           } else {
             aiUpdates[field] = typeof val === "string" ? JSON.parse(val) : val;
@@ -9920,6 +10116,7 @@ export default function App() {
           existingInstagramData: cr.instagramData,
           onCreditUsed: bumpScrapeCredit,
           brandContext: aiKnowledge.brandContext,
+          aiKnowledge,
         });
         const tt = payload.ttData;
         const engagementRate = payload.engagementRate;
@@ -9947,7 +10144,7 @@ export default function App() {
         const bulkFull = {
           ...platformUpdate,
           ...mergePatch,
-          ...enrichPatchWithCpm(cr, mergePatch, mergedCreator),
+          ...enrichPatchWithCpm(cr, mergePatch, mergedCreator, aiKnowledge),
           ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         };
         if (payload.discoveredYoutubeHandle && !cr.youtubeHandle) {
@@ -10080,6 +10277,7 @@ export default function App() {
         onCreditUsed: bumpScrapeCredit,
         requireTikTokProfile: true,
         brandContext: aiKnowledge.brandContext,
+        aiKnowledge,
       });
       const ai = payload.aiAnalysis;
       const ttBio = payload?.ttData?.bio || "";
@@ -10140,7 +10338,7 @@ export default function App() {
         payments: [],
       };
       const merged = { ...base, ...patch };
-      const newCreator = { ...merged, ...enrichPatchWithCpm(stub, patch, merged) };
+      const newCreator = { ...merged, ...enrichPatchWithCpm(stub, patch, merged, aiKnowledge) };
       const hydratedNew = hydrateCreator(newCreator);
       const insRes = await dbUpsertCreator(hydratedNew);
       if (insRes?.creator) {
@@ -10197,6 +10395,7 @@ export default function App() {
         existingInstagramData: existing.instagramData,
         onCreditUsed: bumpScrapeCredit,
         brandContext: aiKnowledge.brandContext,
+        aiKnowledge,
       });
       const merged = mergeAiFieldsIntoExisting(existing, payload.aiAnalysis);
       const platformUpdate = {
@@ -10222,7 +10421,7 @@ export default function App() {
       updateCreator(existingId, {
         ...platformUpdate,
         ...merged,
-        ...enrichPatchWithCpm(existing, merged, mergedCreator),
+        ...enrichPatchWithCpm(existing, merged, mergedCreator, aiKnowledge),
         ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         ...(payload.discoveredYoutubeHandle && !existing.youtubeHandle ? { youtubeHandle: payload.discoveredYoutubeHandle } : {}),
         ...(payload.youtubeData?.title && !String(existing.youtubeHandle || "").trim() && !payload.discoveredYoutubeHandle ? { youtubeHandle: cleanHandle } : {}),
@@ -10504,10 +10703,23 @@ export default function App() {
       lengthGuide: "ai_length_guide",
       personas: "ai_personas",
       brandContext: "ai_brand_context",
+      ibScoreWeights: "ai_ib_score_weights",
+      ibScoreLabels: "ai_ib_score_labels",
+      creatorAnalysisPrompt: "ai_creator_analysis_prompt",
+      outreachStyle: "ai_outreach_style",
+      cpmTiers: "ai_cpm_tiers",
+      cpmCap: "ai_cpm_cap",
+      rateFloor: "ai_rate_floor",
+      rateCeiling: "ai_rate_ceiling",
+      alignmentKeywords: "ai_alignment_keywords",
+      competitorKeywords: "ai_competitor_keywords",
     };
     const key = keyMap[field];
     if (!key) return;
-    const storeVal = field === "brandContext" ? String(value) : JSON.stringify(value);
+    const storeVal =
+      field === "brandContext" || field === "creatorAnalysisPrompt" || field === "outreachStyle"
+        ? String(value)
+        : JSON.stringify(value);
     await dbSetSetting(key, storeVal);
     setAiKnowledge((prev) => ({ ...prev, [field]: value }));
   }, []);
@@ -12216,7 +12428,7 @@ export default function App() {
                 S={S}
                 onScrapeCreditUsed={bumpScrapeCredit}
                 setDbError={setDbError}
-                aiBrandContext={aiKnowledge.brandContext}
+                aiKnowledge={aiKnowledge}
               />
             </CreatorDetailErrorBoundary>
           )
