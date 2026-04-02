@@ -42,8 +42,12 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.23.0";
+const APP_VERSION = "5.24.0";
 const CHANGELOG = [
+  { version: "5.24.0", date: "2026-04-01", changes: [
+    "Rate calculator rebuilt — industry-aligned, $25 CPM cap, Intake content bonus, competitor detection",
+    "Transparent formula breakdown visible on every creator profile",
+  ]},
   { version: "5.23.0", date: "2026-04-01", changes: [
     "Status column wider — no more truncated text",
     "Draggable column resizing — grab any column border to resize",
@@ -1294,82 +1298,268 @@ function buildViewsSparklinePercents(videos, max = 15) {
 }
 
 /**
- * Calculate suggested rate per video based on CPM and actual view data.
- * Returns { cpmLow, cpmHigh, cpmTier, avgViews, platform, videoCount, rateLow, rateHigh, rateDisplay, explanation }
+ * Intake Breathing Creator Rate Calculator v2
+ *
+ * Industry context (2026):
+ * - Average UGC: $185/deliverable
+ * - Beginner: $50-150, Mid: $150-300, Established: $300-500+
+ * - Usage rights add 25-50% on top
+ *
+ * Our formula:
+ * 1. Base CPM ($5-$25 max) based on creator tier
+ * 2. × Average views per video (from actual data)
+ * 3. × Content alignment multiplier (0.8 - 1.5)
+ * 4. × Engagement quality multiplier (0.7 - 1.3)
+ * 5. Floor at $50, cap at $500 per video (UGC range)
  */
 function calculateCreatorCPM(creator) {
-  const igFollowers = creator.instagramData?.followers || 0;
-  const ttFollowers = creator.tiktokData?.followers || 0;
-  const totalFollowers = Math.max(igFollowers, ttFollowers);
-
-  let cpmLow, cpmHigh, tier;
-  if (totalFollowers < 10000) {
-    cpmLow = 10;
-    cpmHigh = 20;
-    tier = "Nano";
-  } else if (totalFollowers < 50000) {
-    cpmLow = 15;
-    cpmHigh = 25;
-    tier = "Micro";
-  } else if (totalFollowers < 200000) {
-    cpmLow = 20;
-    cpmHigh = 35;
-    tier = "Mid-tier";
-  } else if (totalFollowers < 1000000) {
-    cpmLow = 25;
-    cpmHigh = 40;
-    tier = "Macro";
-  } else {
-    cpmLow = 30;
-    cpmHigh = 50;
-    tier = "Mega";
-  }
-
+  // ─── Step 1: Get actual view data ───
   const ttAvgViews = creator.tiktokData?.avgViews || creator.tiktokAvgViews || 0;
   const igRecentPosts = creator.instagramRecentPosts || [];
-  const igAvgViews =
-    igRecentPosts.length > 0
-      ? Math.round(igRecentPosts.reduce((sum, p) => sum + (p.likes || 0), 0) / igRecentPosts.length)
-      : 0;
+  const igRecentReels = creator.instagramRecentReels || [];
 
-  let avgViews, platform, videoCount;
-  if (ttAvgViews > 0 && ttFollowers > 0) {
+  // Instagram: use reel views if available, otherwise estimate from likes
+  let igAvgViews = 0;
+  if (igRecentReels.length > 0) {
+    const reelViews = igRecentReels.map((r) => r.video_view_count || r.view_count || r.views || 0).filter((v) => v > 0);
+    if (reelViews.length > 0) igAvgViews = Math.round(reelViews.reduce((a, b) => a + b, 0) / reelViews.length);
+  }
+  if (igAvgViews === 0 && igRecentPosts.length > 0) {
+    // Conservative estimate: likes × 8 (industry average is 5-12x)
+    const avgLikes = igRecentPosts.reduce((sum, p) => sum + (p.likes || p.like_count || 0), 0) / igRecentPosts.length;
+    igAvgViews = Math.round(avgLikes * 8);
+  }
+
+  // Pick the platform with better data
+  let avgViews;
+  let platform;
+  let videoCount;
+  let platformFollowers;
+  if (ttAvgViews > 0) {
     avgViews = ttAvgViews;
     platform = "TikTok";
     videoCount = (creator.tiktokData?.recentVideos || []).length || 15;
+    platformFollowers = creator.tiktokData?.followers || 0;
   } else if (igAvgViews > 0) {
-    avgViews = igAvgViews * 12;
-    platform = "Instagram (estimated from likes)";
-    videoCount = igRecentPosts.length;
+    avgViews = igAvgViews;
+    platform = "Instagram";
+    videoCount = igRecentReels.length || igRecentPosts.length;
+    platformFollowers = creator.instagramData?.followers || 0;
   } else {
-    return null;
+    return null; // No view data — can't calculate
   }
 
-  const rateLow = Math.round((avgViews / 1000) * cpmLow);
-  const rateHigh = Math.round((avgViews / 1000) * cpmHigh);
+  // ─── Step 2: Base CPM by tier (CAPPED AT $25) ───
+  const totalFollowers = Math.max(creator.instagramData?.followers || 0, creator.tiktokData?.followers || 0);
 
-  const finalLow = Math.max(50, rateLow);
-  const finalHigh = Math.max(75, rateHigh);
+  let cpmBase;
+  let tier;
+  if (totalFollowers < 5000) {
+    cpmBase = 5;
+    tier = "Nano (<5K)";
+  } else if (totalFollowers < 15000) {
+    cpmBase = 8;
+    tier = "Micro (5-15K)";
+  } else if (totalFollowers < 50000) {
+    cpmBase = 12;
+    tier = "Rising (15-50K)";
+  } else if (totalFollowers < 150000) {
+    cpmBase = 16;
+    tier = "Mid (50-150K)";
+  } else if (totalFollowers < 500000) {
+    cpmBase = 20;
+    tier = "Established (150-500K)";
+  } else {
+    cpmBase = 25;
+    tier = "Major (500K+)";
+  }
+  // CPM never exceeds $25
+  const cpmFinal = Math.min(cpmBase, 25);
 
-  const cappedLow = Math.min(finalLow, 5000);
-  const cappedHigh = Math.min(finalHigh, 10000);
+  // ─── Step 3: Content alignment multiplier ───
+  // Check if creator's content aligns with Intake's categories
+  const niche = (creator.niche || "").toLowerCase();
+  const ttBio = (creator.tiktokData?.bio || "").toLowerCase();
+  const igBio = (creator.instagramData?.bio || "").toLowerCase();
+  const allBios = `${niche} ${ttBio} ${igBio}`;
+  const aiAnalysis = creator.aiAnalysis || {};
 
-  const explanation =
-    `Based on ${formatMetricShort(avgViews)} average views across ${videoCount} recent ${platform.includes("Instagram") ? "posts" : "videos"} on ${platform.split(" (")[0]}. ` +
-    `${tier} tier CPM range: $${cpmLow}-${cpmHigh} per 1,000 views. ` +
-    `Calculation: ${formatMetricShort(avgViews)} views ÷ 1,000 × $${cpmLow}-${cpmHigh} CPM = $${cappedLow}-${cappedHigh} per video.`;
+  // Intake-aligned keywords
+  const intakeKeywords = [
+    "breath",
+    "nasal",
+    "sleep",
+    "running",
+    "fitness",
+    "athlete",
+    "sports",
+    "wellness",
+    "health",
+    "gym",
+    "workout",
+    "exercise",
+    "recovery",
+    "performance",
+    "endurance",
+    "cardio",
+    "mma",
+    "boxing",
+    "cycling",
+    "triathlon",
+    "crossfit",
+    "yoga",
+    "meditation",
+    "airway",
+    "snoring",
+    "cpap",
+  ];
+  const competitorKeywords = ["breathe right", "rhinomed", "mute snoring", "airmax", "intake competitor"];
+
+  let alignmentMultiplier = 1.0;
+  const alignmentReasons = [];
+
+  // Check for Intake-specific content
+  const hasIntakeContent = allBios.includes("intake") || (aiAnalysis.competitorMentions || "").toLowerCase().includes("intake");
+  if (hasIntakeContent) {
+    alignmentMultiplier += 0.3;
+    alignmentReasons.push("Has created Intake content (+30%)");
+  }
+
+  // Check for niche alignment
+  const matchedKeywords = intakeKeywords.filter((kw) => allBios.includes(kw));
+  if (matchedKeywords.length >= 3) {
+    alignmentMultiplier += 0.2;
+    alignmentReasons.push(`Strong niche fit: ${matchedKeywords.slice(0, 3).join(", ")} (+20%)`);
+  } else if (matchedKeywords.length >= 1) {
+    alignmentMultiplier += 0.1;
+    alignmentReasons.push(`Partial niche fit: ${matchedKeywords.join(", ")} (+10%)`);
+  }
+
+  // Check for competitor content (NEGATIVE signal)
+  const hasCompetitor = competitorKeywords.some((kw) => allBios.includes(kw));
+  const competitorFromAi = (aiAnalysis.competitorMentions || "").toLowerCase();
+  const hasCompetitorAi = competitorFromAi && !competitorFromAi.includes("none");
+  if (hasCompetitor || hasCompetitorAi) {
+    alignmentMultiplier -= 0.15;
+    alignmentReasons.push("Competitor product detected (-15%)");
+  }
+
+  // Verified or business account bonus
+  if (creator.instagramData?.verified || creator.tiktokData?.verified) {
+    alignmentMultiplier += 0.1;
+    alignmentReasons.push("Verified account (+10%)");
+  }
+
+  // TikTok Shop / Commerce user bonus
+  if (creator.tiktokData?.isCommerceUser || creator.tiktokShopData?.hasShop) {
+    alignmentMultiplier += 0.05;
+    alignmentReasons.push("TikTok commerce creator (+5%)");
+  }
+
+  // Cap alignment multiplier
+  alignmentMultiplier = Math.max(0.7, Math.min(1.5, alignmentMultiplier));
+
+  // ─── Step 4: Engagement quality multiplier ───
+  let engMultiplier = 1.0;
+  const engReasons = [];
+
+  let engRate =
+    creator.engagementRate != null && creator.engagementRate !== ""
+      ? Number(creator.engagementRate)
+      : creator.tiktokEngRate != null && creator.tiktokEngRate !== ""
+        ? Number(creator.tiktokEngRate)
+        : creator.instagramEngRate != null && creator.instagramEngRate !== ""
+          ? Number(creator.instagramEngRate)
+          : null;
+  if (engRate != null && Number.isFinite(engRate) && engRate > 0 && engRate <= 1) {
+    engRate *= 100;
+  }
+
+  if (engRate != null && Number.isFinite(engRate)) {
+    if (engRate >= 8) {
+      engMultiplier = 1.3;
+      engReasons.push(`Exceptional engagement ${engRate.toFixed(1)}% (+30%)`);
+    } else if (engRate >= 5) {
+      engMultiplier = 1.15;
+      engReasons.push(`Strong engagement ${engRate.toFixed(1)}% (+15%)`);
+    } else if (engRate >= 2) {
+      engMultiplier = 1.0;
+      engReasons.push(`Average engagement ${engRate.toFixed(1)}%`);
+    } else if (engRate >= 1) {
+      engMultiplier = 0.85;
+      engReasons.push(`Below average engagement ${engRate.toFixed(1)}% (-15%)`);
+    } else {
+      engMultiplier = 0.7;
+      engReasons.push(`Low engagement ${engRate.toFixed(1)}% (-30%)`);
+    }
+  }
+
+  // View-to-follower ratio check
+  if (platformFollowers > 0 && avgViews > 0) {
+    const viewRatio = avgViews / platformFollowers;
+    if (viewRatio > 0.5) {
+      engMultiplier += 0.1;
+      engReasons.push(`High view ratio ${(viewRatio * 100).toFixed(0)}% (+10%)`);
+    } else if (viewRatio < 0.05) {
+      engMultiplier -= 0.1;
+      engReasons.push(`Low view ratio ${(viewRatio * 100).toFixed(1)}% (-10%)`);
+    }
+  }
+
+  engMultiplier = Math.max(0.6, Math.min(1.4, engMultiplier));
+
+  // ─── Step 5: Calculate final rate ───
+  const rawRate = (avgViews / 1000) * cpmFinal * alignmentMultiplier * engMultiplier;
+
+  // Industry-aligned range: ±20% around the calculated rate
+  let rateLow = Math.round(rawRate * 0.8);
+  let rateHigh = Math.round(rawRate * 1.2);
+
+  // Floor: $50 minimum (beginner UGC rate)
+  rateLow = Math.max(50, rateLow);
+  rateHigh = Math.max(75, rateHigh);
+
+  // Cap: $500 max per video (Intake's UGC budget range)
+  // Anything above $500 is influencer territory, not UGC
+  rateLow = Math.min(rateLow, 400);
+  rateHigh = Math.min(rateHigh, 500);
+
+  // Make sure low < high
+  if (rateLow >= rateHigh) rateHigh = rateLow + 25;
+
+  const rateDisplay = `$${rateLow}-${rateHigh}`;
+
+  // ─── Build explanation ───
+  const explanation = [
+    `Base: ${formatMetricShort(avgViews)} avg views × $${cpmFinal} CPM (${tier}) = $${Math.round((avgViews / 1000) * cpmFinal)}`,
+    `Content alignment: ×${alignmentMultiplier.toFixed(2)} ${alignmentReasons.length > 0 ? `(${alignmentReasons.join("; ")})` : "(neutral)"}`,
+    `Engagement quality: ×${engMultiplier.toFixed(2)} ${engReasons.length > 0 ? `(${engReasons.join("; ")})` : "(no data)"}`,
+    `Raw rate: $${Math.round(rawRate)} → Range: ${rateDisplay}/video`,
+    "Industry context: Avg UGC in 2026 is $150-300/video. Beginner $50-150, Mid $150-300, Established $300-500.",
+  ].join("\n");
 
   return {
-    cpmLow,
-    cpmHigh,
+    cpmBase,
+    cpmFinal,
     cpmTier: tier,
     avgViews,
-    platform: platform.split(" (")[0],
+    platform,
     videoCount,
-    rateLow: cappedLow,
-    rateHigh: cappedHigh,
-    rateDisplay: cappedLow === cappedHigh ? `$${cappedLow}` : `$${cappedLow}-${cappedHigh}`,
+    platformFollowers,
+    rateLow,
+    rateHigh,
+    rateDisplay,
+    rawRate: Math.round(rawRate),
+    alignmentMultiplier,
+    alignmentReasons,
+    engMultiplier,
+    engReasons,
     explanation,
+    // For display
+    totalFollowers,
+    engRate,
+    hasIntakeContent,
+    hasCompetitor: hasCompetitor || hasCompetitorAi,
   };
 }
 
@@ -6451,54 +6641,100 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
             if (!cpmData && !aiRate) return null;
 
-            return (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Estimated Rate per Video</div>
-
-                {cpmData ? (
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: t.green, marginBottom: 8 }}>
-                      {cpmData.rateDisplay}
-                      <span style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginLeft: 8 }}>per video</span>
+            if (cpmData) {
+              const vidLabel = cpmData.platform === "Instagram" ? "posts" : "videos";
+              return (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Estimated Rate per Video</div>
+                  <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+                      <span style={{ fontSize: 28, fontWeight: 800, color: t.green }}>{cpmData.rateDisplay}</span>
+                      <span style={{ fontSize: 13, color: t.textMuted }}>per video</span>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-                      <div style={{ padding: 10, background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>CPM Range</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>${cpmData.cpmLow}-${cpmData.cpmHigh}</div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>{cpmData.cpmTier} tier</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginBottom: 14 }}>
+                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>Avg Views</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{formatMetricShort(cpmData.avgViews)}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>
+                          {cpmData.videoCount} {cpmData.platform} {vidLabel}
+                        </div>
                       </div>
-                      <div style={{ padding: 10, background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Avg Views</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{formatMetricShort(cpmData.avgViews)}</div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>per {cpmData.platform === "Instagram" ? "post" : "video"}</div>
+                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>CPM Rate</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>${cpmData.cpmFinal}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>{cpmData.cpmTier}</div>
                       </div>
-                      <div style={{ padding: 10, background: t.cardAlt, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Sample Size</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{cpmData.videoCount}</div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>recent {cpmData.platform === "Instagram" ? "posts" : "videos"}</div>
+                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>Content Fit</div>
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: cpmData.alignmentMultiplier > 1.1 ? t.green : cpmData.alignmentMultiplier < 0.9 ? t.orange : t.text,
+                          }}
+                        >
+                          ×{cpmData.alignmentMultiplier.toFixed(2)}
+                        </div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>
+                          {cpmData.hasIntakeContent ? "Intake creator ✓" : cpmData.hasCompetitor ? "Competitor ⚠" : "Neutral"}
+                        </div>
                       </div>
+                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>Engagement</div>
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: cpmData.engMultiplier > 1.1 ? t.green : cpmData.engMultiplier < 0.9 ? t.orange : t.text,
+                          }}
+                        >
+                          ×{cpmData.engMultiplier.toFixed(2)}
+                        </div>
+                        <div style={{ fontSize: 10, color: t.textFaint }}>
+                          {cpmData.engRate != null && Number.isFinite(Number(cpmData.engRate)) ? `${Number(cpmData.engRate).toFixed(1)}% rate` : "No data"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {(cpmData.alignmentReasons?.length > 0 || cpmData.engReasons?.length > 0) ? (
+                      <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>
+                        {[...(cpmData.alignmentReasons || []), ...(cpmData.engReasons || [])].map((r, i) => (
+                          <div key={i} style={{ color: r.includes("+") ? t.green : r.includes("-") ? t.orange : t.textMuted }}>• {r}</div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div style={{ fontSize: 10, color: t.textFaint, borderTop: `1px solid ${t.border}`, paddingTop: 8, lineHeight: 1.5 }}>
+                      <strong>Formula:</strong> {formatMetricShort(cpmData.avgViews)} views ÷ 1,000 × ${cpmData.cpmFinal} CPM × {cpmData.alignmentMultiplier.toFixed(2)} fit × {cpmData.engMultiplier.toFixed(2)} eng = ${cpmData.rawRate}/video
+                      <br />
+                      <strong>Industry avg (2026):</strong> $150-300/video for UGC · Beginner $50-150 · Mid $150-300 · Established $300-500
                     </div>
 
                     <ExpandableInsight
                       t={t}
                       label=""
-                      value="How this was calculated"
+                      value="Full calculation breakdown"
                       valueColor={t.textMuted}
                       valueFontSize={12}
                       explanation={cpmData.explanation}
                     />
                   </div>
-                ) : aiRate ? (
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: t.green, marginBottom: 4 }}>
-                      {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green, marginRight: 4 }}>✦</span> : null}
-                      {aiRate}
-                      <span style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginLeft: 8 }}>per video (AI estimate)</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: t.textFaint }}>Enrich this creator to get a CPM-based calculation from actual video data.</div>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Estimated Rate per Video</div>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: t.green, marginBottom: 4 }}>
+                    {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green, marginRight: 4 }}>✦</span> : null}
+                    {aiRate}
+                    <span style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginLeft: 8 }}>per video (AI estimate)</span>
                   </div>
-                ) : null}
+                  <div style={{ fontSize: 11, color: t.textFaint }}>Enrich this creator to get a CPM-based calculation from actual video data.</div>
+                </div>
               </div>
             );
           })()}
