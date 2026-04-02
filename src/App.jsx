@@ -7200,25 +7200,27 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
 
     return (
       <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: maxCols * 90 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: Math.min(maxCols * 80, 3000) }}>
           <thead>
-            <tr style={{ background: t.cardAlt }}>
+            <tr>
               {Array.from({ length: maxCols }, (_, i) => headerRow[i]).map((cell, i) => (
                 <th
                   key={i}
                   style={{
-                    padding: "8px 10px",
+                    padding: "6px 8px",
                     textAlign: i === 0 ? "left" : "right",
                     fontSize: 9,
                     fontWeight: 700,
-                    color: t.textFaint,
+                    color: t.text,
                     textTransform: "uppercase",
                     whiteSpace: "nowrap",
                     position: i === 0 ? "sticky" : "static",
                     left: i === 0 ? 0 : "auto",
-                    background: i === 0 ? t.cardAlt : "transparent",
+                    background: t.cardAlt,
                     zIndex: i === 0 ? 2 : 0,
-                    minWidth: i === 0 ? 130 : 75,
+                    minWidth: i === 0 ? 140 : 70,
+                    borderBottom: `2px solid ${t.border}`,
+                    borderRight: `1px solid ${t.border}30`,
                   }}
                 >
                   {String(cell ?? "").replace(/\n/g, " ")}
@@ -7243,18 +7245,16 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
 
               if (isEmpty) return null;
 
-              let rowStyle = { borderBottom: `1px solid ${t.border}10` };
+              let rowStyle = {};
+              const isEvenRow = ri % 2 === 0;
               if (isTotal || isMonthHeader) {
-                rowStyle = {
-                  background: t.cardAlt,
-                  borderTop: `2px solid ${t.border}`,
-                  borderBottom: `2px solid ${t.border}`,
-                  fontWeight: 700,
-                };
+                rowStyle = { background: t.cardAlt, fontWeight: 700 };
               } else if (isMilestone) {
                 rowStyle = { background: (t.purple || "#a78bfa") + "10", fontStyle: "italic" };
               } else if (isSectionHeader) {
-                rowStyle = { background: (t.green || "#00e0b4") + "10", borderTop: `1px solid ${t.border}` };
+                rowStyle = { background: (t.green || "#00e0b4") + "10" };
+              } else {
+                rowStyle = { background: isEvenRow ? "transparent" : t.cardAlt + "40" };
               }
 
               return (
@@ -7265,8 +7265,12 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                     let color = t.text;
                     const s = String(val).trim();
                     if (s === "—" || s === "" || s === "#REF!" || s === "#DIV/0!") color = t.textFaint;
-                    else if (s.startsWith("$") || s.startsWith("-$")) color = t.text;
-                    else if (s.endsWith("%")) color = t.textMuted;
+                    else if (s === "0" || s === "$0" || s === "$0.00" || s === "0.00" || s === "$-") color = t.textFaint;
+                    else if (s.startsWith("-$") || (s.startsWith("-") && /\d/.test(s) && !s.includes("%"))) color = "#ef4444";
+                    else if (s.endsWith("%")) {
+                      const pctVal = parseFloat(s);
+                      color = pctVal < 0 ? "#ef4444" : t.textMuted;
+                    } else if (s.startsWith("$")) color = t.text;
 
                     if (ci === 0 && /^(Active|Pause|Under Review|Complete)$/i.test(s)) {
                       const sc = { active: t.green, pause: t.orange, "under review": t.blue, complete: t.green };
@@ -7291,7 +7295,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                           }
                         }}
                         style={{
-                          padding: "7px 10px",
+                          padding: "5px 8px",
                           textAlign: isFirst ? "left" : "right",
                           color: isTotal ? t.text : color,
                           fontWeight: isTotal || isFirst ? (isTotal ? 700 : 600) : 400,
@@ -7302,11 +7306,20 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                           textOverflow: "ellipsis",
                           position: isFirst ? "sticky" : "static",
                           left: isFirst ? 0 : "auto",
-                          background: isFirst ? (isTotal || isMonthHeader ? t.cardAlt : t.card) : "transparent",
+                          background: isFirst
+                            ? isTotal || isMonthHeader
+                              ? t.cardAlt
+                              : t.card
+                            : isTotal || isMonthHeader
+                              ? t.cardAlt
+                              : "transparent",
                           zIndex: isFirst ? 1 : 0,
                           fontVariantNumeric: "tabular-nums",
                           cursor: canEdit ? "pointer" : "default",
                           outline: isEditing ? `2px solid ${t.green}` : "none",
+                          borderBottom: `1px solid ${t.border}40`,
+                          borderRight: `1px solid ${t.border}20`,
+                          borderTop: isTotal || isMonthHeader ? `2px solid ${t.border}` : "none",
                         }}
                       >
                         {isEditing ? (
