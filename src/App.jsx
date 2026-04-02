@@ -19,29 +19,37 @@ import { supabase } from "./supabase.js";
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
 const CREATOR_COLUMNS = [
-  { key: "status", label: "Status", width: 60, filterable: true, sortable: true },
+  { key: "status", label: "Status", width: 100, filterable: true, sortable: true },
   { key: "avatar", label: "", width: 36, sortable: false },
-  { key: "handle", label: "Handle", width: 140, sortable: true },
-  { key: "niche", label: "Niche", width: 150, filterable: true, sortable: true, editable: true },
+  { key: "handle", label: "Handle", width: 160, sortable: true },
+  { key: "niche", label: "Niche", width: 170, filterable: true, sortable: true, editable: true },
   { key: "tt", label: "TT", width: 36, isLink: "external" },
   { key: "ig", label: "IG", width: 36, isLink: "external" },
   { key: "ibScore", label: "IB", width: 44, sortable: true, align: "right" },
   { key: "videos", label: "Videos", width: 60, sortable: true, align: "right" },
-  { key: "avgViews", label: "Avg Views", width: 72, sortable: true, align: "right" },
+  { key: "avgViews", label: "Avg Views", width: 80, sortable: true, align: "right" },
   { key: "engRate", label: "Eng %", width: 52, sortable: true, align: "right" },
   { key: "quality", label: "Quality", width: 70, filterable: true, sortable: true },
-  { key: "cost", label: "Cost", width: 80, editable: true },
+  { key: "cost", label: "Cost", width: 90, editable: true },
   { key: "notes", label: "Notes", width: null, editable: true },
 ];
 
 const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr" : `${c.width}px`)).join(" ");
 
+function buildCreatorGridTemplate(colWidths) {
+  return CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr" : `${colWidths[c.key] ?? c.width}px`)).join(" ");
+}
+
 // ═══ UPDATE THIS WITH EVERY PUSH ═══
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.22.0";
+const APP_VERSION = "5.23.0";
 const CHANGELOG = [
+  { version: "5.23.0", date: "2026-04-01", changes: [
+    "Status column wider — no more truncated text",
+    "Draggable column resizing — grab any column border to resize",
+  ]},
   { version: "5.22.0", date: "2026-04-01", changes: [
     "Avatar fix — tries YouTube and Facebook avatars as fallback, proxy for CDN-blocked URLs",
     "Notes auto-fill from AI enrichment — partnership notes generated on first enrich",
@@ -7578,6 +7586,30 @@ export default function App() {
   const [sortCol, setSortCol] = useState("ibScore");
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All" });
+  const [colWidths, setColWidths] = useState(() => {
+    const w = {};
+    CREATOR_COLUMNS.forEach((col) => {
+      if (col.width != null) w[col.key] = col.width;
+    });
+    return w;
+  });
+  const handleColResize = useCallback((key, startX, startWidth) => {
+    const onMove = (e) => {
+      const diff = e.clientX - startX;
+      const newWidth = Math.max(36, startWidth + diff);
+      setColWidths((prev) => ({ ...prev, [key]: newWidth }));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
   const [openFilter, setOpenFilter] = useState(null);
   const [dbError, setDbError] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
@@ -9398,7 +9430,33 @@ export default function App() {
                   : false;
           const renderHeaderCell = (col) => {
             if (col.key === "avatar") {
-              return <div key={col.key} style={{ padding: "8px 6px" }} aria-hidden />;
+              const cw = colWidths[col.key] ?? col.width ?? 36;
+              return (
+                <div key={col.key} style={{ position: "relative", padding: "8px 6px", width: cw, minWidth: cw, maxWidth: cw }} aria-hidden>
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleColResize(col.key, e.clientX, colWidths[col.key] ?? col.width ?? 36);
+                    }}
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 5,
+                      cursor: "col-resize",
+                      zIndex: 3,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `${t.green}40`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  />
+                </div>
+              );
             }
             const fk = col.filterable ? col.key : null;
             const fa = fk ? filterActive(fk) : false;
@@ -9411,6 +9469,13 @@ export default function App() {
                 data-creator-sheet-filter={fk || undefined}
                 style={{
                   position: "relative",
+                  ...(col.width != null
+                    ? {
+                        width: colWidths[col.key] ?? col.width ?? 80,
+                        minWidth: colWidths[col.key] ?? col.width ?? 80,
+                        maxWidth: colWidths[col.key] ?? col.width ?? 80,
+                      }
+                    : { minWidth: 0 }),
                   padding: "8px 10px",
                   fontSize: 10,
                   fontWeight: 700,
@@ -9588,16 +9653,48 @@ export default function App() {
                     ))}
                   </div>
                 ) : null}
+                {col.width != null ? (
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleColResize(col.key, e.clientX, colWidths[col.key] ?? col.width ?? 80);
+                    }}
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 5,
+                      cursor: "col-resize",
+                      zIndex: 3,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `${t.green}40`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  />
+                ) : null}
               </div>
             );
           };
 
           const renderBodyCell = (c, col) => {
             const align = col.align === "right" ? { textAlign: "right" } : {};
+            const fixedColStyle =
+              col.width == null
+                ? {}
+                : {
+                    width: colWidths[col.key] ?? col.width ?? 80,
+                    minWidth: colWidths[col.key] ?? col.width ?? 80,
+                    maxWidth: colWidths[col.key] ?? col.width ?? 80,
+                  };
             const stopNav = col.editable
               ? { onClick: (e) => e.stopPropagation() }
               : {};
-            const base = { ...cellBase, ...align };
+            const base = { ...cellBase, ...fixedColStyle, ...align };
 
             if (col.key === "status") {
               const s = c.status || "Active";
@@ -9704,7 +9801,7 @@ export default function App() {
               const hDisp = fmtHandle(c.handle);
               const nm = (c.name || "").trim();
               return (
-                <div key={col.key} style={{ ...base, minWidth: 0 }} title={nm ? `${hDisp} · ${nm}` : hDisp}>
+                <div key={col.key} style={{ ...base }} title={nm ? `${hDisp} · ${nm}` : hDisp}>
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
@@ -10236,7 +10333,7 @@ export default function App() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: CREATOR_GRID_TEMPLATE,
+                    gridTemplateColumns: buildCreatorGridTemplate(colWidths),
                     background: t.cardAlt,
                     borderBottom: `2px solid ${t.border}`,
                     position: "sticky",
@@ -10250,7 +10347,7 @@ export default function App() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: CREATOR_GRID_TEMPLATE,
+                      gridTemplateColumns: buildCreatorGridTemplate(colWidths),
                       padding: "40px 16px",
                       textAlign: "center",
                     }}
@@ -10274,7 +10371,7 @@ export default function App() {
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("creatorDetail", { creatorId: c.id }); } }}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: CREATOR_GRID_TEMPLATE,
+                        gridTemplateColumns: buildCreatorGridTemplate(colWidths),
                         padding: 0,
                         borderBottom: `1px solid ${t.border}30`,
                         cursor: "pointer",
