@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.38.0";
+const APP_VERSION = "5.39.0";
 const CHANGELOG = [
+  { version: "5.39.0", date: "2026-04-02", changes: [
+    "Source of Truth edit matches display — product lines and all sections use stored data only (no hidden hardcoded text)",
+  ]},
   { version: "5.38.0", date: "2026-04-02", changes: [
     "IB-Ai Source of Truth expanded — now covers IB Score, rate calculator, outreach, competitor detection, and creator analysis",
   ]},
@@ -486,7 +489,7 @@ const CHANGELOG = [
     "Brief Library with localStorage persistence",
     "PDF download for generated briefs",
     "Editable brief sections (contentEditable)",
-    "Products: Starter Kit Black, Starter Kit Clear, Mouth Tape, Sports Tabs, Refills, Case, Other",
+    "Products: Starter Kit Black, Starter Kit Clear, Mouth Tape Sleep Strips, Sports Tabs, Refills, Case, All Products, Other",
     "Campaign Vibes with custom Other option",
     "Audience targeting by age range and gender",
     "Free-text core problem field",
@@ -881,7 +884,23 @@ function getS(t) {
 // INTAKE KNOWLEDGE BASE
 // ═══════════════════════════════════════════════════════════
 
-const PRODUCTS = ["Starter Kit Black", "Starter Kit Clear", "Mouth Tape", "Sports Tabs", "Refills", "Case", "Other"];
+const PRODUCTS = [
+  "Starter Kit Black — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band.",
+  "Starter Kit Clear — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band.",
+  "Mouth Tape Sleep Strips — Mouth breathing prevention strips for better sleep.",
+  "Sports Tabs — High-adhesion replacement tabs for intense activity.",
+  "Refills — Standard replacement adhesive tab sets.",
+  "Case — Protective carrying case for the Intake band.",
+  "All Products",
+  "Other",
+];
+
+/** Brief form / stored briefs use the short name (before " — "). */
+function productOptionName(p) {
+  const s = String(p ?? "").trim();
+  const i = s.indexOf(" — ");
+  return i === -1 ? s : s.slice(0, i).trim();
+}
 
 const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge", "Unboxing / First Impressions", "Lifestyle / Routine", "Before & After", "Storytelling / Testimonial", "ASMR / Satisfying", "Other"];
 
@@ -2971,7 +2990,8 @@ const SUPERVISION_FORM_HINTS = {
 };
 
 function buildBriefExtractionPrompt(productsOverride) {
-  const pList = Array.isArray(productsOverride) && productsOverride.length ? productsOverride : PRODUCTS;
+  const raw = Array.isArray(productsOverride) && productsOverride.length ? productsOverride : PRODUCTS;
+  const pList = raw.map(productOptionName);
   return `You are reading an old creator/UGC brief. Extract the key information and map it to Intake Breathing's brief format.
 
 Intake Breathing makes nasal breathing strips for athletes and sleep. Return ONLY a JSON object with these fields (string values unless noted):
@@ -3183,7 +3203,7 @@ function generateBrief(d, knowledge) {
     ? `Target: ${genderLabel}, ages ${ageRange}. ${problemText}`
     : `Target: ${genderLabel}, ages ${ageRange}. They've seen the product in their feed but haven't pulled the trigger. Open-minded but need proof. They trust real people over polished ads.`;
   const isStarterKit = productLabel.startsWith("Starter Kit");
-  const isMouthTape = productLabel === "Mouth Tape";
+  const isMouthTape = /^Mouth Tape/i.test(productLabel);
   const solBase = isStarterKit ? "The Starter Kit includes 4 magnetic bands (S, M, L, XL) and 15 adhesive tab sets. It's magnetic, reusable, and stays on through workouts and sleep." : isMouthTape ? "Intake Mouth Tape keeps your mouth closed so you breathe through your nose all night. Pair with the nasal dilator for max airflow." : `${fullProduct} is part of the Intake Breathing system for better nasal breathing.`;
   const solutionSentences = splitSentences(solBase);
   const theyAre = ["Curious but cautious — needs a push, not a pitch", "Scrolls fast — 2 seconds to hook or gone", "Trusts real reactions over polished ads", "Open to trying if the risk feels low"];
@@ -3261,12 +3281,16 @@ function mergeExtractedBriefToPrefill(extracted, knowledge) {
   const out = { ...base };
 
   const pName = extracted.productName;
-  if (typeof pName === "string" && productsList.includes(pName)) {
-    out.productName = pName;
-    out.customProductName = pName === "Other" ? String(extracted.customProductName ?? "").trim() : "";
-  } else if (typeof pName === "string" && pName.trim()) {
-    out.productName = "Other";
-    out.customProductName = pName.trim();
+  if (typeof pName === "string" && pName.trim()) {
+    const trimmed = pName.trim();
+    const hit = productsList.find((p) => productOptionName(p) === trimmed || p === trimmed);
+    if (hit) {
+      out.productName = productOptionName(hit);
+      out.customProductName = out.productName === "Other" ? String(extracted.customProductName ?? "").trim() : "";
+    } else {
+      out.productName = "Other";
+      out.customProductName = trimmed;
+    }
   }
 
   if (extracted.campaignName != null) out.campaignName = String(extracted.campaignName);
@@ -3723,7 +3747,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
                     value={editDraft}
                     onChange={(e) => setEditDraft(e.target.value)}
                     style={{ width: "100%", minHeight: 200, padding: 10, borderRadius: 8, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
-                    placeholder="One product name per line (must match form dropdown options)"
+                    placeholder="One product per line (same text shown above; brief form uses the name before — )"
                   />
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <button type="button" onClick={() => saveEdit("products")} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
@@ -3732,31 +3756,24 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
                 </div>
               ) : (
                 <div>
-                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7 }}>
-                    {products.map((p, i) => (
-                      <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid ${t.border}10` }}>
-                        <strong style={{ color: t.text }}>{p}</strong>
-                        {p === "Starter Kit Black" || p === "Starter Kit Clear"
-                          ? " — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band."
-                          : ""}
-                        {p === "Mouth Tape" ? " — Sleep strips for mouth breathing prevention." : ""}
-                        {p === "Sports Tabs" ? " — High-adhesion tabs for intense activity." : ""}
-                        {p === "Refills" ? " — Replacement adhesive tab sets." : ""}
-                      </div>
-                    ))}
-                  </div>
+                  {products.map((p, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "6px 0",
+                        fontSize: 12,
+                        color: t.text,
+                        lineHeight: 1.6,
+                        borderBottom: `1px solid ${t.border}10`,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {p}
+                    </div>
+                  ))}
                   <button type="button" onClick={() => startEdit("products", products)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit</button>
                 </div>
               )}
-              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 12, lineHeight: 1.5 }}>
-                <strong>Company:</strong> Intake Breathing Technology<br />
-                <strong>Product type:</strong> Magnetic external nasal dilator<br />
-                <strong>Key differentiator:</strong> Opens from the sides using magnetic lift — never collapses like adhesive strips<br />
-                <strong>Originally designed for:</strong> Motocross athletes<br />
-                <strong>FDA status:</strong> FDA registered (NOT FDA approved — important distinction)<br />
-                <strong>Materials:</strong> Medical grade, hypoallergenic, latex-free<br />
-                <strong>Trial:</strong> 90-day risk-free
-              </div>
             </div>
           )}
 
@@ -3778,7 +3795,6 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, marginBottom: 8 }}>⚠ Revision Required If...</div>
               {renderEditableList("defaultRejections", ak.defaultRejections, t.orange, "⚠")}
-              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>Managers can add custom rejection criteria per brief.</div>
             </div>
           )}
 
@@ -3800,9 +3816,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Video Length Pacing Guides</div>
               {renderEditableJSON("lengthGuide", ak.lengthGuide)}
-              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 12 }}>
-                <strong>Target personas IB-Ai uses (edit below):</strong>
-              </div>
+              <div style={{ marginTop: 16, fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Personas</div>
               <div style={{ marginTop: 8 }}>{renderEditableList("personas", ak.personas, t.blue, "•")}</div>
             </div>
           )}
@@ -3810,7 +3824,6 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
           {activeSection === "scoring" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>IB Score Calculation (1-100)</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>These weights determine how creators are scored. Total should equal 100%.</div>
               {editing === "ibScoreWeights" ? renderEditableJSON("ibScoreWeights", ak.ibScoreWeights) : (
                 <div>
                   {Object.entries(ak.ibScoreWeights || {}).map(([key, val]) => (
@@ -3834,16 +3847,12 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
                   <button type="button" onClick={() => startEdit("ibScoreLabels", ak.ibScoreLabels)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Labels</button>
                 </div>
               )}
-              <div style={{ marginTop: 12, padding: 10, background: t.cardAlt, borderRadius: 8, fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>
-                <strong>Generated per creator:</strong> One-sentence summary, content style, partnership notes, outreach DM + email, competitor check, brand safety rating, suggested campaigns, best platform
-              </div>
             </div>
           )}
 
           {activeSection === "rates" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Rate Calculator Parameters</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Controls how estimated rates per video are calculated.</div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
                 <div style={{ background: t.cardAlt, borderRadius: 8, padding: 10, textAlign: "center" }}>
@@ -3907,37 +3916,28 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
                 </div>
               ))}
               <button type="button" onClick={() => startEdit("cpmTiers", ak.cpmTiers)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Tiers</button>
-
-              <div style={{ marginTop: 12, padding: 10, background: t.cardAlt, borderRadius: 8, fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>
-                <strong>Formula:</strong> (Avg Views ÷ 1,000) × CPM × Content Alignment × Engagement Quality<br />
-                <strong>Industry avg (2026):</strong> $150-300/video for UGC
-              </div>
             </div>
           )}
 
           {activeSection === "outreach" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>AI Outreach Message Guidelines</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>This guides how IB-Ai writes Instagram DMs and outreach emails for each creator.</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Outreach style</div>
               {renderEditableText("outreachStyle", ak.outreachStyle || "")}
-              <div style={{ marginTop: 16, fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Creator Analysis Prompt</div>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>What IB-Ai evaluates when analyzing a creator for partnership potential.</div>
+              <div style={{ marginTop: 16, fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Creator analysis prompt</div>
               {renderEditableText("creatorAnalysisPrompt", ak.creatorAnalysisPrompt || "")}
             </div>
           )}
 
           {activeSection === "competitors" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Competitor Detection</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>IB-Ai flags creators who mention these competitor brands. Detection reduces their Content Alignment score by 15%.</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Competitor keywords</div>
               {renderEditableList("competitorKeywords", ak.competitorKeywords || [], "#ef4444", "•")}
             </div>
           )}
 
           {activeSection === "alignment" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Content Alignment Keywords</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Creators whose bios or content match these keywords get a higher alignment score in the rate calculator and IB Score.</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Content alignment keywords</div>
               {renderEditableList("alignmentKeywords", ak.alignmentKeywords || [], t.green, "•")}
             </div>
           )}
@@ -4420,7 +4420,10 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Product *</label>
             <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); fireFormSuggest(); }}>
-              {productOpts.map(o => <option key={o} value={o}>{o}</option>)}
+              {productOpts.map((p) => {
+                const name = productOptionName(p);
+                return <option key={name} value={name}>{name}</option>;
+              })}
             </select>
             {showCustomProduct && <div style={S.fg}><label style={S.label}>Product Name</label>
               <input style={S.input} defaultValue={vals.current.customProductName} onChange={e => { vals.current.customProductName = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Enter your product name" />
