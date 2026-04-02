@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.29.0";
+const APP_VERSION = "5.30.0";
 const CHANGELOG = [
+  { version: "5.30.0", date: "2026-04-02", changes: [
+    "IB-Ai Source of Truth — collapsible knowledge base showing everything the AI uses to generate briefs and scores",
+  ]},
   { version: "5.29.0", date: "2026-04-02", changes: [
     "Upload Old Brief — drop any PDF, image, or text file and AI rewrites it into Intake's brief format",
   ]},
@@ -3284,6 +3287,247 @@ function UploadOldBrief({ onExtracted, t }) {
         </label>
       )}
       {error ? <div style={{ fontSize: 12, color: "#ef4444", marginTop: 8 }}>{error}</div> : null}
+    </div>
+  );
+}
+
+function IBAiSourceOfTruth({ t }) {
+  const [open, setOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("products");
+
+  const sections = [
+    { id: "products", label: "Products" },
+    { id: "approved", label: "Approved Claims" },
+    { id: "banned", label: "Banned Claims" },
+    { id: "rejections", label: "Revision Criteria" },
+    { id: "tones", label: "Tone & Hooks" },
+    { id: "platforms", label: "Platform Specs" },
+    { id: "lengths", label: "Video Length Guides" },
+    { id: "scoring", label: "IB Score Weighting" },
+    { id: "brand", label: "Brand Context" },
+  ];
+
+  return (
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 40px" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          width: "100%",
+          padding: "14px 20px",
+          borderRadius: 10,
+          border: `1px solid ${t.border}`,
+          background: t.card,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          cursor: "pointer",
+          fontSize: 14,
+          fontWeight: 700,
+          color: t.text,
+        }}
+      >
+        <span>🧠 IB-Ai Source of Truth</span>
+        <span style={{ fontSize: 12, color: t.textMuted }}>{open ? "▲ Close" : "▼ View what IB-Ai knows"}</span>
+      </button>
+
+      {open && (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: 20 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16, borderBottom: `1px solid ${t.border}`, paddingBottom: 8 }}>
+            {sections.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setActiveSection(s.id)}
+                style={{
+                  padding: "6px 12px",
+                  fontSize: 11,
+                  fontWeight: activeSection === s.id ? 700 : 500,
+                  color: activeSection === s.id ? t.green : t.textMuted,
+                  background: activeSection === s.id ? t.green + "10" : "transparent",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {activeSection === "products" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Intake Breathing Products</div>
+              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7 }}>
+                {PRODUCTS.map((p, i) => (
+                  <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid ${t.border}10` }}>
+                    <strong style={{ color: t.text }}>{p}</strong>
+                    {p === "Starter Kit Black" || p === "Starter Kit Clear"
+                      ? " — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band."
+                      : ""}
+                    {p === "Mouth Tape" ? " — Sleep strips for mouth breathing prevention." : ""}
+                    {p === "Sports Tabs" ? " — High-adhesion tabs for intense activity." : ""}
+                    {p === "Refills" ? " — Replacement adhesive tab sets." : ""}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 12, lineHeight: 1.5 }}>
+                <strong>Company:</strong> Intake Breathing Technology<br />
+                <strong>Product type:</strong> Magnetic external nasal dilator<br />
+                <strong>Key differentiator:</strong> Opens from the sides using magnetic lift — never collapses like adhesive strips<br />
+                <strong>Originally designed for:</strong> Motocross athletes<br />
+                <strong>FDA status:</strong> FDA registered (NOT FDA approved — important distinction)<br />
+                <strong>Materials:</strong> Medical grade, hypoallergenic, latex-free<br />
+                <strong>Trial:</strong> 90-day risk-free
+              </div>
+            </div>
+          )}
+
+          {activeSection === "approved" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.green, marginBottom: 8 }}>✓ Creators CAN Say These</div>
+              {APPROVED_CLAIMS.map((c, i) => (
+                <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
+                  <span style={{ color: t.green, flexShrink: 0 }}>✓</span> {c}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSection === "banned" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#ef4444", marginBottom: 8 }}>✗ Creators Must NEVER Say These</div>
+              {BANNED_CLAIMS.map((c, i) => (
+                <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
+                  <span style={{ color: "#ef4444", flexShrink: 0 }}>✗</span> {c}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSection === "rejections" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, marginBottom: 8 }}>⚠ Revision Required If...</div>
+              {DEFAULT_REJECTIONS.map((c, i) => (
+                <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
+                  <span style={{ color: t.orange, flexShrink: 0 }}>⚠</span> {c}
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>Managers can add custom rejection criteria per brief.</div>
+            </div>
+          )}
+
+          {activeSection === "tones" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Tone Options & Example Hooks</div>
+              {Object.entries(TONE_HOOKS).map(([tone, hooks]) => (
+                <div key={tone} style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 4 }}>{tone}</div>
+                  {hooks.map((h, i) => (
+                    <div key={i} style={{ fontSize: 12, color: t.textMuted, paddingLeft: 12, lineHeight: 1.6 }}>
+                      {`"${h}"`}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSection === "platforms" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Platform Specifications</div>
+              {Object.entries(PLATFORM_NOTES).map(([plat, notes]) => (
+                <div key={plat} style={{ marginBottom: 12, padding: 10, background: t.cardAlt, borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 4 }}>{plat}</div>
+                  <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6 }}>{notes}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSection === "lengths" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Video Length Pacing Guides</div>
+              {Object.entries(LENGTH_GUIDE).map(([len, guide]) => (
+                <div key={len} style={{ marginBottom: 10, padding: 10, background: t.cardAlt, borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 2 }}>{len}</div>
+                  <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>{guide}</div>
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>
+                <strong>Target personas IB-Ai creates for:</strong>
+                <br />
+                {PERSONAS.map((p, i) => (
+                  <span key={i} style={{ display: "inline-block", padding: "2px 8px", margin: "2px 4px 2px 0", background: t.cardAlt, borderRadius: 4, fontSize: 10 }}>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeSection === "scoring" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>IB Score Calculation (1-100)</div>
+              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7 }}>
+                {[
+                  { label: "Instagram", weight: "45%", detail: "Followers, engagement rate, post quality, bio relevance, business account, category alignment" },
+                  { label: "TikTok", weight: "30%", detail: "Followers, hearts, video count, engagement rate, avg views, bio, TikTok Shop status" },
+                  { label: "Cross-Platform Presence", weight: "10%", detail: "YouTube subscribers, Twitter followers, LinkedIn, Facebook, Snapchat presence" },
+                  { label: "Content Alignment", weight: "15%", detail: "How well their content themes match Intake's mission (fitness, sleep, breathing, wellness, sports)" },
+                ].map((item, i) => (
+                  <div key={i} style={{ padding: "8px 0", borderBottom: `1px solid ${t.border}10` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <strong style={{ color: t.text }}>{item.label}</strong>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: t.green }}>{item.weight}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 12, padding: 10, background: t.cardAlt, borderRadius: 8, fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>
+                <strong>Score Labels:</strong>
+                <br />
+                80-100 = Elite · 65-79 = Excellent · 50-64 = Strong · 35-49 = Promising · 1-34 = Low Fit
+                <br />
+                <br />
+                <strong>Also generated per creator:</strong>
+                <br />
+                One-sentence summary · Content style · Why Intake · Risk assessment · Suggested campaigns · Best platform analysis · Partnership notes · Outreach DM/Email · Competitor check · Brand safety
+              </div>
+            </div>
+          )}
+
+          {activeSection === "brand" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Brand Context Given to IB-Ai</div>
+              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7, whiteSpace: "pre-line" }}>
+                {`Company: Intake Breathing Technology
+Product: Magnetic external nasal dilator
+Tagline: "Opens wider, holds stronger, never collapses"
+
+Origin Story: Originally engineered for motocross athletes who needed maximum airflow during high-intensity racing with helmets on. Now used by runners, cyclists, gym-goers, and anyone who wants better nasal breathing during sleep or activity.
+
+How It Works: Two magnetic points lift and expand the nasal passage from the OUTSIDE — nothing goes inside the nose. The reusable band clips magnetically through adhesive tabs placed on each side of the nose.
+
+Key Differentiator vs Breathe Right: Breathe Right uses adhesive that pulls from the bridge of the nose (top). Intake uses magnetic lift from the sides — structurally stronger, doesn't collapse during heavy breathing, and is reusable.
+
+Target Audiences:
+• Athletes (runners, cyclists, MMA, CrossFit, motocross)
+• People with sleep/snoring issues
+• Health & wellness enthusiasts
+• Mouth breathers looking to switch to nasal breathing
+
+Content Philosophy: Authentic, creator-led content that feels real — not polished ads. Hook in 2 seconds, show the problem, reveal the solution. The product should feel like a discovery, not a pitch.`}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 16, fontSize: 10, color: t.textFaint, textAlign: "center" }}>
+            This is the knowledge IB-Ai uses when generating briefs, scoring creators, and writing outreach. Updates here apply to all future AI calls.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -10471,6 +10715,7 @@ export default function App() {
               />
             </div>
             <BriefForm key={`b-${formKey}`} prefill={briefPrefill || undefined} onGenerate={handleGenerate} />
+            <IBAiSourceOfTruth t={t} />
           </div>
         )}
         {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} creators={creators} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
