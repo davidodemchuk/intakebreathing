@@ -42,8 +42,13 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.27.0";
+const APP_VERSION = "5.28.0";
 const CHANGELOG = [
+  { version: "5.28.0", date: "2026-04-02", changes: [
+    "Change request system — floating button on every page for managers and creators to request updates",
+    "Request includes: who's requesting, page, description, priority",
+    "Admin view to manage all requests — mark complete, delete",
+  ]},
   { version: "5.27.0", date: "2026-04-01", changes: [
     "Fix creator profile white screen — always recalculate CPM v2, null-safe rate UI, error boundary",
   ]},
@@ -8014,6 +8019,331 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
 
 
 // ═══════════════════════════════════════════════════════════
+// CHANGE REQUEST WIDGET (Supabase table: change_requests — see supabase/schema.sql)
+// ═══════════════════════════════════════════════════════════
+
+function ChangeRequestWidget({ currentPage, t }) {
+  const [open, setOpen] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [showAll, setShowAll] = useState(false);
+  const [form, setForm] = useState({ name: "", description: "", priority: "normal" });
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [pageOpenBadge, setPageOpenBadge] = useState(0);
+
+  const refreshPageOpenBadge = useCallback(async () => {
+    const { data } = await supabase.from("change_requests").select("id").eq("page", currentPage).eq("status", "open");
+    setPageOpenBadge((data || []).length);
+  }, [currentPage]);
+
+  useEffect(() => {
+    refreshPageOpenBadge();
+  }, [refreshPageOpenBadge]);
+
+  // Load requests for current page (and all if showAll)
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const query = showAll
+        ? supabase.from("change_requests").select("*").order("created_at", { ascending: false })
+        : supabase.from("change_requests").select("*").eq("page", currentPage).eq("status", "open").order("created_at", { ascending: false });
+      const { data } = await query;
+      setRequests(data || []);
+    })();
+  }, [open, showAll, currentPage]);
+
+  const submit = async () => {
+    if (!form.name.trim() || !form.description.trim()) {
+      alert("Please enter your name and a description.");
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.from("change_requests").insert({
+      page: currentPage,
+      requested_by: form.name.trim(),
+      description: form.description.trim(),
+      priority: form.priority,
+    });
+    if (error) {
+      alert("Failed to submit: " + error.message);
+    } else {
+      setForm({ name: form.name, description: "", priority: "normal" });
+      setToast("Request submitted!");
+      setTimeout(() => setToast(null), 3000);
+      const { data } = await supabase.from("change_requests").select("*").eq("page", currentPage).eq("status", "open").order("created_at", { ascending: false });
+      setRequests(data || []);
+      refreshPageOpenBadge();
+    }
+    setSubmitting(false);
+  };
+
+  const markComplete = async (id) => {
+    await supabase.from("change_requests").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id);
+    setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: "completed", completed_at: new Date().toISOString() } : r)));
+    refreshPageOpenBadge();
+  };
+
+  const deleteRequest = async (id) => {
+    if (!window.confirm("Delete this request permanently?")) return;
+    await supabase.from("change_requests").delete().eq("id", id);
+    setRequests((prev) => prev.filter((r) => r.id !== id));
+    refreshPageOpenBadge();
+  };
+
+  const openCount = open ? requests.filter((r) => r.status === "open").length : pageOpenBadge;
+  const priorityColors = { urgent: "#ef4444", high: "#f97316", normal: t.textMuted, low: t.textFaint };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          background: open ? t.text : t.green,
+          color: open ? t.bg : "#000",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 20,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+          zIndex: 1000,
+          transition: "all 0.2s",
+        }}
+      >
+        {open ? "✕" : "✎"}
+        {!open && openCount > 0 ? (
+          <span
+            style={{
+              position: "absolute",
+              top: -4,
+              right: -4,
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              background: "#ef4444",
+              color: "#fff",
+              fontSize: 10,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {openCount}
+          </span>
+        ) : null}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 84,
+            right: 24,
+            width: 380,
+            maxHeight: "70vh",
+            background: t.card,
+            border: `1px solid ${t.border}`,
+            borderRadius: 14,
+            boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
+            zIndex: 999,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Change Requests</div>
+              <div style={{ fontSize: 10, color: t.textFaint }}>{currentPage}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAll(!showAll)}
+              style={{
+                fontSize: 10,
+                padding: "3px 8px",
+                borderRadius: 4,
+                border: `1px solid ${t.border}`,
+                background: showAll ? t.green + "15" : "transparent",
+                color: showAll ? t.green : t.textFaint,
+                cursor: "pointer",
+              }}
+            >
+              {showAll ? "This Page" : "All Pages"}
+            </button>
+          </div>
+
+          {toast ? (
+            <div style={{ padding: "8px 16px", background: t.green + "15", color: t.green, fontSize: 12, fontWeight: 600, textAlign: "center" }}>{toast}</div>
+          ) : null}
+
+          <div style={{ padding: 14, borderBottom: `1px solid ${t.border}` }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input
+                placeholder="Your name"
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                style={{ flex: 1, padding: "7px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12 }}
+              />
+              <select
+                value={form.priority}
+                onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))}
+                style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 11 }}
+              >
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <textarea
+              placeholder="Describe the change or update needed..."
+              value={form.description}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              rows={3}
+              style={{
+                width: "100%",
+                padding: "7px 10px",
+                borderRadius: 6,
+                border: `1px solid ${t.border}`,
+                background: t.inputBg,
+                color: t.inputText,
+                fontSize: 12,
+                resize: "vertical",
+                boxSizing: "border-box",
+                fontFamily: "inherit",
+              }}
+            />
+            <button
+              type="button"
+              onClick={submit}
+              disabled={submitting}
+              style={{
+                marginTop: 8,
+                width: "100%",
+                padding: "8px",
+                borderRadius: 6,
+                border: "none",
+                background: t.green,
+                color: "#000",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                opacity: submitting ? 0.5 : 1,
+              }}
+            >
+              {submitting ? "Submitting..." : "Submit Request"}
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+            {requests.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: t.textFaint, fontSize: 12 }}>No requests {showAll ? "" : "for this page"}</div>
+            ) : (
+              requests.map((r) => (
+                <div
+                  key={r.id}
+                  style={{
+                    padding: "10px 14px",
+                    borderBottom: `1px solid ${t.border}10`,
+                    opacity: r.status === "completed" ? 0.5 : 1,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: t.text }}>{r.requested_by}</span>
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 600,
+                            padding: "1px 6px",
+                            borderRadius: 4,
+                            background: (priorityColors[r.priority] || t.textFaint) + "15",
+                            color: priorityColors[r.priority] || t.textFaint,
+                          }}
+                        >
+                          {r.priority}
+                        </span>
+                        {r.status === "completed" ? (
+                          <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 4, background: t.green + "15", color: t.green }}>✓ Done</span>
+                        ) : null}
+                      </div>
+                      <div style={{ fontSize: 12, color: t.text, lineHeight: 1.4, marginBottom: 4 }}>{r.description}</div>
+                      <div style={{ fontSize: 9, color: t.textFaint }}>
+                        {showAll ? `${r.page} · ` : ""}
+                        {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        {r.completed_at
+                          ? ` · Completed ${new Date(r.completed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      {r.status === "open" ? (
+                        <button
+                          type="button"
+                          onClick={() => markComplete(r.id)}
+                          title="Mark complete"
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 4,
+                            border: `1px solid ${t.border}`,
+                            background: "transparent",
+                            color: t.green,
+                            cursor: "pointer",
+                            fontSize: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          ✓
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => deleteRequest(r.id)}
+                        title="Delete"
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 4,
+                          border: `1px solid ${t.border}`,
+                          background: "transparent",
+                          color: t.textFaint,
+                          cursor: "pointer",
+                          fontSize: 12,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════
 
@@ -10963,6 +11293,33 @@ export default function App() {
 
         </>}
         </>}
+
+        {/* Change Request Widget — appears on every page */}
+        {(() => {
+          const pageNames = {
+            home: "Homepage",
+            ugcDashboard: "UGC Army Dashboard",
+            creators: "Creators List",
+            creatorDetail: "Creator Profile" + (detailCreator ? ` — ${detailCreator.handle || detailCreator.id}` : ""),
+            create: "Brief Creator",
+            library: "Brief Library",
+            display: "Brief Display",
+            pipeline: "Channel Pipeline",
+            influencer: "Influencer Buys",
+            tools: "Tools",
+            videotool: "Video Tool",
+            settings: "Settings",
+            creatorDashboard: "Creator Portal — Dashboard",
+            creatorProfile: "Creator Portal — Profile",
+            creatorBriefView: "Creator Portal — Brief",
+            creatorMessages: "Creator Portal — Messages",
+            creatorLogin: "Creator Portal — Login",
+            creatorOnboard: "Creator Portal — Onboarding",
+            publicBrief: "Public Brief",
+          };
+          const currentPage = pageNames[view] || view || "Unknown";
+          return <ChangeRequestWidget currentPage={currentPage} t={t} />;
+        })()}
       </div>
     </ThemeContext.Provider>
   );

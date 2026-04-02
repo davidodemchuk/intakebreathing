@@ -232,3 +232,18 @@ create index if not exists idx_ps_month on partnership_spend(month);
 create index if not exists idx_ps_section on partnership_spend(section);
 create index if not exists idx_sops_dept on sops(department);
 create index if not exists idx_kpi_member on team_kpis(team_member);
+
+-- Change requests / feedback (run in SQL Editor if not applied)
+create table if not exists change_requests (
+  id uuid primary key default gen_random_uuid(),
+  page text not null,
+  requested_by text not null,
+  description text not null,
+  priority text default 'normal',
+  status text default 'open',
+  completed_at timestamptz,
+  completed_by text,
+  created_at timestamptz default now()
+);
+alter table change_requests enable row level security;
+create policy "cr_all" on change_requests for all using (true) with check (true);
