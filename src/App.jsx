@@ -42,8 +42,13 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.32.0";
+const APP_VERSION = "5.33.0";
 const CHANGELOG = [
+  { version: "5.33.0", date: "2026-04-02", changes: [
+    "YouTube data displays correctly — better response parsing",
+    "Content thumbnails — graceful fallback when CDN URLs expire",
+    "Creator profile layout — header, AI summary, stats all in proper card sections",
+  ]},
   { version: "5.32.0", date: "2026-04-02", changes: [
     "IB-Ai Source of Truth moved to homepage — visible to all managers",
   ]},
@@ -2248,25 +2253,59 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
     }));
   }
 
-  const ytP = ytData ? (ytData.data || ytData.snippet || ytData.channel || ytData) : null;
-  const ytStats = ytData?.statistics || ytData?.stats || ytP?.statistics || ytP?.stats || {};
-  const youtubeData = ytP
-    ? {
-        subscribers:
-          ytStats.subscriberCount ?? ytStats.subscriber_count ?? ytP.subscriberCount ?? ytP.subscriber_count ?? ytP.subscribers ?? null,
-        totalViews:
-          ytStats.viewCount ?? ytStats.view_count ?? ytP.viewCount ?? ytP.view_count ?? ytP.totalViews ?? null,
-        videoCount:
-          ytStats.videoCount ?? ytStats.video_count ?? ytP.videoCount ?? ytP.video_count ?? null,
-        description: ytP.description || ytP.snippet?.description || "",
-        avatarUrl: ytP.avatar || ytP.thumbnail || ytP.snippet?.thumbnails?.default?.url || "",
-        channelUrl: ytP.customUrl
-          ? `https://youtube.com/${ytP.customUrl}`
-          : ytP.url || ytP.channel_url || "",
-        title: ytP.title || ytP.snippet?.title || "",
+  // YouTube — try every possible response structure
+  let youtubeData = null;
+  if (ytData) {
+    console.log("[enrich] YouTube raw:", JSON.stringify(ytData)?.substring(0, 800));
+
+    const yt = ytData?.data || ytData?.channel || ytData?.items?.[0] || ytData?.snippet || ytData;
+    const ytSnippet = yt?.snippet || yt;
+    const ytStats = yt?.statistics || ytData?.statistics || {};
+    const ytBranding = yt?.brandingSettings?.channel || {};
+
+    const subs = Number(
+      ytStats.subscriberCount ?? ytStats.subscriber_count ??
+      yt.subscriberCount ?? yt.subscriber_count ?? yt.subscribers ??
+      yt.follower_count ?? yt.followers ?? 0
+    ) || null;
+
+    const views = Number(
+      ytStats.viewCount ?? ytStats.view_count ??
+      yt.viewCount ?? yt.view_count ?? yt.totalViews ?? 0
+    ) || null;
+
+    const vidCount = Number(
+      ytStats.videoCount ?? ytStats.video_count ??
+      yt.videoCount ?? yt.video_count ?? 0
+    ) || null;
+
+    const avatar = yt.avatar || yt.thumbnail || yt.profile_image_url ||
+      ytSnippet?.thumbnails?.default?.url || ytSnippet?.thumbnails?.medium?.url ||
+      yt.thumbnails?.default?.url || "";
+
+    const channelUrl = yt.customUrl ? `https://youtube.com/${String(yt.customUrl).replace(/^\//, "")}` :
+      yt.url || yt.channel_url || yt.vanity_url ||
+      (yt.id ? `https://youtube.com/channel/${yt.id}` : "");
+
+    const title = yt.title || ytSnippet?.title || ytBranding.title || yt.name || "";
+    const desc = yt.description || ytSnippet?.description || ytBranding.description || "";
+
+    if (subs || views || vidCount || title) {
+      youtubeData = {
+        subscribers: subs,
+        totalViews: views,
+        videoCount: vidCount,
+        description: desc,
+        avatarUrl: avatar,
+        channelUrl,
+        title,
         lastEnriched: new Date().toISOString(),
-      }
-    : null;
+      };
+      console.log("[enrich] YouTube parsed:", { subs, views, vidCount, title: title?.substring(0, 30) });
+    } else {
+      console.log("[enrich] YouTube response had no usable data");
+    }
+  }
 
   const twP = twData ? (twData.data || twData.user || twData) : null;
   const twMetrics = twP?.public_metrics || {};
@@ -6598,6 +6637,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       if (payload.discoveredYoutubeHandle && !c.youtubeHandle) {
         fullUpdate.youtubeHandle = payload.discoveredYoutubeHandle;
       }
+      if (payload.youtubeData?.title && !String(fullUpdate.youtubeHandle || c.youtubeHandle || "").trim()) {
+        fullUpdate.youtubeHandle = cleanHandle;
+      }
       if (payload.discoveredTwitterHandle && !c.twitterHandle) {
         fullUpdate.twitterHandle = payload.discoveredTwitterHandle;
       }
@@ -6806,7 +6848,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
       ) : null}
 
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+      {/* CARD: Profile header */}
+      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px", minWidth: 0 }}>
           {(() => {
             const attempts = buildAvatarSrcAttempts(c);
@@ -6884,12 +6928,18 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           )}
         </div>
       </div>
+      </div>
 
-      {ai.oneSentence ? (
-        <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", marginBottom: 20 }}>{ai.oneSentence}</div>
+      {(ai.oneSentence || enrichMsg) ? (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          {ai.oneSentence ? (
+            <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", lineHeight: 1.6 }}>{ai.oneSentence}</div>
+          ) : null}
+          {enrichMsg ? (
+            <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginTop: ai.oneSentence ? 8 : 0 }}>{enrichMsg}</div>
+          ) : null}
+        </div>
       ) : null}
-
-      {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginBottom: 14 }}>{enrichMsg}</div> : null}
 
       {(() => {
         const igF = Number(c.instagramData?.followers) || 0;
@@ -6942,31 +6992,34 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         ].filter(Boolean);
         if (stats.length === 0) return null;
         return (
-          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-            {stats.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: "1 1 100px",
-                  minWidth: 90,
-                  background: t.card,
-                  border: `1px solid ${t.border}`,
-                  borderRadius: 8,
-                  padding: "10px 12px",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{s.value}</div>
-                <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{s.label}</div>
-              </div>
-            ))}
+          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Quick Stats</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {stats.map((s, i) => (
+                <div
+                  key={i}
+                  style={{
+                    flex: "1 1 100px",
+                    minWidth: 90,
+                    background: t.cardAlt,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         );
       })()}
 
       <div id="creator-detail-content" style={{ marginBottom: 20 }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Platforms</div>
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Platforms</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 
             {/* Instagram */}
@@ -7162,7 +7215,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           if (platforms.length === 0) return null;
 
           return (
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Content</div>
 
               {platforms.map((plat, pi) => (
@@ -7246,36 +7299,42 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                           e.currentTarget.style.borderColor = t.border;
                         }}
                       >
-                        {item.cover ? (
-                          <img
-                            src={item.cover}
-                            alt=""
-                            referrerPolicy="no-referrer"
-                            crossOrigin="anonymous"
-                            loading="lazy"
-                            style={{ width: 130, height: 170, objectFit: "cover", display: "block", background: t.cardAlt }}
-                            onError={(e) => {
-                              e.target.style.display = "none";
-                              if (e.target.nextSibling) {
-                                e.target.nextSibling.style.display = "flex";
-                                e.target.nextSibling.style.height = "170px";
-                              }
+                        <div style={{ width: 130, height: 170, position: "relative", background: t.cardAlt, overflow: "hidden" }}>
+                          {item.cover ? (
+                            <img
+                              src={item.cover}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                              crossOrigin="anonymous"
+                              loading="lazy"
+                              style={{ width: 130, height: 170, objectFit: "cover", display: "block" }}
+                              onError={(e) => {
+                                e.target.style.display = "none";
+                                const fallback = e.target.nextSibling;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            style={{
+                              width: 130,
+                              height: 170,
+                              display: item.cover ? "none" : "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: `linear-gradient(135deg, ${plat.color}15, ${t.cardAlt})`,
+                              gap: 6,
                             }}
-                          />
-                        ) : null}
-                        <div
-                          style={{
-                            width: 130,
-                            height: item.cover ? 0 : 170,
-                            background: t.cardAlt,
-                            display: item.cover ? "none" : "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 28,
-                            color: t.textFaint,
-                          }}
-                        >
-                          {item.type === "post" ? "▣" : "▶"}
+                          >
+                            <span style={{ fontSize: 28, opacity: 0.4 }}>{item.type === "post" ? "📷" : "🎬"}</span>
+                            {item.views > 0 ? (
+                              <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{formatMetricShort(item.views)} ▶</span>
+                            ) : item.likes > 0 ? (
+                              <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{formatMetricShort(item.likes)} ♥</span>
+                            ) : null}
+                            {item.date ? <span style={{ fontSize: 9, color: t.textFaint }}>{item.date}</span> : null}
+                          </div>
                         </div>
                         <div style={{ padding: "6px 8px" }}>
                           {item.views > 0 ? (
@@ -7316,9 +7375,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           if (!ttBio && !igBio && !ttBioLink && !igExtUrl) return null;
 
           return (
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Bios & Links</div>
-              <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
+              <div style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
                 {ttBio ? (
                   <div style={{ marginBottom: 10 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: t.green }}>TikTok:</span>
@@ -7393,13 +7452,14 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
 
       {Number.isFinite(ib) ? (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <>
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <span style={{ fontSize: 16, fontWeight: 800, color: t.text }}>IB Score</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 8px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
           </div>
 
-          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 24 }}>
+          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 0 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
               <div style={{ width: 80, height: 80, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, color: "#fff" }}>
                 {Math.round(ib)}
@@ -7439,9 +7499,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               })}
             </div>
           </div>
+        </div>
 
-          <div style={{ borderTop: `1px solid ${t.border}`, marginBottom: 20 }} />
-
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 16 }}>AI Insights</div>
           {ai.whyIntake ? (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Why Intake</div>
@@ -7580,6 +7641,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             </div>
           ) : null}
 
+        </div>
+
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 16 }}>Rate & platform</div>
           {(() => {
             const cpmData = calculateCreatorCPM(c);
             const aiRate = ai.estimatedRate;
@@ -7710,6 +7775,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, fontSize: 12, padding: "8px 14px", marginTop: 8 }}>Recalculate IB Score</button>
         </div>
+        </>
       ) : null}
 
       {bestHighlight && bestHighlight.url ? (
@@ -7731,7 +7797,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
       ) : null}
 
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 20 }}>
+      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 400px", minWidth: 280 }}>
           <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Profile</div>
           <div style={{ marginBottom: 10 }}>
@@ -7936,8 +8003,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           ) : null}
         </div>
       </div>
+      </div>
 
-      <div id="creator-notes-section" style={{ marginBottom: 24 }}>
+      <div id="creator-notes-section" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8, color: t.text, display: "flex", alignItems: "center", gap: 8 }}>
           Notes
           {af.notes ? <span style={{ fontSize: 10, fontWeight: 700, color: t.green }}>✦ IB-Ai seeded</span> : null}
@@ -9526,10 +9594,13 @@ export default function App() {
           ...enrichPatchWithCpm(cr, mergePatch, mergedCreator),
           ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         };
-        updateCreator(cr.id, bulkFull);
         if (payload.discoveredYoutubeHandle && !cr.youtubeHandle) {
-          updateCreator(cr.id, { youtubeHandle: payload.discoveredYoutubeHandle });
+          bulkFull.youtubeHandle = payload.discoveredYoutubeHandle;
         }
+        if (payload.youtubeData?.title && !String(bulkFull.youtubeHandle || cr.youtubeHandle || "").trim()) {
+          bulkFull.youtubeHandle = ch;
+        }
+        updateCreator(cr.id, bulkFull);
         if (payload.discoveredTwitterHandle && !cr.twitterHandle) {
           updateCreator(cr.id, { twitterHandle: payload.discoveredTwitterHandle });
         }
@@ -9679,7 +9750,7 @@ export default function App() {
         instagramUrl: `https://www.instagram.com/${igFromBio || cleanHandle}/`,
         tiktokHandle: cleanHandle,
         instagramHandle: igFromBio || cleanHandle,
-        youtubeHandle: payload.discoveredYoutubeHandle || ytFromBio || "",
+        youtubeHandle: payload.discoveredYoutubeHandle || ytFromBio || (payload.youtubeData?.title ? cleanHandle : "") || "",
         twitterHandle: payload.discoveredTwitterHandle || "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
@@ -9798,6 +9869,7 @@ export default function App() {
         ...enrichPatchWithCpm(existing, merged, mergedCreator),
         ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         ...(payload.discoveredYoutubeHandle && !existing.youtubeHandle ? { youtubeHandle: payload.discoveredYoutubeHandle } : {}),
+        ...(payload.youtubeData?.title && !String(existing.youtubeHandle || "").trim() && !payload.discoveredYoutubeHandle ? { youtubeHandle: cleanHandle } : {}),
         ...(payload.discoveredTwitterHandle && !existing.twitterHandle ? { twitterHandle: payload.discoveredTwitterHandle } : {}),
       });
       if (payload.notes.length) {
