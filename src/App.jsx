@@ -42,8 +42,12 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.30.0";
+const APP_VERSION = "5.31.0";
 const CHANGELOG = [
+  { version: "5.31.0", date: "2026-04-02", changes: [
+    "IB-Ai Source of Truth is now editable — managers can update claims, products, tones, and brand context live",
+    "AI knowledge stored in Supabase — no code changes needed to update what IB-Ai knows",
+  ]},
   { version: "5.30.0", date: "2026-04-02", changes: [
     "IB-Ai Source of Truth — collapsible knowledge base showing everything the AI uses to generate briefs and scores",
   ]},
@@ -897,9 +901,10 @@ function parseCustomRejections(text) {
   return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
-function buildRejectionsArray(d) {
+function buildRejectionsArray(d, defaultRejectionsOverride) {
   const custom = parseCustomRejections(d?.customRejections);
-  return [...DEFAULT_REJECTIONS, ...custom];
+  const base = Array.isArray(defaultRejectionsOverride) && defaultRejectionsOverride.length ? defaultRejectionsOverride : DEFAULT_REJECTIONS;
+  return [...base, ...custom];
 }
 
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
@@ -2372,9 +2377,13 @@ async function runIbScoreClaude(ctx) {
   const safeNum = (val) => (val != null && Number(val) > 0 ? String(val) : "unknown");
   const safeRate = (val) => (val != null && Number(val) >= 0 && Number(val) <= 100 ? `${val}%` : "unknown");
 
+  const brandBlock = (ctx.brandContext && String(ctx.brandContext).trim())
+    ? `BRAND / COMPANY CONTEXT (use for content alignment, outreach tone, and "why Intake"):\n${String(ctx.brandContext).trim()}\n\n`
+    : `BRAND / COMPANY CONTEXT: Intake Breathing — magnetic external nasal dilator for better breathing, sleep, and athletic performance. FDA registered, made in USA.\n\n`;
+
   const prompt = `You are the IB Score calculator for Intake Breathing, a magnetic nasal dilator company for better breathing, sleep, and athletic performance.
 
-CREATOR: @${cleanHandle}
+${brandBlock}CREATOR: @${cleanHandle}
 NAME: ${tiktokData?.displayName || instagramData?.fullName || "Unknown"}
 
 INSTAGRAM (primary platform — weight 45%):
@@ -2646,6 +2655,7 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     onStep?.("ai_score", "run");
     aiAnalysis = await runIbScoreClaude({
       apiKey: ak,
+      brandContext: opts?.brandContext,
       cleanHandle,
       tiktokData: processed.tiktokData,
       instagramData: processed.instagramData,
@@ -2915,12 +2925,14 @@ const SUPERVISION_FORM_HINTS = {
   handsoff: "Submit and done — no back and forth",
 };
 
-const BRIEF_EXTRACTION_PROMPT = `You are reading an old creator/UGC brief. Extract the key information and map it to Intake Breathing's brief format.
+function buildBriefExtractionPrompt(productsOverride) {
+  const pList = Array.isArray(productsOverride) && productsOverride.length ? productsOverride : PRODUCTS;
+  return `You are reading an old creator/UGC brief. Extract the key information and map it to Intake Breathing's brief format.
 
 Intake Breathing makes nasal breathing strips for athletes and sleep. Return ONLY a JSON object with these fields (string values unless noted):
 
 {
-  "productName": "<one of: ${PRODUCTS.join("', '")}>",
+  "productName": "<one of: ${pList.join("', '")}>",
   "customProductName": "<if productName is Other, the specific product name; else empty string>",
   "campaignName": "<campaign name or empty string>",
   "vibe": "<one of: ${VIBES.join("', '")}>",
@@ -2947,6 +2959,7 @@ Rules:
 - If a field cannot be determined, use sensible defaults aligned with a nasal dilator brand.
 - notes should hold unique requirements that do not fit elsewhere.
 - Return ONLY the JSON object, no markdown fences or commentary.`;
+}
 
 const DEFAULTS = {
   manager: "Summer", customManager: "", contentQuantity: "1",
@@ -2994,6 +3007,21 @@ const LENGTH_GUIDE = {
 };
 const PERSONAS = ["The Curious Scroller", "The Skeptical Shopper", "The Scroll-Past Skeptic", "The Late-Night Browser", "The Try-Anything Explorer", "The Sleep Seeker", "The Mouth-Breather in Denial"];
 
+function getDefaultAiKnowledge() {
+  return {
+    approvedClaims: [...APPROVED_CLAIMS],
+    bannedClaims: [...BANNED_CLAIMS],
+    products: [...PRODUCTS],
+    defaultRejections: [...DEFAULT_REJECTIONS],
+    toneHooks: { ...TONE_HOOKS },
+    platformNotes: { ...PLATFORM_NOTES },
+    lengthGuide: { ...LENGTH_GUIDE },
+    personas: [...PERSONAS],
+    brandContext:
+      "Intake Breathing Technology makes magnetic external nasal dilators. Originally designed for motocross athletes. Opens wider, holds stronger, never collapses. FDA registered, made in USA. Medical grade, hypoallergenic, latex-free. 90-day risk-free trial. Starter Kit includes 4 sizes (S, M, L, XL) + 15 tab sets.",
+  };
+}
+
 function normalizePlatforms(d) {
   if (Array.isArray(d.platforms) && d.platforms.length) return d.platforms;
   if (d.platform) return [d.platform];
@@ -3016,7 +3044,15 @@ function formatToneDisplay(fd) {
   return fd.tone || "";
 }
 
-function generateBrief(d) {
+function generateBrief(d, knowledge) {
+  const k = knowledge && typeof knowledge === "object" ? knowledge : null;
+  const personas = k?.personas?.length ? k.personas : PERSONAS;
+  const toneHooks = k?.toneHooks && typeof k.toneHooks === "object" ? k.toneHooks : TONE_HOOKS;
+  const platformNotes = k?.platformNotes && typeof k.platformNotes === "object" ? k.platformNotes : PLATFORM_NOTES;
+  const lengthGuide = k?.lengthGuide && typeof k.lengthGuide === "object" ? k.lengthGuide : LENGTH_GUIDE;
+  const approvedFallback = k?.approvedClaims?.length ? k.approvedClaims : APPROVED_CLAIMS;
+  const bannedFallback = k?.bannedClaims?.length ? k.bannedClaims : BANNED_CLAIMS;
+
   const productLabel = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
   const fullProduct = productLabel ? `Intake Breathing — ${productLabel}` : "Intake Breathing";
   const mission = d.mission || `Discover what ${fullProduct} can do for you.`;
@@ -3025,7 +3061,7 @@ function generateBrief(d) {
   const age = `${ageRange} · ${genderLabel}`;
   const problemText = (d.problem || d.customProblem || "").trim();
   const problemSentences = splitSentences(problemText);
-  const persona = PERSONAS[Math.floor(Math.random() * PERSONAS.length)];
+  const persona = personas[Math.floor(Math.random() * personas.length)];
   const psycho = problemText.length > 20
     ? `Target: ${genderLabel}, ages ${ageRange}. ${problemText}`
     : `Target: ${genderLabel}, ages ${ageRange}. They've seen the product in their feed but haven't pulled the trigger. Open-minded but need proof. They trust real people over polished ads.`;
@@ -3046,24 +3082,24 @@ function generateBrief(d) {
   const solOverlays = ["Before/after or progression reveal", "Product in action — the key moment", "End card: product + CTA + 90-day trial"];
   const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
   const hookKey = d.tone === "Other" ? "Real & relatable" : d.tone;
-  const hooks = TONE_HOOKS[hookKey] || TONE_HOOKS["Real & relatable"];
+  const hooks = toneHooks[hookKey] || toneHooks["Real & relatable"];
   const vibeLabel = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
   const vibePrefix = d.vibe === "Other" && vibeLabel ? `Campaign vibe: ${vibeLabel}\n\n` : "";
   const tonePrefix = toneResolved ? `Tone / voice: ${toneResolved}\n\n` : "";
   const platformsArr = normalizePlatforms(d);
   const noteBlocks = platformsArr.map((p) => {
-    const base = (PLATFORM_NOTES[p] || "").trim();
-    if (PLATFORM_NOTES[p]) {
+    const base = (platformNotes[p] || "").trim();
+    if (platformNotes[p]) {
       if (p === "Other" && (d.customPlatform || "").trim()) {
         const o = (d.customPlatform || "").trim();
         return base ? `${base}\nNamed platform: ${o}` : `Platform: ${o}`;
       }
       return base;
     }
-    const otherBase = (PLATFORM_NOTES["Other"] || "").trim();
+    const otherBase = (platformNotes["Other"] || "").trim();
     return otherBase ? `${otherBase}\nNamed platform: ${p}` : `Platform: ${p}`;
   }).filter(Boolean);
-  const lg = LENGTH_GUIDE[d.videoLength] || "";
+  const lg = lengthGuide[d.videoLength] || "";
   const platNotes = vibePrefix + tonePrefix + noteBlocks.join("\n\n—\n\n") + (noteBlocks.length && lg ? "\n\n" : "") + lg;
   const platLabel = (p) => {
     if (p === "Other" && (d.customPlatform || "").trim()) return (d.customPlatform || "").trim();
@@ -3080,9 +3116,9 @@ function generateBrief(d) {
   else if (supVal === "full") supervisionExtra = " Expect 1-2 rounds of revisions before final approval.";
   else if (supVal === "light") supervisionExtra = " Minor feedback may be provided but revisions are unlikely.";
   const deliverables = `Submitted by: ${mgr}. Content requested: ${qty} videos. Submit for: ${platformsArr.map(platLabel).join(", ")}. Budget: ${budgetStr}. Supervision: ${supervisionLabel}.${supervisionExtra} (1) Final video — vertical 9:16, 1080×1920 min, ${d.videoLength}. (2) Raw footage. (3) One thumbnail still. Upload via creator portal.`;
-  const rejections = buildRejectionsArray(d);
-  const approvedForBrief = Array.isArray(d.approvedClaims) && d.approvedClaims.length ? [...d.approvedClaims] : [...APPROVED_CLAIMS.slice(0, 5)];
-  const bannedForBrief = Array.isArray(d.bannedClaims) && d.bannedClaims.length ? [...d.bannedClaims] : [...BANNED_CLAIMS.slice(0, 5)];
+  const rejections = buildRejectionsArray(d, k?.defaultRejections);
+  const approvedForBrief = Array.isArray(d.approvedClaims) && d.approvedClaims.length ? [...d.approvedClaims] : [...approvedFallback.slice(0, 5)];
+  const bannedForBrief = Array.isArray(d.bannedClaims) && d.bannedClaims.length ? [...d.bannedClaims] : [...bannedFallback.slice(0, 5)];
   return { mission, persona, age, psycho, theyAre, theyAreNot, probInst, probLines, probOverlays, agInst, agLines, agOverlays, solInst, solLines, solOverlays, hooks, sayThis: approvedForBrief, notThis: bannedForBrief, platNotes, deliverables, rejections };
 }
 
@@ -3090,18 +3126,25 @@ function generateBrief(d) {
 // FORM
 // ═══════════════════════════════════════════════════════════
 
-function mergeExtractedBriefToPrefill(extracted) {
-  const base = {
+function mergeExtractedBriefToPrefill(extracted, knowledge) {
+  const k = knowledge && typeof knowledge === "object" ? knowledge : null;
+  const productsList = k?.products?.length ? k.products : PRODUCTS;
+  const baseDefaults = {
     ...DEFAULTS,
-    approvedClaims: [...DEFAULTS.approvedClaims],
-    bannedClaims: [...DEFAULTS.bannedClaims],
+    approvedClaims: [...(k?.approvedClaims?.length ? k.approvedClaims.slice(0, 5) : APPROVED_CLAIMS.slice(0, 5))],
+    bannedClaims: [...(k?.bannedClaims?.length ? k.bannedClaims.slice(0, 5) : BANNED_CLAIMS.slice(0, 5))],
+  };
+  const base = {
+    ...baseDefaults,
+    approvedClaims: [...baseDefaults.approvedClaims],
+    bannedClaims: [...baseDefaults.bannedClaims],
   };
   if (!extracted || typeof extracted !== "object") return base;
 
   const out = { ...base };
 
   const pName = extracted.productName;
-  if (typeof pName === "string" && PRODUCTS.includes(pName)) {
+  if (typeof pName === "string" && productsList.includes(pName)) {
     out.productName = pName;
     out.customProductName = pName === "Other" ? String(extracted.customProductName ?? "").trim() : "";
   } else if (typeof pName === "string" && pName.trim()) {
@@ -3184,7 +3227,16 @@ function mergeExtractedBriefToPrefill(extracted) {
   return out;
 }
 
-function UploadOldBrief({ onExtracted, t }) {
+function getBriefFormBaseDefaults(ak) {
+  const a = ak && typeof ak === "object" ? ak : null;
+  return {
+    ...DEFAULTS,
+    approvedClaims: [...(a?.approvedClaims?.length ? a.approvedClaims.slice(0, 5) : APPROVED_CLAIMS.slice(0, 5))],
+    bannedClaims: [...(a?.bannedClaims?.length ? a.bannedClaims.slice(0, 5) : BANNED_CLAIMS.slice(0, 5))],
+  };
+}
+
+function UploadOldBrief({ onExtracted, t, extractionPrompt, aiKnowledge }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -3221,12 +3273,12 @@ function UploadOldBrief({ onExtracted, t }) {
         const mediaType = isPdf ? "application/pdf" : file.type || "image/jpeg";
         content = [
           { type: isPdf ? "document" : "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: BRIEF_EXTRACTION_PROMPT },
+          { type: "text", text: extractionPrompt },
         ];
       } else {
         const text = await file.text();
         content = [
-          { type: "text", text: `Here is the old brief content:\n\n---\n${text}\n---\n\n${BRIEF_EXTRACTION_PROMPT}` },
+          { type: "text", text: `Here is the old brief content:\n\n---\n${text}\n---\n\n${extractionPrompt}` },
         ];
       }
 
@@ -3262,7 +3314,7 @@ function UploadOldBrief({ onExtracted, t }) {
         throw new Error("AI returned invalid JSON. Try again.");
       }
 
-      onExtracted(mergeExtractedBriefToPrefill(parsed));
+      onExtracted(mergeExtractedBriefToPrefill(parsed, aiKnowledge));
       alert("Brief imported! Review the fields below and click Generate to create your Intake brief.");
     } catch (err) {
       setError(err.message || "Failed to process brief");
@@ -3291,9 +3343,13 @@ function UploadOldBrief({ onExtracted, t }) {
   );
 }
 
-function IBAiSourceOfTruth({ t }) {
+function IBAiSourceOfTruth({ t, aiKnowledge, onSave }) {
+  const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : getDefaultAiKnowledge();
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("products");
+  const [editing, setEditing] = useState(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const sections = [
     { id: "products", label: "Products" },
@@ -3306,6 +3362,128 @@ function IBAiSourceOfTruth({ t }) {
     { id: "scoring", label: "IB Score Weighting" },
     { id: "brand", label: "Brand Context" },
   ];
+
+  const startEdit = (field, currentValue) => {
+    setEditing(field);
+    if (Array.isArray(currentValue)) {
+      setEditDraft(currentValue.join("\n"));
+    } else if (typeof currentValue === "object" && currentValue !== null) {
+      setEditDraft(JSON.stringify(currentValue, null, 2));
+    } else {
+      setEditDraft(String(currentValue || ""));
+    }
+  };
+
+  const saveEdit = async (field) => {
+    setSaving(true);
+    try {
+      let value;
+      if (field === "brandContext") {
+        value = editDraft;
+      } else if (field === "toneHooks" || field === "platformNotes" || field === "lengthGuide") {
+        value = JSON.parse(editDraft);
+      } else {
+        value = editDraft.split("\n").map((s) => s.trim()).filter(Boolean);
+      }
+      await onSave(field, value);
+      setEditing(null);
+    } catch (e) {
+      alert("Save failed: " + (e.message || String(e)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderEditableList = (field, items, color, sym) => {
+    const list = Array.isArray(items) ? items : [];
+    if (editing === field) {
+      return (
+        <div>
+          <textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            style={{ width: "100%", minHeight: 200, padding: 10, borderRadius: 8, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+            placeholder="One item per line"
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {list.map((c, i) => (
+          <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
+            <span style={{ color, flexShrink: 0 }}>{sym}</span> {c}
+          </div>
+        ))}
+        <button type="button" onClick={() => startEdit(field, list)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit</button>
+      </div>
+    );
+  };
+
+  const renderEditableText = (field, text) => {
+    if (editing === field) {
+      return (
+        <div>
+          <textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            style={{ width: "100%", minHeight: 250, padding: 10, borderRadius: 8, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div>
+        <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7, whiteSpace: "pre-line" }}>{text}</div>
+        <button type="button" onClick={() => startEdit(field, text)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit</button>
+      </div>
+    );
+  };
+
+  const renderEditableJSON = (field, obj) => {
+    const o = obj && typeof obj === "object" ? obj : {};
+    if (editing === field) {
+      return (
+        <div>
+          <textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            style={{ width: "100%", minHeight: 300, padding: 10, borderRadius: 8, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }}
+          />
+          <div style={{ fontSize: 10, color: t.textFaint, marginTop: 4 }}>Edit as JSON. Keep the same structure.</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {Object.entries(o).map(([key, val]) => (
+          <div key={key} style={{ marginBottom: 12, padding: 10, background: t.cardAlt, borderRadius: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 4 }}>{key}</div>
+            {Array.isArray(val) ? val.map((v, i) => (
+              <div key={i} style={{ fontSize: 12, color: t.textMuted, paddingLeft: 12, lineHeight: 1.6 }}>{`"${v}"`}</div>
+            )) : (
+              <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6 }}>{String(val)}</div>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={() => startEdit(field, o)} style={{ marginTop: 4, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit JSON</button>
+      </div>
+    );
+  };
+
+  const products = ak.products?.length ? ak.products : PRODUCTS;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 40px" }}>
@@ -3358,19 +3536,37 @@ function IBAiSourceOfTruth({ t }) {
           {activeSection === "products" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Intake Breathing Products</div>
-              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7 }}>
-                {PRODUCTS.map((p, i) => (
-                  <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid ${t.border}10` }}>
-                    <strong style={{ color: t.text }}>{p}</strong>
-                    {p === "Starter Kit Black" || p === "Starter Kit Clear"
-                      ? " — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band."
-                      : ""}
-                    {p === "Mouth Tape" ? " — Sleep strips for mouth breathing prevention." : ""}
-                    {p === "Sports Tabs" ? " — High-adhesion tabs for intense activity." : ""}
-                    {p === "Refills" ? " — Replacement adhesive tab sets." : ""}
+              {editing === "products" ? (
+                <div>
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    style={{ width: "100%", minHeight: 200, padding: 10, borderRadius: 8, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+                    placeholder="One product name per line (must match form dropdown options)"
+                  />
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button type="button" onClick={() => saveEdit("products")} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+                    <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7 }}>
+                    {products.map((p, i) => (
+                      <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid ${t.border}10` }}>
+                        <strong style={{ color: t.text }}>{p}</strong>
+                        {p === "Starter Kit Black" || p === "Starter Kit Clear"
+                          ? " — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band."
+                          : ""}
+                        {p === "Mouth Tape" ? " — Sleep strips for mouth breathing prevention." : ""}
+                        {p === "Sports Tabs" ? " — High-adhesion tabs for intense activity." : ""}
+                        {p === "Refills" ? " — Replacement adhesive tab sets." : ""}
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => startEdit("products", products)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit</button>
+                </div>
+              )}
               <div style={{ fontSize: 11, color: t.textFaint, marginTop: 12, lineHeight: 1.5 }}>
                 <strong>Company:</strong> Intake Breathing Technology<br />
                 <strong>Product type:</strong> Magnetic external nasal dilator<br />
@@ -3386,33 +3582,21 @@ function IBAiSourceOfTruth({ t }) {
           {activeSection === "approved" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.green, marginBottom: 8 }}>✓ Creators CAN Say These</div>
-              {APPROVED_CLAIMS.map((c, i) => (
-                <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
-                  <span style={{ color: t.green, flexShrink: 0 }}>✓</span> {c}
-                </div>
-              ))}
+              {renderEditableList("approvedClaims", ak.approvedClaims, t.green, "✓")}
             </div>
           )}
 
           {activeSection === "banned" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#ef4444", marginBottom: 8 }}>✗ Creators Must NEVER Say These</div>
-              {BANNED_CLAIMS.map((c, i) => (
-                <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
-                  <span style={{ color: "#ef4444", flexShrink: 0 }}>✗</span> {c}
-                </div>
-              ))}
+              {renderEditableList("bannedClaims", ak.bannedClaims, "#ef4444", "✗")}
             </div>
           )}
 
           {activeSection === "rejections" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, marginBottom: 8 }}>⚠ Revision Required If...</div>
-              {DEFAULT_REJECTIONS.map((c, i) => (
-                <div key={i} style={{ padding: "6px 0", fontSize: 12, color: t.text, borderBottom: `1px solid ${t.border}10`, display: "flex", gap: 8 }}>
-                  <span style={{ color: t.orange, flexShrink: 0 }}>⚠</span> {c}
-                </div>
-              ))}
+              {renderEditableList("defaultRejections", ak.defaultRejections, t.orange, "⚠")}
               <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>Managers can add custom rejection criteria per brief.</div>
             </div>
           )}
@@ -3420,49 +3604,25 @@ function IBAiSourceOfTruth({ t }) {
           {activeSection === "tones" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Tone Options & Example Hooks</div>
-              {Object.entries(TONE_HOOKS).map(([tone, hooks]) => (
-                <div key={tone} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 4 }}>{tone}</div>
-                  {hooks.map((h, i) => (
-                    <div key={i} style={{ fontSize: 12, color: t.textMuted, paddingLeft: 12, lineHeight: 1.6 }}>
-                      {`"${h}"`}
-                    </div>
-                  ))}
-                </div>
-              ))}
+              {renderEditableJSON("toneHooks", ak.toneHooks)}
             </div>
           )}
 
           {activeSection === "platforms" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Platform Specifications</div>
-              {Object.entries(PLATFORM_NOTES).map(([plat, notes]) => (
-                <div key={plat} style={{ marginBottom: 12, padding: 10, background: t.cardAlt, borderRadius: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 4 }}>{plat}</div>
-                  <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6 }}>{notes}</div>
-                </div>
-              ))}
+              {renderEditableJSON("platformNotes", ak.platformNotes)}
             </div>
           )}
 
           {activeSection === "lengths" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Video Length Pacing Guides</div>
-              {Object.entries(LENGTH_GUIDE).map(([len, guide]) => (
-                <div key={len} style={{ marginBottom: 10, padding: 10, background: t.cardAlt, borderRadius: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 2 }}>{len}</div>
-                  <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>{guide}</div>
-                </div>
-              ))}
-              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>
-                <strong>Target personas IB-Ai creates for:</strong>
-                <br />
-                {PERSONAS.map((p, i) => (
-                  <span key={i} style={{ display: "inline-block", padding: "2px 8px", margin: "2px 4px 2px 0", background: t.cardAlt, borderRadius: 4, fontSize: 10 }}>
-                    {p}
-                  </span>
-                ))}
+              {renderEditableJSON("lengthGuide", ak.lengthGuide)}
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 12 }}>
+                <strong>Target personas IB-Ai uses (edit below):</strong>
               </div>
+              <div style={{ marginTop: 8 }}>{renderEditableList("personas", ak.personas, t.blue, "•")}</div>
             </div>
           )}
 
@@ -3501,30 +3661,12 @@ function IBAiSourceOfTruth({ t }) {
           {activeSection === "brand" && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Brand Context Given to IB-Ai</div>
-              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.7, whiteSpace: "pre-line" }}>
-                {`Company: Intake Breathing Technology
-Product: Magnetic external nasal dilator
-Tagline: "Opens wider, holds stronger, never collapses"
-
-Origin Story: Originally engineered for motocross athletes who needed maximum airflow during high-intensity racing with helmets on. Now used by runners, cyclists, gym-goers, and anyone who wants better nasal breathing during sleep or activity.
-
-How It Works: Two magnetic points lift and expand the nasal passage from the OUTSIDE — nothing goes inside the nose. The reusable band clips magnetically through adhesive tabs placed on each side of the nose.
-
-Key Differentiator vs Breathe Right: Breathe Right uses adhesive that pulls from the bridge of the nose (top). Intake uses magnetic lift from the sides — structurally stronger, doesn't collapse during heavy breathing, and is reusable.
-
-Target Audiences:
-• Athletes (runners, cyclists, MMA, CrossFit, motocross)
-• People with sleep/snoring issues
-• Health & wellness enthusiasts
-• Mouth breathers looking to switch to nasal breathing
-
-Content Philosophy: Authentic, creator-led content that feels real — not polished ads. Hook in 2 seconds, show the problem, reveal the solution. The product should feel like a discovery, not a pitch.`}
-              </div>
+              {renderEditableText("brandContext", ak.brandContext || "")}
             </div>
           )}
 
           <div style={{ marginTop: 16, fontSize: 10, color: t.textFaint, textAlign: "center" }}>
-            This is the knowledge IB-Ai uses when generating briefs, scoring creators, and writing outreach. Updates here apply to all future AI calls.
+            Edits save to Supabase and apply to IB-Ai brief generation, compliance, templates, uploads, and scoring context immediately.
           </div>
         </div>
       )}
@@ -3532,9 +3674,14 @@ Content Philosophy: Authentic, creator-led content that feels real — not polis
   );
 }
 
-const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
+const BriefForm = memo(function BriefForm({ prefill, onGenerate, aiKnowledge }) {
   const { t, S } = useContext(ThemeContext);
-  const pf = prefill || DEFAULTS;
+  const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : null;
+  const approvedSource = ak?.approvedClaims?.length ? ak.approvedClaims : APPROVED_CLAIMS;
+  const bannedSource = ak?.bannedClaims?.length ? ak.bannedClaims : BANNED_CLAIMS;
+  const productOpts = ak?.products?.length ? ak.products : PRODUCTS;
+  const defaultRejectionsDisplay = ak?.defaultRejections?.length ? ak.defaultRejections : DEFAULT_REJECTIONS;
+  const pf = { ...getBriefFormBaseDefaults(ak), ...(prefill || {}) };
   const [ageRange, setAgeRange] = useState(pf.ageRange ?? DEFAULTS.ageRange);
   const [gender, setGender] = useState(pf.gender ?? DEFAULTS.gender);
   const [showCustomProduct, setShowCustomProduct] = useState((pf.productName || DEFAULTS.productName) === "Other");
@@ -3606,9 +3753,9 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate }) {
             max_tokens: 300,
             messages: [{ role: "user", content: `You are a compliance officer for Intake Breathing, a magnetic nasal dilator company. Given this campaign context: "${context}".
 
-Here are ALL available approved claims: ${JSON.stringify(APPROVED_CLAIMS)}
+Here are ALL available approved claims: ${JSON.stringify(approvedSource)}
 
-Here are ALL available banned claims: ${JSON.stringify(BANNED_CLAIMS)}
+Here are ALL available banned claims: ${JSON.stringify(bannedSource)}
 
 Select the most relevant approved claims (5-7) and banned claims (5-7) for this specific campaign. Return ONLY a JSON object like: {"approved": ["claim1", "claim2"], "banned": ["claim1", "claim2"]}. Pick claims that are most relevant to the product, audience, and campaign described. Return ONLY the JSON, nothing else.` }],
           }),
@@ -3625,13 +3772,13 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
           const result = JSON.parse(match[0]);
           if (Array.isArray(result.approved) && result.approved.length > 0) {
             const ok = result.approved.filter((c) =>
-              APPROVED_CLAIMS.some((ac) => normalize(ac) === normalize(c))
+              approvedSource.some((ac) => normalize(ac) === normalize(c))
             );
             if (ok.length > 0) setSelectedApproved(ok);
           }
           if (Array.isArray(result.banned) && result.banned.length > 0) {
             const ok = result.banned.filter((c) =>
-              BANNED_CLAIMS.some((bc) => normalize(bc) === normalize(c))
+              bannedSource.some((bc) => normalize(bc) === normalize(c))
             );
             if (ok.length > 0) setSelectedBanned(ok);
           }
@@ -3639,7 +3786,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       }
     } catch { /* ignore */ }
     finally { setComplianceLoading(false); }
-  }, []);
+  }, [approvedSource, bannedSource]);
 
   const triggerComplianceSuggest = useCallback(() => {
     if (complianceTimer.current) clearTimeout(complianceTimer.current);
@@ -3716,9 +3863,9 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       bannedClaims: [...selectedBanned],
       _approved: selectedApproved.join(". "),
       _banned: selectedBanned.join(". "),
-      _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }),
+      _rejections: buildRejectionsArray({ customRejections: v.customRejections || "" }, ak?.defaultRejections?.length ? ak.defaultRejections : DEFAULT_REJECTIONS),
     });
-  }, [onGenerate, ageRange, gender, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty, supervisionLevel]);
+  }, [onGenerate, ageRange, gender, selectedPlatforms, selectedApproved, selectedBanned, managerSel, contentQty, supervisionLevel, ak]);
   const mkSel = (key, label, opts) => (
     <div style={S.fg}><label style={S.label}>{label}</label>
       <select style={S.select} defaultValue={vals.current[key]} onChange={e=>{vals.current[key]=e.target.value}}>
@@ -3996,7 +4143,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Product *</label>
             <select style={S.select} defaultValue={vals.current.productName} onChange={e => { const v = e.target.value; vals.current.productName = v; setShowCustomProduct(v === "Other"); fireFormSuggest(); }}>
-              {PRODUCTS.map(o => <option key={o} value={o}>{o}</option>)}
+              {productOpts.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
             {showCustomProduct && <div style={S.fg}><label style={S.label}>Product Name</label>
               <input style={S.input} defaultValue={vals.current.customProductName} onChange={e => { vals.current.customProductName = e.target.value; }} onFocus={e => { e.target.style.borderColor = t.green; }} onBlur={e => { e.target.style.borderColor = t.border; }} placeholder="Enter your product name" />
@@ -4094,7 +4241,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       <div style={S.section}>
         <div style={S.secLabel}><Icon name="alertTriangle" size={16} color={t.orange} /><span>Revision Criteria</span></div>
         <div style={{ ...S.hint, marginBottom: 12, fontStyle: "normal" }}>Revisions will be needed if any of the following are present. Add custom rules below.</div>
-        <div style={S.roBox}>{DEFAULT_REJECTIONS.map((c, i) => (
+        <div style={S.roBox}>{defaultRejectionsDisplay.map((c, i) => (
           <div key={i} style={{ ...S.roItem(), display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 2 }}><Icon name="x" size={14} color={t.orange} /></span>{c}</div>
         ))}</div>
         <div style={{ ...S.fg, marginTop: 14 }}>
@@ -5286,7 +5433,8 @@ function PublicBriefView({ t }) {
 // IB-Ai — prompt builder (Claude)
 // ═══════════════════════════════════════════════════════════
 
-function buildAIPrompt(d) {
+function buildAIPrompt(d, knowledge) {
+  const k = knowledge && typeof knowledge === "object" ? knowledge : null;
   const ageR = d.ageRange || "25-34";
   const gen = d.gender || "Men & Women";
   const productResolved = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
@@ -5302,7 +5450,7 @@ function buildAIPrompt(d) {
   const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
   const rejectionsLine = Array.isArray(d._rejections) && d._rejections.length
     ? d._rejections.join(". ")
-    : buildRejectionsArray(d).join(". ");
+    : buildRejectionsArray(d, k?.defaultRejections).join(". ");
   const mgrName = managerDisplayName(d);
   const qtyVideos = String(d.contentQuantity ?? "1").trim() || "1";
   const rawBudgetAi = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
@@ -5317,9 +5465,12 @@ function buildAIPrompt(d) {
       : supValAi === "full"
         ? "Supervision is Full Review: you may keep the creative direction slightly looser knowing 1-2 revision rounds will refine the work — but still be specific on compliance and deliverables."
         : "Supervision is Light Touch: balance clarity with brevity — minor feedback may occur but avoid relying on heavy revision cycles.";
+  const brandBlock = k?.brandContext && String(k.brandContext).trim()
+    ? `BRAND CONTEXT (internal — match tone and claims to this):\n${String(k.brandContext).trim()}\n\n`
+    : "";
   return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
 
-PRODUCT: ${productResolved} by Intake Breathing
+${brandBlock}PRODUCT: ${productResolved} by Intake Breathing
 CAMPAIGN NAME: ${d.campaignName || "Untitled"}
 CAMPAIGN VIBE: ${vibeResolved}
 MISSION: ${d.mission || "N/A"}
@@ -6244,7 +6395,7 @@ class CreatorDetailErrorBoundary extends React.Component {
   }
 }
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiBrandContext }) {
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
     url: "",
@@ -6370,6 +6521,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         twitterHandle: c.twitterHandle || "",
         existingInstagramData: c.instagramData,
         onCreditUsed: onScrapeCreditUsed,
+        brandContext: aiBrandContext,
       });
       const patch = payload.aiAnalysis ? mergeAiFieldsIntoExisting(c, payload.aiAnalysis) : {};
       const platformUpdate = {
@@ -6489,6 +6641,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       const ig = c.instagramData || {};
       const ai = await runIbScoreClaude({
         apiKey: ak.trim(),
+        brandContext: aiBrandContext,
         cleanHandle,
         tiktokData: tt,
         instagramData: ig,
@@ -8862,6 +9015,7 @@ export default function App() {
   const [library, setLibrary] = useState([]);
   const [formKey, setFormKey] = useState(0);
   const [briefPrefill, setBriefPrefill] = useState(null);
+  const [aiKnowledge, setAiKnowledge] = useState(() => getDefaultAiKnowledge());
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -9018,6 +9172,35 @@ export default function App() {
         storageSet("intake-scrape-key", dbScrapeKey);
       } else if (!cancelled && scrapeVal && !dbScrapeKey) {
         dbSetSetting("scrapecreators-api-key", scrapeVal).catch((e) => console.error("[settings] Seed ScrapeCreators key to Supabase failed:", e));
+      }
+
+      const aiSettingPairs = [
+        ["ai_approved_claims", "approvedClaims"],
+        ["ai_banned_claims", "bannedClaims"],
+        ["ai_products", "products"],
+        ["ai_default_rejections", "defaultRejections"],
+        ["ai_tone_hooks", "toneHooks"],
+        ["ai_platform_notes", "platformNotes"],
+        ["ai_length_guide", "lengthGuide"],
+        ["ai_personas", "personas"],
+        ["ai_brand_context", "brandContext"],
+      ];
+      const aiUpdates = {};
+      for (const [dbKey, field] of aiSettingPairs) {
+        const val = await dbGetSetting(dbKey);
+        if (val == null) continue;
+        try {
+          if (field === "brandContext") {
+            aiUpdates[field] = typeof val === "string" ? val : String(val);
+          } else {
+            aiUpdates[field] = typeof val === "string" ? JSON.parse(val) : val;
+          }
+        } catch {
+          /* skip malformed */
+        }
+      }
+      if (!cancelled && Object.keys(aiUpdates).length > 0) {
+        setAiKnowledge((prev) => ({ ...prev, ...aiUpdates }));
       }
 
       if (!cancelled) setStorageReady(true);
@@ -9269,6 +9452,7 @@ export default function App() {
           twitterHandle: cr.twitterHandle || "",
           existingInstagramData: cr.instagramData,
           onCreditUsed: bumpScrapeCredit,
+          brandContext: aiKnowledge.brandContext,
         });
         const tt = payload.ttData;
         const engagementRate = payload.engagementRate;
@@ -9342,7 +9526,7 @@ export default function App() {
       `Bulk enrichment complete:\n• ${done} creators updated\n• ${skipped} skipped (fresh per your setting)\n• ${fail} failed (handle not found or API error)${td}`
     );
     setTimeout(() => setCreatorImportToast(null), 12000);
-  }, [creators, scrapeKey, apiKey, updateCreator, bulkStaleWindow, bumpScrapeCredit]);
+  }, [creators, scrapeKey, apiKey, updateCreator, bulkStaleWindow, bumpScrapeCredit, aiKnowledge]);
 
   const runAddAndEnrich = useCallback(async () => {
     const raw = addHandleInput.trim();
@@ -9425,6 +9609,7 @@ export default function App() {
         twitterHandle: "",
         onCreditUsed: bumpScrapeCredit,
         requireTikTokProfile: true,
+        brandContext: aiKnowledge.brandContext,
       });
       const ai = payload.aiAnalysis;
       const ttBio = payload?.ttData?.bio || "";
@@ -9517,7 +9702,7 @@ export default function App() {
       setAddEnrichBusy(false);
       setAddEnrichStepState(null);
     }
-  }, [addHandleInput, creators, scrapeKey, apiKey, navigate, bumpScrapeCredit]);
+  }, [addHandleInput, creators, scrapeKey, apiKey, navigate, bumpScrapeCredit, aiKnowledge]);
 
   const runReEnrichExisting = useCallback(async () => {
     if (!duplicateModal) return;
@@ -9541,6 +9726,7 @@ export default function App() {
         twitterHandle: existing.twitterHandle || "",
         existingInstagramData: existing.instagramData,
         onCreditUsed: bumpScrapeCredit,
+        brandContext: aiKnowledge.brandContext,
       });
       const merged = mergeAiFieldsIntoExisting(existing, payload.aiAnalysis);
       const platformUpdate = {
@@ -9581,7 +9767,7 @@ export default function App() {
     } finally {
       setAddEnrichBusy(false);
     }
-  }, [duplicateModal, creators, scrapeKey, apiKey, updateCreator, navigate, bumpScrapeCredit]);
+  }, [duplicateModal, creators, scrapeKey, apiKey, updateCreator, navigate, bumpScrapeCredit, aiKnowledge]);
 
   const handleCsvImport = useCallback(
     (file) => {
@@ -9836,9 +10022,28 @@ export default function App() {
     }
   }, []);
 
+  const saveAiKnowledge = useCallback(async (field, value) => {
+    const keyMap = {
+      approvedClaims: "ai_approved_claims",
+      bannedClaims: "ai_banned_claims",
+      products: "ai_products",
+      defaultRejections: "ai_default_rejections",
+      toneHooks: "ai_tone_hooks",
+      platformNotes: "ai_platform_notes",
+      lengthGuide: "ai_length_guide",
+      personas: "ai_personas",
+      brandContext: "ai_brand_context",
+    };
+    const key = keyMap[field];
+    if (!key) return;
+    const storeVal = field === "brandContext" ? String(value) : JSON.stringify(value);
+    await dbSetSetting(key, storeVal);
+    setAiKnowledge((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
   const handleGenerate = useCallback(async (formData) => {
     if (formData.mode === "template") {
-      await saveBrief(generateBrief(formData), formData);
+      await saveBrief(generateBrief(formData, aiKnowledge), formData);
       return;
     }
 
@@ -9871,7 +10076,7 @@ export default function App() {
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 3000,
-            messages: [{ role: "user", content: buildAIPrompt(formData) }],
+            messages: [{ role: "user", content: buildAIPrompt(formData, aiKnowledge) }],
           }),
         }),
         new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 60000)),
@@ -9899,7 +10104,7 @@ export default function App() {
       delete brief.proof;
       delete brief.disclosure;
 
-      const mergedRej = buildRejectionsArray(formData);
+      const mergedRej = buildRejectionsArray(formData, aiKnowledge?.defaultRejections);
       if (!Array.isArray(brief.rejections) || brief.rejections.length === 0) brief.rejections = mergedRej;
 
       deferredSuccess = true;
@@ -9922,7 +10127,7 @@ export default function App() {
         setAiLoading(false);
       }
     }
-  }, [startStepAnimation, stopStepAnimation, saveBrief]);
+  }, [startStepAnimation, stopStepAnimation, saveBrief, aiKnowledge]);
 
   const handleCancel = () => {
     cancelledRef.current = true;
@@ -9933,8 +10138,8 @@ export default function App() {
   };
 
   const handleRegenTemplate = useCallback(async () => {
-    if (currentFormData) await saveBrief(generateBrief(currentFormData), { ...currentFormData, mode: "template" });
-  }, [currentFormData, saveBrief]);
+    if (currentFormData) await saveBrief(generateBrief(currentFormData, aiKnowledge), { ...currentFormData, mode: "template" });
+  }, [currentFormData, saveBrief, aiKnowledge]);
 
   const handleRegenAI = useCallback(() => {
     if (currentFormData) handleGenerate({ ...currentFormData, mode: "ai" });
@@ -10707,6 +10912,8 @@ export default function App() {
           <div style={{ animation: "fadeIn 0.3s ease" }}>
             <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px" }}>
               <UploadOldBrief
+                extractionPrompt={buildBriefExtractionPrompt(aiKnowledge.products)}
+                aiKnowledge={aiKnowledge}
                 onExtracted={(fields) => {
                   setBriefPrefill(fields);
                   setFormKey((k) => k + 1);
@@ -10714,8 +10921,8 @@ export default function App() {
                 t={t}
               />
             </div>
-            <BriefForm key={`b-${formKey}`} prefill={briefPrefill || undefined} onGenerate={handleGenerate} />
-            <IBAiSourceOfTruth t={t} />
+            <BriefForm key={`b-${formKey}`} prefill={briefPrefill || undefined} onGenerate={handleGenerate} aiKnowledge={aiKnowledge} />
+            <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} />
           </div>
         )}
         {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} creators={creators} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
@@ -11748,6 +11955,7 @@ export default function App() {
                 S={S}
                 onScrapeCreditUsed={bumpScrapeCredit}
                 setDbError={setDbError}
+                aiBrandContext={aiKnowledge.brandContext}
               />
             </CreatorDetailErrorBoundary>
           )
