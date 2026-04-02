@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.24.0";
+const APP_VERSION = "5.25.0";
 const CHANGELOG = [
+  { version: "5.25.0", date: "2026-04-01", changes: [
+    "Recent Content — one horizontal row per platform (TikTok, IG Reels, IG Posts) with avatars and scrollable linked thumbnails",
+  ]},
   { version: "5.24.0", date: "2026-04-01", changes: [
     "Rate calculator rebuilt — industry-aligned, $25 CPM cap, Intake content bonus, competitor detection",
     "Transparent formula breakdown visible on every creator profile",
@@ -6244,117 +6247,210 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           </div>
         </div>
 
+        {/* ═══ Recent Content — by Platform ═══ */}
         {(() => {
-          const ttVideos = c.tiktokData?.recentVideos || c.tiktokRecentVideos || [];
-          const igPosts = c.instagramRecentPosts || [];
-          const igReels = c.instagramRecentReels || [];
-          const allContent = [
-            ...ttVideos.map((v) => ({ ...v, platform: "TikTok", type: "video" })),
-            ...igPosts.map((p) => ({ ...p, platform: "Instagram", type: "post" })),
-            ...igReels.map((r) => ({ ...r, platform: "Instagram", type: "reel" })),
-          ]
-            .sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0))
-            .slice(0, 12);
+          const ttVideos = (c.tiktokData?.recentVideos || c.tiktokRecentVideos || []).slice(0, 8);
+          const igPosts = (c.instagramRecentPosts || []).slice(0, 8);
+          const igReels = (c.instagramRecentReels || []).slice(0, 8);
 
-          if (allContent.length === 0) return null;
+          const platforms = [
+            {
+              name: "TikTok",
+              color: t.green,
+              icon: "♪",
+              avatar: c.tiktokData?.avatarUrl || "",
+              handle: c.tiktokHandle || c.handle?.replace("@", "") || "",
+              profileUrl: c.tiktokHandle ? `https://www.tiktok.com/@${c.tiktokHandle}` : "",
+              followers: c.tiktokData?.followers,
+              items: ttVideos.map((v) => ({
+                cover: v.cover || v.coverUrl || "",
+                views: v.views || 0,
+                likes: v.likes || 0,
+                caption: v.caption || v.desc || "",
+                url: v.url || "",
+                date: v.date || "",
+                type: "video",
+              })),
+            },
+            {
+              name: "Instagram Reels",
+              color: "#E1306C",
+              icon: "◎",
+              avatar: c.instagramData?.avatarUrl || "",
+              handle: c.instagramHandle || c.handle?.replace("@", "") || "",
+              profileUrl: c.instagramHandle ? `https://www.instagram.com/${c.instagramHandle}/reels/` : "",
+              followers: c.instagramData?.followers,
+              items: igReels.map((r) => ({
+                cover: r.coverUrl || r.imageUrl || "",
+                views: r.playCount || r.play_count || r.views || 0,
+                likes: r.likes || 0,
+                caption: r.caption || "",
+                url: r.url || "",
+                date: r.date || "",
+                type: "reel",
+              })),
+            },
+            {
+              name: "Instagram Posts",
+              color: "#E1306C",
+              icon: "▣",
+              avatar: c.instagramData?.avatarUrl || "",
+              handle: c.instagramHandle || c.handle?.replace("@", "") || "",
+              profileUrl: c.instagramHandle ? `https://www.instagram.com/${c.instagramHandle}/` : "",
+              followers: null, // Don't repeat followers for second IG row
+              items: igPosts.map((p) => ({
+                cover: p.imageUrl || p.thumbnail_url || "",
+                views: 0, // Posts don't have view counts typically
+                likes: p.likes || 0,
+                caption: p.caption || "",
+                url: p.url || "",
+                date: p.date || "",
+                type: p.mediaType === "video" ? "video" : "post",
+              })),
+            },
+          ].filter((p) => p.items.length > 0);
+
+          if (platforms.length === 0) return null;
 
           return (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                Recent Content ({allContent.length})
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-                {allContent.map((item, i) => {
-                  const cover = item.cover || item.thumbnail_url || item.image_url || item.display_url || item.imageUrl || "";
-                  const views = item.views || item.view_count || item.video_view_count || 0;
-                  const likes = item.likes || item.like_count || item.diggCount || 0;
-                  const caption = item.caption || item.desc || item.text || "";
-                  const date = item.date || item.taken_at || "";
-                  const url =
-                    item.url ||
-                    (item.shortcode ? `https://instagram.com/p/${item.shortcode}` : "") ||
-                    (item.id && item.platform === "TikTok" ? `https://www.tiktok.com/video/${item.id}` : "");
-                  const platformColor = item.platform === "TikTok" ? t.green : "#E1306C";
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Content</div>
 
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        background: t.card,
-                        border: `1px solid ${t.border}`,
-                        borderRadius: 8,
-                        overflow: "hidden",
-                        cursor: url ? "pointer" : "default",
-                      }}
-                      onClick={() => url && window.open(url, "_blank")}
-                      onKeyDown={(e) => {
-                        if ((e.key === "Enter" || e.key === " ") && url) {
-                          e.preventDefault();
-                          window.open(url, "_blank");
-                        }
-                      }}
-                      role={url ? "link" : undefined}
-                      tabIndex={url ? 0 : undefined}
-                    >
-                      {cover ? (
-                        <img
-                          src={cover}
-                          alt=""
-                          referrerPolicy="no-referrer"
-                          crossOrigin="anonymous"
-                          style={{ width: "100%", height: 160, objectFit: "cover", display: "block", background: t.cardAlt }}
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                          }}
-                        />
+              {platforms.map((plat, pi) => (
+                <div key={pi} style={{ marginBottom: 16 }}>
+                  {/* Platform header row — avatar + name + handle + follower count */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    {plat.avatar ? (
+                      <img
+                        src={plat.avatar}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", border: `2px solid ${plat.color}30`, flexShrink: 0 }}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          background: `${plat.color}15`,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 14,
+                          color: plat.color,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {plat.icon}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: plat.color }}>{plat.name}</span>
+                        {plat.profileUrl ? (
+                          <a href={plat.profileUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.textMuted, textDecoration: "none" }}>
+                            @{plat.handle} ↗
+                          </a>
+                        ) : null}
+                      </div>
+                      {plat.followers ? (
+                        <div style={{ fontSize: 10, color: t.textFaint }}>
+                          {formatMetricShort(plat.followers)} followers · {plat.items.length} recent{" "}
+                          {plat.items[0]?.type === "post" ? "posts" : plat.items[0]?.type === "reel" ? "reels" : "videos"}
+                        </div>
                       ) : (
+                        <div style={{ fontSize: 10, color: t.textFaint }}>
+                          {plat.items.length} recent{" "}
+                          {plat.items[0]?.type === "post" ? "posts" : plat.items[0]?.type === "reel" ? "reels" : "videos"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Scrollable content row */}
+                  <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                    {plat.items.map((item, ii) => (
+                      <a
+                        key={ii}
+                        href={item.url || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          flexShrink: 0,
+                          width: 130,
+                          textDecoration: "none",
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          border: `1px solid ${t.border}`,
+                          background: t.card,
+                          transition: "border-color 0.2s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = `${plat.color}50`;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = t.border;
+                        }}
+                      >
+                        {item.cover ? (
+                          <img
+                            src={item.cover}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
+                            loading="lazy"
+                            style={{ width: 130, height: 170, objectFit: "cover", display: "block", background: t.cardAlt }}
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                              if (e.target.nextSibling) {
+                                e.target.nextSibling.style.display = "flex";
+                                e.target.nextSibling.style.height = "170px";
+                              }
+                            }}
+                          />
+                        ) : null}
                         <div
                           style={{
-                            width: "100%",
-                            height: 160,
+                            width: 130,
+                            height: item.cover ? 0 : 170,
                             background: t.cardAlt,
-                            display: "flex",
+                            display: item.cover ? "none" : "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            fontSize: 24,
+                            fontSize: 28,
                             color: t.textFaint,
                           }}
                         >
-                          ▶
+                          {item.type === "post" ? "▣" : "▶"}
                         </div>
-                      )}
-                      <div style={{ padding: "8px 10px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: platformColor }}>
-                            {item.platform} {item.type !== "video" ? item.type : ""}
-                          </span>
-                          {date ? (
-                            <span style={{ fontSize: 9, color: t.textFaint }}>
-                              {typeof date === "string" && date.length > 5 ? date.substring(5) : date}
-                            </span>
+                        <div style={{ padding: "6px 8px" }}>
+                          {item.views > 0 ? (
+                            <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>
+                              {formatMetricShort(item.views)} ▶
+                            </div>
+                          ) : item.likes > 0 ? (
+                            <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>
+                              {formatMetricShort(item.likes)} ♥
+                            </div>
+                          ) : null}
+                          {item.views > 0 && item.likes > 0 ? <div style={{ fontSize: 10, color: t.textFaint }}>{formatMetricShort(item.likes)} ♥</div> : null}
+                          {item.date ? <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>{item.date}</div> : null}
+                          {item.caption ? (
+                            <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 114 }}>
+                              {String(item.caption).substring(0, 50)}
+                            </div>
                           ) : null}
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: t.text }}>{views > 0 ? `${formatMetricShort(views)} views` : "—"}</div>
-                        {likes > 0 ? <div style={{ fontSize: 10, color: t.textMuted }}>{formatMetricShort(likes)} likes</div> : null}
-                        {caption ? (
-                          <div
-                            style={{
-                              fontSize: 10,
-                              color: t.textFaint,
-                              marginTop: 4,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {caption.substring(0, 60)}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           );
         })()}
