@@ -42,8 +42,14 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.25.0";
+const APP_VERSION = "5.26.0";
 const CHANGELOG = [
+  { version: "5.26.0", date: "2026-04-01", changes: [
+    "Instagram is now the primary platform — source of truth for handles",
+    "Smart YouTube discovery — tries handle, bio links, and name variations",
+    "Smart Twitter discovery — tries handle and bio links",
+    "Extracts YouTube/Twitter URLs from TikTok and Instagram bios automatically",
+  ]},
   { version: "5.25.0", date: "2026-04-01", changes: [
     "Recent Content — one horizontal row per platform (TikTok, IG Reels, IG Posts) with avatars and scrollable linked thumbnails",
   ]},
@@ -2459,17 +2465,24 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
   const sk = String(scrapeKey || "").trim();
   const ak = String(aiKey || "").trim();
   const skipAi = !!opts?.skipAi;
-  const ttHandle = String(opts?.tiktokHandle || "").replace(/^@/, "").trim() || cleanHandle;
-  const igHandle = String(opts?.instagramHandle || "").replace(/^@/, "").trim() || cleanHandle;
-  const ytHandle = String(opts?.youtubeHandle || "").replace(/^@/, "").trim() || cleanHandle;
-  const twHandle = String(opts?.twitterHandle || "").replace(/^@/, "").trim() || cleanHandle;
   const bump = opts?.onCreditUsed;
+  const base = "https://api.scrapecreators.com";
+
+  // Instagram is the source of truth
+  const igHandle = String(opts?.instagramHandle || "").replace(/^@/, "").trim() || cleanHandle;
+  const ttHandle = String(opts?.tiktokHandle || "").replace(/^@/, "").trim() || cleanHandle;
+
+  // YouTube and Twitter: use explicit handle, OR fall back to trying the IG handle
+  const ytHandleExplicit = String(opts?.youtubeHandle || "").replace(/^@/, "").trim();
+  const twHandleExplicit = String(opts?.twitterHandle || "").replace(/^@/, "").trim();
+
+  // We'll try the main handle for YT/TW — most creators use the same handle across platforms
+  const ytHandle = ytHandleExplicit || igHandle;
+  const twHandle = twHandleExplicit || igHandle;
+
   const h = encodeURIComponent(cleanHandle);
   const ttEnc = encodeURIComponent(ttHandle);
   const igEnc = encodeURIComponent(igHandle);
-  const ytEnc = encodeURIComponent(ytHandle);
-  const twEnc = encodeURIComponent(twHandle);
-  const base = "https://api.scrapecreators.com";
 
   const fetchOne = async (url, stepId) => {
     try {
@@ -2488,31 +2501,97 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     }
   };
 
-  const [
-    ttProfileRaw,
-    ttVideosRaw,
-    ttShopRaw,
-    igProfileRaw,
-    igPostsRaw,
-    igReelsRaw,
-    ytRaw,
-    twRaw,
-    liRaw,
-    snapRaw,
-    fbRaw,
-  ] = await Promise.all([
+  // Phase 1: Core platforms (TikTok + Instagram — always run)
+  const [ttProfileRaw, ttVideosRaw, ttShopRaw, igProfileRaw, igPostsRaw, igReelsRaw] = await Promise.all([
     fetchOne(`${base}/v1/tiktok/profile?handle=${ttEnc}`, "tt_profile"),
     fetchOne(`${base}/v3/tiktok/profile/videos?handle=${ttEnc}`, "tt_videos"),
     fetchOne(`${base}/v1/tiktok/user/showcase?handle=${ttEnc}`, "tt_shop"),
     fetchOne(`${base}/v1/instagram/profile?handle=${igEnc}`, "ig_profile"),
     fetchOne(`${base}/v2/instagram/user/posts?handle=${igEnc}`, "ig_posts"),
     fetchOne(`${base}/v1/instagram/user/reels?handle=${igEnc}`, "ig_reels"),
-    fetchOne(`${base}/v1/youtube/channel?handle=${ytEnc}`, "youtube"),
-    fetchOne(`${base}/v1/twitter/profile?handle=${twEnc}`, "twitter"),
+  ]);
+
+  // Phase 2: Extract handles from bios BEFORE calling secondary platforms
+  const ttBio = (() => {
+    try {
+      const d = ttProfileRaw?.data ?? ttProfileRaw;
+      const user = d?.user ?? d?.userInfo?.user ?? d;
+      return (user?.signature || user?.bio || "").toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+  const igBio = (() => {
+    try {
+      const d = igProfileRaw?.data?.user ?? igProfileRaw?.data ?? igProfileRaw?.user ?? igProfileRaw;
+      return `${d?.biography || d?.bio || ""} ${d?.external_url || d?.bio_link?.url || ""}`.toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+  const allBios = `${ttBio} ${igBio}`;
+
+  // Extract YouTube handle from bio links
+  let discoveredYtHandle = ytHandle;
+  const ytUrlMatch = allBios.match(/youtube\.com\/@?([\w.-]+)|youtube\.com\/(?:c\/|channel\/|user\/)?([\w.-]+)|youtu\.be\/([\w.-]+)/i);
+  if (ytUrlMatch) {
+    const extracted = (ytUrlMatch[1] || ytUrlMatch[2] || ytUrlMatch[3] || "").replace(/^@/, "").split(/[/?#]/)[0];
+    if (extracted && extracted.length > 1 && !["watch", "playlist", "feed", "results"].includes(extracted.toLowerCase())) {
+      discoveredYtHandle = extracted;
+      console.log(`[enrich] Discovered YouTube handle from bio: @${extracted}`);
+    }
+  }
+
+  // Extract Twitter/X handle from bio links
+  let discoveredTwHandle = twHandle;
+  const twUrlMatch = allBios.match(/(?:twitter\.com|x\.com)\/([\w]+)/i);
+  if (twUrlMatch) {
+    const extracted = twUrlMatch[1];
+    if (extracted && extracted.length > 1 && !["intent", "share", "home", "i", "search"].includes(extracted.toLowerCase())) {
+      discoveredTwHandle = extracted;
+      console.log(`[enrich] Discovered Twitter handle from bio: @${extracted}`);
+    }
+  }
+
+  // Phase 3: Secondary platforms — use discovered handles
+  const [ytRaw, twRaw, liRaw, snapRaw, fbRaw] = await Promise.all([
+    fetchOne(`${base}/v1/youtube/channel?handle=${encodeURIComponent(discoveredYtHandle)}`, "youtube"),
+    fetchOne(`${base}/v1/twitter/profile?handle=${encodeURIComponent(discoveredTwHandle)}`, "twitter"),
     fetchOne(`${base}/v1/linkedin/profile?handle=${h}`, "linkedin"),
     fetchOne(`${base}/v1/snapchat/profile?handle=${h}`, "snapchat"),
     fetchOne(`${base}/v1/facebook/profile?handle=${h}`, "facebook"),
   ]);
+
+  // Phase 4: If YouTube failed with discovered handle, try alternatives
+  let ytFinal = ytRaw;
+  if (!ytRaw && discoveredYtHandle !== igHandle) {
+    console.log(`[enrich] YouTube not found as @${discoveredYtHandle}, trying @${igHandle}...`);
+    ytFinal = await fetchOne(`${base}/v1/youtube/channel?handle=${encodeURIComponent(igHandle)}`, "youtube");
+  }
+  if (!ytFinal && discoveredYtHandle !== ttHandle && igHandle !== ttHandle) {
+    console.log(`[enrich] YouTube not found as @${igHandle}, trying @${ttHandle}...`);
+    ytFinal = await fetchOne(`${base}/v1/youtube/channel?handle=${encodeURIComponent(ttHandle)}`, "youtube");
+  }
+  if (!ytFinal) {
+    console.log(`[enrich] YouTube retry with @ prefix on @${igHandle}`);
+    ytFinal = await fetchOne(`${base}/v1/youtube/channel?handle=${encodeURIComponent(`@${igHandle}`)}`, "youtube");
+  }
+  if (!ytFinal) {
+    ytFinal = await fetchOne(`${base}/v1/youtube/channel?handle=${encodeURIComponent(`@${ttHandle}`)}`, "youtube");
+  }
+
+  // Twitter: if empty, try IG / TT handles
+  let twFinal = twRaw;
+  if (!twRaw && discoveredTwHandle !== igHandle) {
+    twFinal = await fetchOne(`${base}/v1/twitter/profile?handle=${encodeURIComponent(igHandle)}`, "twitter");
+  }
+  if (!twFinal && igHandle !== ttHandle) {
+    twFinal = await fetchOne(`${base}/v1/twitter/profile?handle=${encodeURIComponent(ttHandle)}`, "twitter");
+  }
+  if (!twFinal) {
+    twFinal = await fetchOne(`${base}/v1/twitter/profile?handle=${encodeURIComponent(`@${igHandle}`)}`, "twitter");
+  }
+
   // Debug logging — shows actual API response structures
   if (typeof window !== "undefined" && window.console) {
     console.group("[Enrich] Raw API responses for @" + cleanHandle);
@@ -2520,8 +2599,8 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     console.log("TT Videos:", JSON.stringify(ttVideosRaw)?.substring(0, 500));
     console.log("IG Profile:", JSON.stringify(igProfileRaw)?.substring(0, 500));
     console.log("IG Posts:", JSON.stringify(igPostsRaw)?.substring(0, 500));
-    console.log("YouTube:", JSON.stringify(ytRaw)?.substring(0, 500));
-    console.log("Twitter:", JSON.stringify(twRaw)?.substring(0, 500));
+    console.log("YouTube:", JSON.stringify(ytFinal)?.substring(0, 500));
+    console.log("Twitter:", JSON.stringify(twFinal)?.substring(0, 500));
     console.log("LinkedIn:", JSON.stringify(liRaw)?.substring(0, 500));
     console.log("Snapchat:", JSON.stringify(snapRaw)?.substring(0, 500));
     console.log("Facebook:", JSON.stringify(fbRaw)?.substring(0, 500));
@@ -2541,8 +2620,8 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     igProfileRaw,
     igPostsRaw,
     igReelsRaw,
-    ytData: ytRaw,
-    twData: twRaw,
+    ytData: ytFinal,
+    twData: twFinal,
     liData: liRaw,
     snapData: snapRaw,
     fbData: fbRaw,
@@ -2587,12 +2666,17 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     igProfileRaw,
     igPostsRaw,
     igReelsRaw,
-    ytRaw,
-    twRaw,
+    ytFinal,
+    twFinal,
     liRaw,
     snapRaw,
     fbRaw,
   ].filter(Boolean).length;
+
+  const discoveredYoutubeHandle =
+    discoveredYtHandle !== igHandle && discoveredYtHandle !== ttHandle ? discoveredYtHandle : null;
+  const discoveredTwitterHandle =
+    discoveredTwHandle !== igHandle && discoveredTwHandle !== ttHandle ? discoveredTwHandle : null;
 
   return {
     ...processed,
@@ -2602,6 +2686,8 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     igData: processed.instagramData,
     ttData: processed.tiktokData,
     platformsFound,
+    discoveredYoutubeHandle,
+    discoveredTwitterHandle,
   };
 }
 
@@ -2670,6 +2756,8 @@ async function runScrapeAndAiPipeline(cleanHandle, scrapeKey, aiKey, onStep, opt
     instagramAvgComments: out.instagramAvgComments,
     instagramEngRate: out.instagramEngRate,
     platformsFound: out.platformsFound,
+    discoveredYoutubeHandle: out.discoveredYoutubeHandle,
+    discoveredTwitterHandle: out.discoveredTwitterHandle,
   };
 }
 
@@ -5672,9 +5760,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const videoCount = creatorDisplayVideoCount(c);
   const ttD = c.tiktokData || {};
   const igD = c.instagramData || {};
-  const igFollowers = Number(c.instagramData?.followers) || 0;
-  const ttFollowers = Number(c.tiktokData?.followers) || 0;
-  const primaryPlatform = igFollowers >= ttFollowers ? "instagram" : "tiktok";
+  const primaryPlatform = "instagram";
   const cleanHandle = String(c.handle || "").replace(/^@/, "").trim();
   const ttH = String(c.tiktokHandle || cleanHandle).replace(/^@/, "").trim();
   const igH = String(c.instagramHandle || cleanHandle).replace(/^@/, "").trim();
@@ -5791,6 +5877,12 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         ...cpmExtra,
         ...nameExtra,
       };
+      if (payload.discoveredYoutubeHandle && !c.youtubeHandle) {
+        fullUpdate.youtubeHandle = payload.discoveredYoutubeHandle;
+      }
+      if (payload.discoveredTwitterHandle && !c.twitterHandle) {
+        fullUpdate.twitterHandle = payload.discoveredTwitterHandle;
+      }
       updateCreator(c.id, fullUpdate);
       const hasNotesAfter = String(fullUpdate.notes ?? c.notes ?? "").trim();
       if (!hasNotesAfter && payload.aiAnalysis) {
@@ -6193,8 +6285,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               onHandleChange={(h) => updateCreator(c.id, { tiktokHandle: h, tiktokUrl: h ? `https://www.tiktok.com/@${h}` : "" })}
             />
 
-            {/* YouTube — only if data or handle */}
-            {(c.youtubeData || c.youtubeHandle) ? (
+            {/* YouTube — meaningful data or handle; else Add */}
+            {((Number(c.youtubeData?.subscribers) > 0) || !!(String(c.youtubeHandle || "").trim())) ? (
               <PlatformCard
                 t={t}
                 platform="YouTube"
@@ -6206,10 +6298,29 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 secondaryText={c.youtubeData?.videoCount ? `${c.youtubeData.videoCount} videos` : ""}
                 onHandleChange={(h) => updateCreator(c.id, { youtubeHandle: h })}
               />
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={() => updateCreator(c.id, { youtubeHandle: igH })}
+                style={{
+                  flex: "0 0 auto",
+                  alignSelf: "flex-start",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: `1px dashed ${t.border}`,
+                  background: t.cardAlt,
+                  color: t.textMuted,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                + Add YouTube
+              </button>
+            )}
 
-            {/* Twitter — only if data or handle */}
-            {(c.twitterData || c.twitterHandle) ? (
+            {/* Twitter — meaningful data or handle; else Add */}
+            {((Number(c.twitterData?.followers) > 0) || !!(String(c.twitterHandle || "").trim())) ? (
               <PlatformCard
                 t={t}
                 platform="X / Twitter"
@@ -6220,10 +6331,29 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 secondaryText={c.twitterData?.tweets ? `${formatMetricShort(c.twitterData.tweets)} tweets` : ""}
                 onHandleChange={(h) => updateCreator(c.id, { twitterHandle: h })}
               />
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={() => updateCreator(c.id, { twitterHandle: igH })}
+                style={{
+                  flex: "0 0 auto",
+                  alignSelf: "flex-start",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: `1px dashed ${t.border}`,
+                  background: t.cardAlt,
+                  color: t.textMuted,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                + Add Twitter
+              </button>
+            )}
 
-            {/* Facebook — only if data */}
-            {c.facebookData ? (
+            {/* Facebook — only if followers */}
+            {Number(c.facebookData?.followers) > 0 ? (
               <PlatformCard
                 t={t}
                 platform="Facebook"
@@ -6236,11 +6366,11 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               />
             ) : null}
 
-            {/* Snapchat — minimal */}
-            {c.snapchatData ? (
+            {/* Snapchat — display name from enrichment */}
+            {c.snapchatData?.displayName && String(c.snapchatData.displayName).trim() ? (
               <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#FFFC00", marginBottom: 6 }}>Snapchat</div>
-                <div style={{ fontSize: 13, color: t.text }}>{c.snapchatData.displayName || "Present"}</div>
+                <div style={{ fontSize: 13, color: t.text }}>{c.snapchatData.displayName}</div>
               </div>
             ) : null}
 
@@ -8285,7 +8415,7 @@ export default function App() {
         const payload = await runScrapeAndAiPipeline(ch, key.trim(), ak, null, {
           skipAi: !!cr.aiAnalysis?.ibScore,
           tiktokHandle: cr.tiktokHandle || ch,
-          instagramHandle: cr.instagramHandle,
+          instagramHandle: cr.instagramHandle || ch,
           youtubeHandle: cr.youtubeHandle || "",
           twitterHandle: cr.twitterHandle || "",
           existingInstagramData: cr.instagramData,
@@ -8321,6 +8451,12 @@ export default function App() {
           ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
         };
         updateCreator(cr.id, bulkFull);
+        if (payload.discoveredYoutubeHandle && !cr.youtubeHandle) {
+          updateCreator(cr.id, { youtubeHandle: payload.discoveredYoutubeHandle });
+        }
+        if (payload.discoveredTwitterHandle && !cr.twitterHandle) {
+          updateCreator(cr.id, { twitterHandle: payload.discoveredTwitterHandle });
+        }
         const hasNotesAfter = String(bulkFull.notes ?? cr.notes ?? "").trim();
         if (!hasNotesAfter && payload.aiAnalysis) {
           const autoNotes = buildAutoNotesFromAi(payload.aiAnalysis);
@@ -8466,8 +8602,8 @@ export default function App() {
         instagramUrl: `https://www.instagram.com/${igFromBio || cleanHandle}/`,
         tiktokHandle: cleanHandle,
         instagramHandle: igFromBio || cleanHandle,
-        youtubeHandle: ytFromBio || "",
-        twitterHandle: "",
+        youtubeHandle: payload.discoveredYoutubeHandle || ytFromBio || "",
+        twitterHandle: payload.discoveredTwitterHandle || "",
         videoLog: [],
         dateAdded: new Date().toISOString().slice(0, 10),
         bestVideos: [],
@@ -8551,7 +8687,7 @@ export default function App() {
       if (!existing) return;
       const payload = await runScrapeAndAiPipeline(cleanHandle, sk, ak, null, {
         tiktokHandle: existing.tiktokHandle || cleanHandle,
-        instagramHandle: existing.instagramHandle,
+        instagramHandle: existing.instagramHandle || cleanHandle,
         youtubeHandle: existing.youtubeHandle || "",
         twitterHandle: existing.twitterHandle || "",
         existingInstagramData: existing.instagramData,
@@ -8583,6 +8719,8 @@ export default function App() {
         ...merged,
         ...enrichPatchWithCpm(existing, merged, mergedCreator),
         ...(!existing.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
+        ...(payload.discoveredYoutubeHandle && !existing.youtubeHandle ? { youtubeHandle: payload.discoveredYoutubeHandle } : {}),
+        ...(payload.discoveredTwitterHandle && !existing.twitterHandle ? { twitterHandle: payload.discoveredTwitterHandle } : {}),
       });
       if (payload.notes.length) {
         setCreatorImportToast(payload.notes[0]);
