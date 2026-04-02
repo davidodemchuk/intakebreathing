@@ -542,14 +542,37 @@ function sheetsQuoteTitle(name) {
 function getSheetsClient() {
   if (sheetsClient) return sheetsClient;
 
+  let creds = null;
+
+  // Try env var first
   const saJson = process.env.GOOGLE_SERVICE_ACCOUNT;
-  if (!saJson) {
-    console.warn("[sheets] No GOOGLE_SERVICE_ACCOUNT env var — reads will use API key fallback");
+  if (saJson) {
+    try {
+      creds = JSON.parse(saJson);
+    } catch (e) {
+      console.error("[sheets] Failed to parse GOOGLE_SERVICE_ACCOUNT env var:", e.message);
+    }
+  }
+
+  // Fall back to file
+  if (!creds) {
+    try {
+      const filePath = path.join(__dirname, "google-sa.json");
+      if (fs.existsSync(filePath)) {
+        creds = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        console.log("[sheets] Loaded service account from google-sa.json");
+      }
+    } catch (e) {
+      console.error("[sheets] Failed to read google-sa.json:", e.message);
+    }
+  }
+
+  if (!creds) {
+    console.warn("[sheets] No service account available — writes disabled, reads use API key");
     return null;
   }
 
   try {
-    const creds = JSON.parse(saJson);
     const auth = new google.auth.GoogleAuth({
       credentials: creds,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
@@ -558,7 +581,7 @@ function getSheetsClient() {
     console.log("[sheets] Service account authenticated:", creds.client_email);
     return sheetsClient;
   } catch (e) {
-    console.error("[sheets] Service account auth failed:", e.message);
+    console.error("[sheets] Auth failed:", e.message);
     return null;
   }
 }

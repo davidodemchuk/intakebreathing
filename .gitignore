@@ -3,3 +3,6 @@ dist
 .env
 .env.local
 .DS_Store
+
+# Google service account (add locally / on Railway; never commit real keys)
+google-sa.json
