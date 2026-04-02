@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.31.0";
+const APP_VERSION = "5.32.0";
 const CHANGELOG = [
+  { version: "5.32.0", date: "2026-04-02", changes: [
+    "IB-Ai Source of Truth moved to homepage — visible to all managers",
+  ]},
   { version: "5.31.0", date: "2026-04-02", changes: [
     "IB-Ai Source of Truth is now editable — managers can update claims, products, tones, and brand context live",
     "AI knowledge stored in Supabase — no code changes needed to update what IB-Ai knows",
@@ -3343,7 +3346,7 @@ function UploadOldBrief({ onExtracted, t, extractionPrompt, aiKnowledge }) {
   );
 }
 
-function IBAiSourceOfTruth({ t, aiKnowledge, onSave }) {
+function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
   const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : getDefaultAiKnowledge();
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("products");
@@ -3485,32 +3488,72 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave }) {
 
   const products = ak.products?.length ? ak.products : PRODUCTS;
 
+  const outerStyle = homepage
+    ? {
+        background: t.card,
+        border: `1px solid ${t.border}`,
+        borderRadius: 14,
+        padding: 0,
+        marginBottom: 20,
+        overflow: "hidden",
+        maxWidth: 1000,
+        marginLeft: "auto",
+        marginRight: "auto",
+      }
+    : {
+        maxWidth: 960,
+        margin: "0 auto",
+        padding: "0 24px 40px",
+      };
+
+  const innerOpenStyle = homepage
+    ? {
+        background: t.card,
+        borderTop: `1px solid ${t.border}`,
+        borderRadius: "0 0 14px 14px",
+        padding: "20px 24px 24px",
+      }
+    : {
+        background: t.card,
+        border: `1px solid ${t.border}`,
+        borderTop: "none",
+        borderRadius: "0 0 10px 10px",
+        padding: 20,
+      };
+
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 40px" }}>
+    <div style={outerStyle}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
         style={{
           width: "100%",
-          padding: "14px 20px",
-          borderRadius: 10,
-          border: `1px solid ${t.border}`,
+          padding: homepage ? "20px 24px" : "14px 20px",
+          borderRadius: homepage ? (open ? "14px 14px 0 0" : 14) : 10,
+          border: homepage ? "none" : `1px solid ${t.border}`,
           background: t.card,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           cursor: "pointer",
-          fontSize: 14,
+          fontSize: homepage ? 16 : 14,
           fontWeight: 700,
           color: t.text,
         }}
       >
-        <span>🧠 IB-Ai Source of Truth</span>
-        <span style={{ fontSize: 12, color: t.textMuted }}>{open ? "▲ Close" : "▼ View what IB-Ai knows"}</span>
+        <div style={{ textAlign: "left" }}>
+          <span>🧠 IB-Ai Source of Truth</span>
+          {homepage ? (
+            <div style={{ fontSize: 12, fontWeight: 400, color: t.textMuted, marginTop: 2 }}>Everything IB-Ai knows — editable by managers</div>
+          ) : null}
+        </div>
+        <span style={{ fontSize: 12, color: t.textMuted, flexShrink: 0, marginLeft: 12 }}>
+          {homepage ? (open ? "▲" : "▼") : open ? "▲ Close" : "▼ View what IB-Ai knows"}
+        </span>
       </button>
 
       {open && (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: 20 }}>
+        <div style={innerOpenStyle}>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16, borderBottom: `1px solid ${t.border}`, paddingBottom: 8 }}>
             {sections.map((s) => (
               <button
@@ -10602,6 +10645,9 @@ export default function App() {
                   <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>1 tool available</div>
                 </div>
               </div>
+
+              {/* IB-Ai Source of Truth — same state as brief page; edits sync everywhere */}
+              <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} homepage />
 
               <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60" }}>v{APP_VERSION}</div>
             </div>
