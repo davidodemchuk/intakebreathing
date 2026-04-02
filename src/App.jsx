@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext, Fragment } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo, memo, createContext, useContext, Fragment } from "react";
 import SEED_CREATORS from "./seedCreators.json";
 // If API key sync fails, ensure `app_settings` exists — run the SQL block in supabase/schema.sql in the Supabase SQL Editor.
 import {
@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.26.0";
+const APP_VERSION = "5.27.0";
 const CHANGELOG = [
+  { version: "5.27.0", date: "2026-04-01", changes: [
+    "Fix creator profile white screen — always recalculate CPM v2, null-safe rate UI, error boundary",
+  ]},
   { version: "5.26.0", date: "2026-04-01", changes: [
     "Instagram is now the primary platform — source of truth for handles",
     "Smart YouTube discovery — tries handle, bio links, and name variations",
@@ -1286,7 +1289,7 @@ function computeCreatorQuickStats(c) {
           ? c.engagementRate
           : null;
 
-  const cpm = c.cpmData || calculateCreatorCPM(c);
+  const cpm = calculateCreatorCPM(c);
   const estRate = cpm?.rateDisplay || null;
   const postFreq = computePostingFrequencyLabel(videos);
   const sorted = videos
@@ -5721,6 +5724,40 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
   );
 }
 
+class CreatorDetailErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, info: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error: error.message };
+  }
+  componentDidCatch(error, info) {
+    console.error("[CreatorDetail crash]", error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 40, maxWidth: 800, margin: "0 auto" }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#ff4444", marginBottom: 12 }}>Something went wrong</div>
+          <pre style={{ background: "#1a1a1a", padding: 16, borderRadius: 8, color: "#ff8800", overflow: "auto", fontSize: 12, marginBottom: 16 }}>{this.state.error}</pre>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ error: null });
+              window.history.back();
+            }}
+            style={{ padding: "10px 20px", background: "#00FEA9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13 }}
+          >
+            ← Go Back
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError }) {
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
@@ -6179,7 +6216,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         const totalReach = igF + ttF + ytF;
         const avgViews = c.tiktokData?.avgViews || c.tiktokAvgViews || null;
         const engRate = c.engagementRate ?? c.tiktokEngRate ?? c.instagramEngRate ?? null;
-        const cpmD = c.cpmData || calculateCreatorCPM(c);
+        const cpmD = calculateCreatorCPM(c);
         const costDisplay = (String(c.costPerVideo || "").trim() || cpmD?.rateDisplay || "").trim() || null;
         const recentVids = c.tiktokData?.recentVideos || c.tiktokRecentVideos || [];
         let postFreq = null;
@@ -6862,7 +6899,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           ) : null}
 
           {(() => {
-            const cpmData = c.cpmData || calculateCreatorCPM(c);
+            const cpmData = calculateCreatorCPM(c);
             const aiRate = ai.estimatedRate;
 
             if (!cpmData && !aiRate) return null;
@@ -6897,13 +6934,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                           style={{
                             fontSize: 15,
                             fontWeight: 700,
-                            color: cpmData.alignmentMultiplier > 1.1 ? t.green : cpmData.alignmentMultiplier < 0.9 ? t.orange : t.text,
+                            color: (cpmData.alignmentMultiplier ?? 1) > 1.1 ? t.green : (cpmData.alignmentMultiplier ?? 1) < 0.9 ? t.orange : t.text,
                           }}
                         >
-                          ×{cpmData.alignmentMultiplier.toFixed(2)}
+                          ×{(cpmData.alignmentMultiplier ?? 1).toFixed(2)}
                         </div>
                         <div style={{ fontSize: 10, color: t.textFaint }}>
-                          {cpmData.hasIntakeContent ? "Intake creator ✓" : cpmData.hasCompetitor ? "Competitor ⚠" : "Neutral"}
+                          {cpmData?.hasIntakeContent ? "Intake creator ✓" : cpmData?.hasCompetitor ? "Competitor ⚠" : "Neutral"}
                         </div>
                       </div>
                       <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
@@ -6912,27 +6949,27 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                           style={{
                             fontSize: 15,
                             fontWeight: 700,
-                            color: cpmData.engMultiplier > 1.1 ? t.green : cpmData.engMultiplier < 0.9 ? t.orange : t.text,
+                            color: (cpmData.engMultiplier ?? 1) > 1.1 ? t.green : (cpmData.engMultiplier ?? 1) < 0.9 ? t.orange : t.text,
                           }}
                         >
-                          ×{cpmData.engMultiplier.toFixed(2)}
+                          ×{(cpmData.engMultiplier ?? 1).toFixed(2)}
                         </div>
                         <div style={{ fontSize: 10, color: t.textFaint }}>
-                          {cpmData.engRate != null && Number.isFinite(Number(cpmData.engRate)) ? `${Number(cpmData.engRate).toFixed(1)}% rate` : "No data"}
+                          {cpmData?.engRate != null && Number.isFinite(Number(cpmData?.engRate)) ? `${Number(cpmData?.engRate).toFixed(1)}% rate` : "No data"}
                         </div>
                       </div>
                     </div>
 
-                    {(cpmData.alignmentReasons?.length > 0 || cpmData.engReasons?.length > 0) ? (
+                    {(cpmData?.alignmentReasons?.length > 0 || cpmData?.engReasons?.length > 0) ? (
                       <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>
-                        {[...(cpmData.alignmentReasons || []), ...(cpmData.engReasons || [])].map((r, i) => (
+                        {[...(cpmData?.alignmentReasons || []), ...(cpmData?.engReasons || [])].map((r, i) => (
                           <div key={i} style={{ color: r.includes("+") ? t.green : r.includes("-") ? t.orange : t.textMuted }}>• {r}</div>
                         ))}
                       </div>
                     ) : null}
 
                     <div style={{ fontSize: 10, color: t.textFaint, borderTop: `1px solid ${t.border}`, paddingTop: 8, lineHeight: 1.5 }}>
-                      <strong>Formula:</strong> {formatMetricShort(cpmData.avgViews)} views ÷ 1,000 × ${cpmData.cpmFinal} CPM × {cpmData.alignmentMultiplier.toFixed(2)} fit × {cpmData.engMultiplier.toFixed(2)} eng = ${cpmData.rawRate}/video
+                      <strong>Formula:</strong> {formatMetricShort(cpmData.avgViews)} views ÷ 1,000 × ${cpmData.cpmFinal} CPM × {(cpmData.alignmentMultiplier ?? 1).toFixed(2)} fit × {(cpmData.engMultiplier ?? 1).toFixed(2)} eng = ${cpmData?.rawRate}/video
                       <br />
                       <strong>Industry avg (2026):</strong> $150-300/video for UGC · Beginner $50-150 · Mid $150-300 · Established $300-500
                     </div>
@@ -6943,7 +6980,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                       value="Full calculation breakdown"
                       valueColor={t.textMuted}
                       valueFontSize={12}
-                      explanation={cpmData.explanation}
+                      explanation={cpmData?.explanation}
                     />
                   </div>
                 </div>
@@ -10872,19 +10909,21 @@ export default function App() {
               <div style={{ color: t.textMuted }}>Creator not found.</div>
             </div>
           ) : (
-            <CreatorDetailView
-              key={detailCreator.id}
-              c={detailCreator}
-              updateCreator={updateCreator}
-              library={library}
-              navigate={navigate}
-              scrapeKey={scrapeKey}
-              apiKey={apiKey}
-              t={t}
-              S={S}
-              onScrapeCreditUsed={bumpScrapeCredit}
-              setDbError={setDbError}
-            />
+            <CreatorDetailErrorBoundary>
+              <CreatorDetailView
+                key={detailCreator.id}
+                c={detailCreator}
+                updateCreator={updateCreator}
+                library={library}
+                navigate={navigate}
+                scrapeKey={scrapeKey}
+                apiKey={apiKey}
+                t={t}
+                S={S}
+                onScrapeCreditUsed={bumpScrapeCredit}
+                setDbError={setDbError}
+              />
+            </CreatorDetailErrorBoundary>
           )
         )}
 
