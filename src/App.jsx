@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.35.0";
+const APP_VERSION = "5.36.0";
 const CHANGELOG = [
+  { version: "5.36.0", date: "2026-04-02", changes: [
+    "Channel Pipeline tables — sticky header row while scrolling",
+  ]},
   { version: "5.35.0", date: "2026-04-02", changes: [
     "Settings accessible from homepage as a collapsible block",
   ]},
@@ -8460,9 +8463,9 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
     );
 
     return (
-      <div style={{ overflowX: "auto", borderRadius: 10, border: `1px solid ${t.border}` }}>
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "75vh", borderRadius: 10, border: `1px solid ${t.border}` }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: Math.min(maxCols * 80, 3000) }}>
-          <thead>
+          <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
             <tr>
               {Array.from({ length: maxCols }, (_, i) => headerRow[i]).map((cell, i) => (
                 <th
@@ -8478,7 +8481,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
                     position: i === 0 ? "sticky" : "static",
                     left: i === 0 ? 0 : "auto",
                     background: t.cardAlt,
-                    zIndex: i === 0 ? 2 : 0,
+                    zIndex: i === 0 ? 12 : 10,
                     minWidth: i === 0 ? 140 : 70,
                     borderBottom: `2px solid ${t.border}`,
                     borderRight: `1px solid ${t.border}30`,
