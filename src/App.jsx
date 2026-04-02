@@ -40,8 +40,17 @@ const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.21.0";
+const APP_VERSION = "5.22.0";
 const CHANGELOG = [
+  { version: "5.22.0", date: "2026-04-01", changes: [
+    "Avatar fix — tries YouTube and Facebook avatars as fallback, proxy for CDN-blocked URLs",
+    "Notes auto-fill from AI enrichment — partnership notes generated on first enrich",
+    "AI prompt upgraded — now generates partnershipNotes, outreachDM, competitorMentions, brandSafety",
+    "Content gallery — shows recent TikTok videos and Instagram posts with thumbnails",
+    "Quick stats bar — total reach, avg views, engagement rate, est rate, posting frequency",
+    "Bio display — shows TT bio, IG bio, bio links, account age",
+    "Bulk enrich progress bar improved — shows live count with cancel option",
+  ]},
   { version: "5.21.0", date: "2026-04-01", changes: [
     "Creator profile 2.0 — quick stats, TikTok/IG galleries, bio & links, view trend",
     "IB-Ai: partnership notes (auto-fills Notes when empty), outreach DM/email, competitor & brand safety",
@@ -1158,6 +1167,41 @@ function formatMetricShort(n) {
   return `${(x / 1_000_000).toFixed(x >= 10_000_000 ? 1 : 2)}M`.replace(/\.0M$/, "M");
 }
 
+/** Profile pic URLs to try (IG, TT, YT, FB). */
+function creatorAvatarUrlCandidates(c) {
+  return [c.instagramData?.avatarUrl, c.tiktokData?.avatarUrl, c.youtubeData?.avatarUrl, c.facebookData?.avatarUrl]
+    .map((v) => String(v || "").trim())
+    .filter((v) => v.length > 5);
+}
+
+/** Server proxy first, then direct URL, per candidate. */
+function buildAvatarSrcAttempts(c) {
+  const urls = creatorAvatarUrlCandidates(c);
+  const attempts = [];
+  urls.forEach((u) => {
+    try {
+      attempts.push(`/api/avatar-proxy?url=${encodeURIComponent(u)}`);
+    } catch {
+      attempts.push(u);
+    }
+    attempts.push(u);
+  });
+  return attempts;
+}
+
+/** When Notes is empty, build text from IB-Ai fields after enrich. */
+function buildAutoNotesFromAi(ai) {
+  if (!ai) return "";
+  return [
+    ai.partnershipNotes,
+    !ai.partnershipNotes && ai.oneSentence ? ai.oneSentence : null,
+    !ai.partnershipNotes && ai.whyIntake ? `Why Intake: ${ai.whyIntake}` : null,
+    ai.risk && ai.risk !== "None identified" ? `⚠️ ${ai.risk}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** TikTok accountCreated ISO date (yyyy-mm-dd) → "Sep 2021" */
 function formatCreatorSinceLabel(isoDate) {
   if (!isoDate) return null;
@@ -2173,11 +2217,11 @@ Return ONLY a JSON object:
   "runnerUpReason": "<1 sentence on why the runner-up is also worth considering>",
   "suggestedNiche": "<comma-separated>",
   "qualityTier": "<'High' if ibScore >= 70, else 'Standard'>",
-  "partnershipNotes": "<3-4 bullet points as one string; use newline between bullets: (1) value or risk, (2) best content type for partnerships, (3) rate range context, (4) outreach angle>",
-  "outreachDM": "<2-3 sentence Instagram DM personalized to this creator>",
-  "outreachEmail": "<short email for a partnership proposal>",
-  "competitorMentions": "<any competing nasal/breathing/wellness products seen in bios or themes, or 'None'>",
-  "brandSafety": "<'Safe' | 'Review' | 'Concern'> — <one short reason>"
+  "partnershipNotes": "<3-4 bullet points: (1) what makes this creator valuable or risky for Intake, (2) what content type they'd be best for (UGC, collab reel, TTS, etc), (3) rate context based on their metrics, (4) specific outreach angle to use>",
+  "outreachDM": "<2-3 sentence Instagram DM personalized to this creator's content. Mention Intake Breathing, reference something specific about their content, keep it casual and authentic. Do not mention payment.>",
+  "outreachEmail": "<3-4 sentence email for partnership proposal. Professional but warm. Mention their specific content themes and why Intake is a fit.>",
+  "competitorMentions": "<list any competing nasal strips, breathing products, or sleep products mentioned in their bios or content. Say 'None detected' if clean.>",
+  "brandSafety": "<'Safe' | 'Review' | 'Concern'> — Safe if no issues, Review if borderline content, Concern if explicit/controversial content or competitor partnerships"
 }
 
 Suggested creator rates are computed in-app from CPM and actual view data — do not estimate dollar rates in your response.`;
@@ -5457,11 +5501,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const lastEnrichedDisplay = lastEnrichedIso
     ? new Date(lastEnrichedIso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric" })
     : null;
-  const quickStats = useMemo(() => computeCreatorQuickStats(c), [c]);
-  const ttVideosList = Array.isArray(ttD.recentVideos) ? ttD.recentVideos : [];
-  const sparkHeights = useMemo(() => buildViewsSparklinePercents(ttVideosList), [ttVideosList]);
-  const igPostsGallery = Array.isArray(c.instagramRecentPosts) ? c.instagramRecentPosts : [];
-
   const pullInstagramOnly = async () => {
     const key = (scrapeKey || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("intake-scrape-key") : "") || "";
     if (!key.trim()) {
@@ -5554,6 +5593,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         ...nameExtra,
       };
       updateCreator(c.id, fullUpdate);
+      const hasNotesAfter = String(fullUpdate.notes ?? c.notes ?? "").trim();
+      if (!hasNotesAfter && payload.aiAnalysis) {
+        const autoNotes = buildAutoNotesFromAi(payload.aiAnalysis);
+        if (autoNotes.trim()) {
+          updateCreator(c.id, { notes: autoNotes.trim() });
+        }
+      }
       const pf = payload.platformsFound ?? 0;
       const ib = payload.aiAnalysis?.ibScore;
       setEnrichMsg(
@@ -5649,7 +5695,15 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       if (ai) {
         const patch = mergeAiFieldsIntoExisting(c, ai);
         const mergedCreator = { ...c, ...patch };
-        updateCreator(c.id, { ...patch, ...enrichPatchWithCpm(c, patch, mergedCreator) });
+        const row = { ...patch, ...enrichPatchWithCpm(c, patch, mergedCreator) };
+        updateCreator(c.id, row);
+        const hasNotesAfter = String(row.notes ?? c.notes ?? "").trim();
+        if (!hasNotesAfter) {
+          const autoNotes = buildAutoNotesFromAi(ai);
+          if (autoNotes.trim()) {
+            updateCreator(c.id, { notes: autoNotes.trim() });
+          }
+        }
         setEnrichMsg("IB Score updated.");
       } else {
         setEnrichMsg("Could not parse AI response.");
@@ -5745,15 +5799,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px", minWidth: 0 }}>
           {(() => {
-            const avatarSources = [
-              c.instagramData?.avatarUrl,
-              c.tiktokData?.avatarUrl,
-              c.facebookData?.avatarUrl,
-            ]
-              .map((v) => String(v || "").trim())
-              .filter(Boolean);
+            const attempts = buildAvatarSrcAttempts(c);
 
-            if (avatarSources.length === 0) {
+            if (attempts.length === 0) {
               return (
                 <div style={{ width: 48, height: 48, borderRadius: 24, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: t.textFaint, flexShrink: 0 }}>
                   {handleLetter}
@@ -5763,19 +5811,18 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
             return (
               <img
-                src={avatarSources[0]}
+                src={attempts[0]}
                 alt=""
                 referrerPolicy="no-referrer"
                 crossOrigin="anonymous"
+                data-av-idx="0"
                 style={{ width: 48, height: 48, borderRadius: 24, objectFit: "cover", background: t.cardAlt, border: `1px solid ${t.border}`, flexShrink: 0, display: "block" }}
                 onError={(e) => {
                   const img = e.currentTarget;
-                  const tried = (img.dataset.tried || "").split("|").filter(Boolean);
-                  const current = img.currentSrc || img.src || "";
-                  const next = avatarSources.find((s) => !tried.includes(s) && s !== current);
-                  if (next) {
-                    img.dataset.tried = [...tried, current].join("|");
-                    img.src = next;
+                  const idx = Number(img.dataset.avIdx || 0) + 1;
+                  if (idx < attempts.length) {
+                    img.dataset.avIdx = String(idx);
+                    img.src = attempts[idx];
                     return;
                   }
                   img.style.display = "none";
@@ -5832,39 +5879,80 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", marginBottom: 20 }}>{ai.oneSentence}</div>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
-          gap: 10,
-          marginBottom: 20,
-        }}
-      >
-        {[
-          { v: formatMetricShort(quickStats.totalReach), l: "Total reach", sub: "followers sum" },
-          { v: quickStats.avgViews != null ? formatMetricShort(quickStats.avgViews) : "—", l: "Avg views", sub: "per video" },
-          { v: quickStats.engRate != null ? `${Number(quickStats.engRate).toFixed(1)}%` : "—", l: "Eng rate", sub: "est." },
-          { v: quickStats.estRate || "—", l: "Est. rate", sub: "per video" },
-          { v: quickStats.postFreq, l: "Post freq", sub: quickStats.lastPosted ? `last ${quickStats.lastPosted}` : "TikTok sample" },
-        ].map((cell) => (
-          <div
-            key={cell.l}
-            style={{
-              background: t.card,
-              border: `1px solid ${t.border}`,
-              borderRadius: 10,
-              padding: "12px 10px",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ fontSize: 18, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>{cell.v}</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", marginTop: 4 }}>{cell.l}</div>
-            <div style={{ fontSize: 9, color: t.textFaint + "99", marginTop: 2 }}>{cell.sub}</div>
-          </div>
-        ))}
-      </div>
-
       {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginBottom: 14 }}>{enrichMsg}</div> : null}
+
+      {(() => {
+        const igF = Number(c.instagramData?.followers) || 0;
+        const ttF = Number(c.tiktokData?.followers) || 0;
+        const ytF = Number(c.youtubeData?.subscribers) || 0;
+        const totalReach = igF + ttF + ytF;
+        const avgViews = c.tiktokData?.avgViews || c.tiktokAvgViews || null;
+        const engRate = c.engagementRate ?? c.tiktokEngRate ?? c.instagramEngRate ?? null;
+        const cpmD = c.cpmData || calculateCreatorCPM(c);
+        const costDisplay = (String(c.costPerVideo || "").trim() || cpmD?.rateDisplay || "").trim() || null;
+        const recentVids = c.tiktokData?.recentVideos || c.tiktokRecentVideos || [];
+        let postFreq = null;
+        if (recentVids.length >= 3) {
+          const dates = recentVids.map((v) => v.date).filter(Boolean).sort();
+          if (dates.length >= 2) {
+            const first = new Date(dates[0]);
+            const last = new Date(dates[dates.length - 1]);
+            const daySpan = Math.max(1, (last - first) / (1000 * 60 * 60 * 24));
+            const perWeek = ((dates.length - 1) / daySpan) * 7;
+            postFreq =
+              perWeek >= 7
+                ? `${Math.round(perWeek / 7)}x/day`
+                : perWeek >= 1
+                  ? `${Math.round(perWeek)}x/week`
+                  : `${Math.max(1, Math.round(perWeek * 4.33))}x/month`;
+          }
+        }
+        const acctCreated = c.tiktokData?.accountCreated;
+        let tenure = null;
+        if (acctCreated) {
+          const created = new Date(acctCreated.length <= 10 ? `${acctCreated}T12:00:00` : acctCreated);
+          if (!Number.isNaN(created.getTime())) {
+            const totalMonths = Math.floor((Date.now() - created.getTime()) / (30.44 * 24 * 60 * 60 * 1000));
+            const y = Math.floor(totalMonths / 12);
+            const m = totalMonths % 12;
+            tenure = y > 0 ? `${y}y ${m}m` : `${m}m`;
+          }
+        }
+        const hasEng = engRate != null && Number.isFinite(Number(engRate));
+        if (totalReach === 0 && !avgViews && !hasEng && !costDisplay && !postFreq && !tenure) {
+          return null;
+        }
+        const stats = [
+          totalReach > 0 ? { value: formatMetricShort(totalReach), label: "Total Reach" } : null,
+          avgViews ? { value: formatMetricShort(avgViews), label: "Avg Views" } : null,
+          engRate != null && Number.isFinite(Number(engRate)) ? { value: `${Number(engRate).toFixed(1)}%`, label: "Eng Rate" } : null,
+          costDisplay ? { value: costDisplay.startsWith("$") ? costDisplay : `$${costDisplay}`, label: "Est Rate" } : null,
+          postFreq ? { value: postFreq, label: "Post Freq" } : null,
+          tenure ? { value: tenure, label: "Creator Since" } : null,
+        ].filter(Boolean);
+        if (stats.length === 0) return null;
+        return (
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            {stats.map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  flex: "1 1 100px",
+                  minWidth: 90,
+                  background: t.card,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       <div id="creator-detail-content" style={{ marginBottom: 20 }}>
         <div style={{ marginBottom: 20 }}>
@@ -5960,201 +6048,208 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           </div>
         </div>
 
-        {(ttD.bio || igD.bio || ttD.bioLink || igD.externalUrl) ? (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Bio & links</div>
-            <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-              {ttD.bio ? (
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ fontWeight: 700, color: t.textFaint }}>TikTok:</span> {ttD.bio}
-                </div>
-              ) : null}
-              {igD.bio ? (
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ fontWeight: 700, color: t.textFaint }}>Instagram:</span> {igD.bio}
-                </div>
-              ) : null}
-              {ttD.bioLink ? (
-                <div style={{ marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, color: t.textFaint }}>TT link:</span>{" "}
-                  <a href={ttD.bioLink} target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>
-                    {String(ttD.bioLink).replace(/^https?:\/\//, "")}
-                  </a>
-                </div>
-              ) : null}
-              {igD.externalUrl ? (
-                <div>
-                  <span style={{ fontWeight: 700, color: t.textFaint }}>IG link:</span>{" "}
-                  <a href={igD.externalUrl} target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>
-                    {String(igD.externalUrl).replace(/^https?:\/\//, "")}
-                  </a>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
+        {(() => {
+          const ttVideos = c.tiktokData?.recentVideos || c.tiktokRecentVideos || [];
+          const igPosts = c.instagramRecentPosts || [];
+          const igReels = c.instagramRecentReels || [];
+          const allContent = [
+            ...ttVideos.map((v) => ({ ...v, platform: "TikTok", type: "video" })),
+            ...igPosts.map((p) => ({ ...p, platform: "Instagram", type: "post" })),
+            ...igReels.map((r) => ({ ...r, platform: "Instagram", type: "reel" })),
+          ]
+            .sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0))
+            .slice(0, 12);
 
-        {ttVideosList.length > 0 ? (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent TikTok</div>
-            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-              {ttVideosList.slice(0, 12).map((v) => (
-                <a
-                  key={v.id || v.url || v.caption}
-                  href={v.url || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ flex: "0 0 auto", width: 120, textDecoration: "none", color: t.text }}
-                >
-                  <div
-                    style={{
-                      width: 120,
-                      height: 160,
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      background: t.cardAlt,
-                      border: `1px solid ${t.border}`,
-                      marginBottom: 6,
-                    }}
-                  >
-                    {v.cover ? (
-                      <img src={v.cover} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                    ) : (
-                      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: t.textFaint, padding: 6, textAlign: "center" }}>
-                        No thumbnail
+          if (allContent.length === 0) return null;
+
+          return (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                Recent Content ({allContent.length})
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+                {allContent.map((item, i) => {
+                  const cover = item.cover || item.thumbnail_url || item.image_url || item.display_url || item.imageUrl || "";
+                  const views = item.views || item.view_count || item.video_view_count || 0;
+                  const likes = item.likes || item.like_count || item.diggCount || 0;
+                  const caption = item.caption || item.desc || item.text || "";
+                  const date = item.date || item.taken_at || "";
+                  const url =
+                    item.url ||
+                    (item.shortcode ? `https://instagram.com/p/${item.shortcode}` : "") ||
+                    (item.id && item.platform === "TikTok" ? `https://www.tiktok.com/video/${item.id}` : "");
+                  const platformColor = item.platform === "TikTok" ? t.green : "#E1306C";
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        background: t.card,
+                        border: `1px solid ${t.border}`,
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        cursor: url ? "pointer" : "default",
+                      }}
+                      onClick={() => url && window.open(url, "_blank")}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === " ") && url) {
+                          e.preventDefault();
+                          window.open(url, "_blank");
+                        }
+                      }}
+                      role={url ? "link" : undefined}
+                      tabIndex={url ? 0 : undefined}
+                    >
+                      {cover ? (
+                        <img
+                          src={cover}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          style={{ width: "100%", height: 160, objectFit: "cover", display: "block", background: t.cardAlt }}
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: 160,
+                            background: t.cardAlt,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 24,
+                            color: t.textFaint,
+                          }}
+                        >
+                          ▶
+                        </div>
+                      )}
+                      <div style={{ padding: "8px 10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: platformColor }}>
+                            {item.platform} {item.type !== "video" ? item.type : ""}
+                          </span>
+                          {date ? (
+                            <span style={{ fontSize: 9, color: t.textFaint }}>
+                              {typeof date === "string" && date.length > 5 ? date.substring(5) : date}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: t.text }}>{views > 0 ? `${formatMetricShort(views)} views` : "—"}</div>
+                        {likes > 0 ? <div style={{ fontSize: 10, color: t.textMuted }}>{formatMetricShort(likes)} likes</div> : null}
+                        {caption ? (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: t.textFaint,
+                              marginTop: 4,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {caption.substring(0, 60)}
+                          </div>
+                        ) : null}
                       </div>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700 }}>{formatMetricShort(v.views)} views</div>
-                  <div style={{ fontSize: 10, color: t.textFaint }}>{v.likes != null ? `${formatMetricShort(v.likes)} likes` : ""}</div>
-                  <div style={{ fontSize: 9, color: t.textFaint }}>{v.date || "—"}</div>
-                </a>
-              ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ) : null}
+          );
+        })()}
 
-        {igPostsGallery.length > 0 ? (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent Instagram</div>
-            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-              {igPostsGallery.slice(0, 12).map((p) => (
-                <a
-                  key={p.id || p.url}
-                  href={p.url || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ flex: "0 0 auto", width: 120, textDecoration: "none", color: t.text }}
-                >
-                  <div
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      background: t.cardAlt,
-                      border: `1px solid ${t.border}`,
-                      marginBottom: 6,
-                    }}
-                  >
-                    {p.imageUrl ? (
-                      <img src={p.imageUrl} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                    ) : (
-                      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: t.textFaint }}>—</div>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700 }}>
-                    {formatMetricShort(p.likes)} likes · {formatMetricShort(p.comments)} replies
-                  </div>
-                  <div style={{ fontSize: 9, color: t.textFaint }}>{p.date || "—"}</div>
-                </a>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        {(() => {
+          const ttBio = c.tiktokData?.bio;
+          const igBio = c.instagramData?.bio;
+          const ttBioLink = c.tiktokData?.bioLink;
+          const igExtUrl = c.instagramData?.externalUrl;
+          const isCommerce = c.tiktokData?.isCommerceUser;
+          const isBusiness = c.instagramData?.isBusiness;
+          const igCategory = c.instagramData?.category;
 
-        {sparkHeights.length > 1 ? (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>View trend (TikTok sample)</div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                gap: 4,
-                height: 56,
-                padding: "8px 10px",
-                background: t.cardAlt,
-                borderRadius: 8,
-                border: `1px solid ${t.border}`,
-              }}
-            >
-              {[...sparkHeights].reverse().map((h, i) => (
-                <div
-                  key={i}
-                  title="Relative views vs. best in sample"
-                  style={{
-                    flex: 1,
-                    minWidth: 3,
-                    height: `${Math.max(4, Math.round((h / 100) * 44))}px`,
-                    background: t.green + "99",
-                    borderRadius: 2,
-                  }}
-                />
-              ))}
+          if (!ttBio && !igBio && !ttBioLink && !igExtUrl) return null;
+
+          return (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Bios & Links</div>
+              <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
+                {ttBio ? (
+                  <div style={{ marginBottom: 10 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: t.green }}>TikTok:</span>
+                    <span style={{ fontSize: 12, color: t.text, marginLeft: 6 }}>{ttBio}</span>
+                    {isCommerce ? (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: t.green,
+                          marginLeft: 6,
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          background: `${t.green}15`,
+                        }}
+                      >
+                        Commerce ✓
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {igBio ? (
+                  <div style={{ marginBottom: 10 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#E1306C" }}>Instagram:</span>
+                    <span style={{ fontSize: 12, color: t.text, marginLeft: 6 }}>{igBio}</span>
+                    {isBusiness ? (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: "#E1306C",
+                          marginLeft: 6,
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          background: "#E1306C15",
+                        }}
+                      >
+                        Business ✓
+                      </span>
+                    ) : null}
+                    {igCategory ? <span style={{ fontSize: 9, color: t.textFaint, marginLeft: 4 }}>({igCategory})</span> : null}
+                  </div>
+                ) : null}
+                {ttBioLink || igExtUrl ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {ttBioLink ? (
+                      <a
+                        href={ttBioLink.startsWith("http") ? ttBioLink : `https://${ttBioLink}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: t.blue, textDecoration: "none" }}
+                      >
+                        🔗 {ttBioLink.replace(/^https?:\/\//, "").substring(0, 40)}
+                      </a>
+                    ) : null}
+                    {igExtUrl && igExtUrl !== ttBioLink ? (
+                      <a
+                        href={igExtUrl.startsWith("http") ? igExtUrl : `https://${igExtUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: t.blue, textDecoration: "none" }}
+                      >
+                        🔗 {igExtUrl.replace(/^https?:\/\//, "").substring(0, 40)}
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <div style={{ fontSize: 10, color: t.textFaint, marginTop: 6 }}>Older ← → Newer (relative heights)</div>
-          </div>
-        ) : null}
+          );
+        })()}
       </div>
-
-      {(ai.partnershipNotes || ai.outreachDM || ai.outreachEmail || ai.competitorMentions || ai.brandSafety) ? (
-        <div style={{ marginBottom: 20, padding: 14, background: t.cardAlt, borderRadius: 10, border: `1px solid ${t.border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em" }}>Partnership & outreach</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 8px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
-          </div>
-          {ai.partnershipNotes ? (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.green, marginBottom: 4 }}>Partnership notes</div>
-              <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{ai.partnershipNotes}</div>
-            </div>
-          ) : null}
-          {ai.outreachDM ? (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: t.text }}>Suggested DM</span>
-                <button type="button" onClick={() => void navigator.clipboard.writeText(String(ai.outreachDM))} style={{ ...S.btnS, fontSize: 11, padding: "4px 10px" }}>
-                  Copy
-                </button>
-              </div>
-              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{ai.outreachDM}</div>
-            </div>
-          ) : null}
-          {ai.outreachEmail ? (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: t.text }}>Suggested email</span>
-                <button type="button" onClick={() => void navigator.clipboard.writeText(String(ai.outreachEmail))} style={{ ...S.btnS, fontSize: 11, padding: "4px 10px" }}>
-                  Copy
-                </button>
-              </div>
-              <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>{ai.outreachEmail}</div>
-            </div>
-          ) : null}
-          {ai.competitorMentions ? (
-            <div style={{ marginBottom: 8, fontSize: 12, color: t.textMuted }}>
-              <span style={{ fontWeight: 700, color: t.orange }}>Competitor check: </span>
-              {ai.competitorMentions}
-            </div>
-          ) : null}
-          {ai.brandSafety ? (
-            <div style={{ fontSize: 12, color: t.textMuted }}>
-              <span style={{ fontWeight: 700, color: t.blue }}>Brand safety: </span>
-              {ai.brandSafety}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
 
       {Number.isFinite(ib) ? (
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
@@ -6259,6 +6354,88 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                   </div>
                 ))
               )}
+            </div>
+          ) : null}
+
+          {(ai.outreachDM || ai.outreachEmail) ? (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Suggested Outreach</div>
+              {ai.outreachDM ? (
+                <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#E1306C" }}>Instagram DM</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(ai.outreachDM);
+                      }}
+                      style={{
+                        fontSize: 10,
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        border: `1px solid ${t.border}`,
+                        background: t.cardAlt,
+                        color: t.textMuted,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12, color: t.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{ai.outreachDM}</div>
+                </div>
+              ) : null}
+              {ai.outreachEmail ? (
+                <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: t.blue }}>Email</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(ai.outreachEmail);
+                      }}
+                      style={{
+                        fontSize: 10,
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        border: `1px solid ${t.border}`,
+                        background: t.cardAlt,
+                        color: t.textMuted,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12, color: t.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{ai.outreachEmail}</div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {(ai.competitorMentions || ai.brandSafety) ? (
+            <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+              {ai.competitorMentions ? (
+                <div style={{ flex: "1 1 200px", background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", marginBottom: 6 }}>Competitor Check</div>
+                  <div style={{ fontSize: 12, color: ai.competitorMentions === "None detected" ? t.green : t.orange }}>{ai.competitorMentions}</div>
+                </div>
+              ) : null}
+              {ai.brandSafety ? (
+                <div style={{ flex: "1 1 200px", background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", marginBottom: 6 }}>Brand Safety</div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: ai.brandSafety === "Safe" ? t.green : ai.brandSafety === "Review" ? t.orange : t.red,
+                    }}
+                  >
+                    {ai.brandSafety === "Safe" ? "✓ " : ai.brandSafety === "Concern" ? "⚠️ " : "🔍 "}
+                    {ai.brandSafety}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -7686,6 +7863,7 @@ export default function App() {
   }, []);
 
   const [bulkEnrichProgress, setBulkEnrichProgress] = useState(null);
+  const bulkEnrichAbortRef = useRef(false);
   const [bulkStaleWindow, setBulkStaleWindow] = useState("7d");
   const [creditsUsed, setCreditsUsed] = useState(0);
   const bumpScrapeCredit = useCallback(() => {
@@ -7710,11 +7888,13 @@ export default function App() {
     ) {
       return;
     }
+    bulkEnrichAbortRef.current = false;
     let done = 0;
     let fail = 0;
     let topDiscovery = null;
     const clean = (h) => String(h || "").replace(/^@/, "").trim().toLowerCase();
     for (let i = 0; i < stale.length; i++) {
+      if (bulkEnrichAbortRef.current) break;
       const cr = stale[i];
       const ch = clean(cr.handle);
       setBulkEnrichProgress({
@@ -7759,12 +7939,20 @@ export default function App() {
           lastEnriched: new Date().toISOString(),
         };
         const mergedCreator = { ...cr, ...platformUpdate, ...mergePatch };
-        updateCreator(cr.id, {
+        const bulkFull = {
           ...platformUpdate,
           ...mergePatch,
           ...enrichPatchWithCpm(cr, mergePatch, mergedCreator),
           ...(!cr.name?.trim() && payload.nickname ? { name: payload.nickname } : {}),
-        });
+        };
+        updateCreator(cr.id, bulkFull);
+        const hasNotesAfter = String(bulkFull.notes ?? cr.notes ?? "").trim();
+        if (!hasNotesAfter && payload.aiAnalysis) {
+          const autoNotes = buildAutoNotesFromAi(payload.aiAnalysis);
+          if (autoNotes.trim()) {
+            updateCreator(cr.id, { notes: autoNotes.trim() });
+          }
+        }
         const ib = payload.aiAnalysis?.ibScore ?? cr.ibScore;
         const fol = tt.followers;
         setBulkEnrichProgress({
@@ -9432,19 +9620,28 @@ export default function App() {
             }
             if (col.key === "avatar") {
               const letter = String(c.handle || "?").replace(/^@/, "").charAt(0).toUpperCase() || "?";
-              const src = (c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl || "").trim();
+              const attempts = buildAvatarSrcAttempts(c);
               return (
                 <div key={col.key} style={{ ...base, display: "flex", alignItems: "center", justifyContent: "center", padding: "6px 4px" }}>
-                  {src ? (
+                  {attempts.length ? (
                     <div style={{ width: 28, height: 28, position: "relative", flexShrink: 0 }}>
                       <img
-                        src={src}
+                        src={attempts[0]}
                         alt=""
                         referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        data-av-idx="0"
                         style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", background: t.cardAlt, display: "block" }}
                         onError={(e) => {
-                          e.target.style.display = "none";
-                          const el = e.target.nextSibling;
+                          const img = e.currentTarget;
+                          const idx = Number(img.dataset.avIdx || 0) + 1;
+                          if (idx < attempts.length) {
+                            img.dataset.avIdx = String(idx);
+                            img.src = attempts[idx];
+                            return;
+                          }
+                          img.style.display = "none";
+                          const el = img.nextSibling;
                           if (el) el.style.display = "flex";
                         }}
                       />
@@ -9959,10 +10156,56 @@ export default function App() {
             ) : null}
 
             {bulkEnrichProgress ? (
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>
-                Enriching {bulkEnrichProgress.cur} of {bulkEnrichProgress.total} — {bulkEnrichProgress.handle}
-                {bulkEnrichProgress.line ? ` (${bulkEnrichProgress.line})` : ""}
-                {bulkEnrichProgress.skipped != null ? ` · skipped ${bulkEnrichProgress.skipped} (< 24h)` : ""}
+              <div
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 50,
+                  background: t.card,
+                  borderBottom: `2px solid ${t.green}`,
+                  padding: "12px 20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                  marginBottom: 12,
+                  borderRadius: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
+                    Enriching {bulkEnrichProgress.cur}/{bulkEnrichProgress.total} — @
+                    {String(bulkEnrichProgress.handle || "").replace(/^@/, "")}
+                  </div>
+                  <div style={{ fontSize: 11, color: t.textMuted }}>
+                    {bulkEnrichProgress.done ?? 0} done · {bulkEnrichProgress.fail ?? 0} failed · {bulkEnrichProgress.skipped ?? 0} skipped
+                  </div>
+                  {bulkEnrichProgress.line ? <div style={{ fontSize: 11, color: t.green }}>{bulkEnrichProgress.line}</div> : null}
+                </div>
+                <div style={{ width: 200, height: 6, borderRadius: 3, background: t.border, overflow: "hidden", flexShrink: 0 }}>
+                  <div
+                    style={{
+                      width: `${bulkEnrichProgress.total ? (bulkEnrichProgress.cur / bulkEnrichProgress.total) * 100 : 0}%`,
+                      height: "100%",
+                      background: t.green,
+                      borderRadius: 3,
+                      transition: "width 0.3s",
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.green, flexShrink: 0 }}>
+                  {bulkEnrichProgress.total ? Math.round((bulkEnrichProgress.cur / bulkEnrichProgress.total) * 100) : 0}%
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    bulkEnrichAbortRef.current = true;
+                  }}
+                  style={{ ...S.btnS, flexShrink: 0, fontSize: 12, padding: "6px 12px" }}
+                >
+                  Cancel
+                </button>
               </div>
             ) : null}
 

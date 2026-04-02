@@ -482,6 +482,52 @@ app.post("/api/reformat-all", async (req, res) => {
   }
 });
 
+// ── Avatar image proxy (bypasses some CDN hotlink / referrer blocks) ──
+app.get("/api/avatar-proxy", async (req, res) => {
+  const raw = req.query.url;
+  if (!raw || typeof raw !== "string") {
+    return res.status(400).end();
+  }
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return res.status(400).end();
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return res.status(400).end();
+  }
+  const host = u.hostname.toLowerCase();
+  const allowed =
+    /tiktokcdn|tiktok|instagram|cdninstagram|fbcdn|facebook|googleusercontent|ggpht|ytimg|youtube|twimg|snapchat|linkedin/i;
+  if (!allowed.test(host)) {
+    return res.status(403).json({ error: "host not allowed" });
+  }
+  try {
+    const r = await fetch(raw, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; IntakeAvatar/1.0)",
+        Accept: "image/*,*/*;q=0.8",
+      },
+      redirect: "follow",
+    });
+    if (!r.ok) {
+      return res.status(502).end();
+    }
+    const ct = r.headers.get("content-type") || "image/jpeg";
+    if (!ct.startsWith("image/")) {
+      return res.status(415).end();
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(buf);
+  } catch (e) {
+    console.error("[avatar-proxy]", e.message);
+    res.status(502).end();
+  }
+});
+
 // ── Google Sheets (Service Account — read + write; API key fallback for read) ──
 const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID || "1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak";
 const sheetsCache = new Map();
