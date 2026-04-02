@@ -34,8 +34,6 @@ const CREATOR_COLUMNS = [
   { key: "notes", label: "Notes", width: null, editable: true },
 ];
 
-const CREATOR_GRID_TEMPLATE = CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr" : `${c.width}px`)).join(" ");
-
 function buildCreatorGridTemplate(colWidths) {
   return CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr" : `${colWidths[c.key] ?? c.width}px`)).join(" ");
 }
