@@ -567,6 +567,22 @@ function getSheetsClient() {
     }
   }
 
+  // Hardcoded fallback
+  if (!creds) {
+    console.log("[sheets] Using hardcoded service account credentials");
+    creds = {
+      type: "service_account",
+      project_id: "intake-creators",
+      private_key_id: "6a98410b9096a7a04d1cd3b29220fa44ae2bf728",
+      private_key:
+        "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCxnyxyNt3xiA0k\nRvthb6mEMMPjiRMLSvxUWdKASxoVOnbP1C9xoKMLzJ9l26xqxMhcPxADu/PuOc0Z\nekNLFGTjiH/4EFw7L6TTeewJEYf/IskS12gO3/0An91SoktyJFp/LEOYfBx1mLrk\niPlLXwlOzdjdGq1mmE0WyiUqeO6XEHKQM9fZYE+FCe9XyAK2wM9LCJoBR6sOe1jy\n+fB4NNTaBXy/lHWipatRPcEdsjm9NoD+DrwYZz1slhrhPHEQ/HoSwLchQFpq98hM\n9I4Wsbg718SGuOrpVElmOrsTh3FT12/uoGUF8j3exqFb1yCBQdMFEgmN8eFYYeVS\nwY8jHNEdAgMBAAECggEACIMhEWktOj/Dp3cqYWlFRbNDlAIz8jDaBl3Wn3TZ72YB\nnySjUG37GlvoUKyWJvi+xGL2TMODZWmKOXwZQP4ddqUKQvRfwytdmg/n/qhDLPg5\nDCjcEQhtesvugqEJ/hKdbqZLqAFcqMsUu9KPpevMSaVGTRRT9ox6d0rhPJeWkZEx\nAwioi3fEvts6w5V4XhArqpUbrFQUivmkQX8GywHHtZPIc+mgv1nL0XRdgrOUyMbZ\nSInNzi29MUQVY+IvdzSjBVvxgU10y1LNgvDhI2/7A52bbrfCKrYgU8Jdobi22jeW\n7D5BdTc9fi8A7+kNBOXQ6bH22Ce3F8vHl9sPjpoCgQKBgQDeyEHU+GsBt9IVl7mW\n2n7ea2P+F59uOILiHRm2cAk5wKEMJMF9Y+Mlp2kouFU/vayDvjWQwKCEBkMzimE6\noMomB2HQK6wDas6cSBkutygtGVZvXkAcB8yzvk+0IUQFRkwXklyNWz9dCX3YeP8g\n9WxKzJbR0PBJK+ZYmaFhO8CynQKBgQDMGxySsQFZkczMf/NdP0SNBkv3otiFnnfY\nIDWqXoX7X4gZAdhbTQpwsfIvnEXEmdM4afYJSzhhAKjNN+Br0LcreTpGXbshXXsf\nXXyXXVOrfHDSt4Z9nmc+H9fXMfmw5JxuKEnRJfxSR58iRJg5GI2DiG51VEMWVCWw\nVOXI+20QgQKBgEbLaHAfCRIgsff+oRFZGZvgkIP8ScOi3aSxDqy06ZmapxLO01Xf\nWh1rF7XC7gQ1aA7tcOQw8lFCFDTaso8I7XQsQF8AocbsN//dwXLg7Tl3pcn6L3E4\n4Un1Hirlr1HlxuRutE6PQpF0JLOXr6tvkhwq63p9ZP47nxVkrK3TaSbZAoGBAII8\ngnzvySa4K/AJbOaBKmK6M9st4+9O8LXNx7CQY/nEOXmLfdy0Sgci5KCQnMwYQ3jp\n0/6WKsFqxEs+bksdgOOSlSa1RGTD235mDswe1vbDjtJGHOEnJEW11+oOj37aQR7h\nQkjcbiaqYNZi4qb8DcByW9kuDSjARNRBN+aI2E0BAoGAF0SM914+Q5g5ItUJUM2e\nglJ88FUpsrVlKrrYKuPAbv3U6u/Q8OsdVrXQiDWIhN7zqFqOI/QsAJPxLHtF7Zys\nVGC4YnrpA8NzqF82n5yTEjPuPsigSdXsShp/FMtDhY4+D5z6MHa57QQ+jz6nIdt1\nvEVeqlrH9xx2ZWSJmaDswjU=\n-----END PRIVATE KEY-----\n",
+      client_email: "channel-pipline@intake-creators.iam.gserviceaccount.com",
+      client_id: "102885946467404793152",
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+    };
+  }
+
   if (!creds) {
     console.warn("[sheets] No service account available — writes disabled, reads use API key");
     return null;
