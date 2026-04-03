@@ -2489,6 +2489,30 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
     }));
   }
 
+  // === Store thumbnails NOW while CDN URLs are still fresh ===
+  const _thumbVideos = [
+    ...ttRecentVideos.map(v => ({ id: v.id, cover: v.cover })),
+    ...igRecentPosts.map(p => ({ id: p.id, cover: p.imageUrl })),
+    ...igRecentReels.map(r => ({ id: r.id, cover: r.coverUrl })),
+  ].filter(v => v.cover && v.cover.startsWith("http") && !v.cover.includes("supabase.co"));
+
+  if (_thumbVideos.length > 0) {
+    console.log("[enrich] Storing " + _thumbVideos.length + " thumbnails while CDN URLs are fresh...");
+    fetch("/api/store-thumbnails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creatorHandle: cleanHandle, videos: _thumbVideos }),
+    }).then(r => r.ok ? r.json() : null).then(data => {
+      if (!data?.results) { console.warn("[enrich] Thumbnail storage returned no results"); return; }
+      const _urlMap = {};
+      data.results.forEach((r, i) => { if (r.url && _thumbVideos[i]) _urlMap[_thumbVideos[i].id] = r.url; });
+      ttRecentVideos.forEach(v => { if (_urlMap[v.id]) { v.cover = _urlMap[v.id]; v.coverUrl = _urlMap[v.id]; } });
+      igRecentPosts.forEach(p => { if (_urlMap[p.id]) p.imageUrl = _urlMap[p.id]; });
+      igRecentReels.forEach(r => { if (_urlMap[r.id]) r.coverUrl = _urlMap[r.id]; });
+      console.log("[enrich] Stored " + Object.keys(_urlMap).length + " permanent thumbnails (early pipeline)");
+    }).catch(e => console.error("[enrich] Early thumbnail storage failed:", e.message));
+  }
+
   // YouTube — try every possible response structure
   let youtubeData = null;
   if (ytData) {
@@ -7098,54 +7122,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       }
       updateCreator(c.id, fullUpdate);
 
-      // Store thumbnails permanently
-      const allVideos = [
-        ...(payload.ttData?.recentVideos || []).map(v => ({ id: v.id, cover: v.cover || v.coverUrl })),
-        ...(payload.instagramRecentPosts || []).map(p => ({ id: p.id, cover: p.imageUrl })),
-        ...(payload.instagramRecentReels || []).map(r => ({ id: r.id, cover: r.coverUrl })),
-      ].filter(v => v.cover && !v.cover.startsWith("https://qaokxufufwbilfultgrk.supabase.co"));
-
-      if (allVideos.length > 0) {
-        console.log("[enrich] Attempting to store", allVideos.length, "thumbnails for", cleanHandle);
-        try {
-          const thumbRes = await fetch("/api/store-thumbnails", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ creatorHandle: cleanHandle, videos: allVideos }),
-          });
-          if (thumbRes.ok) {
-            const thumbData = await thumbRes.json();
-            console.log("[enrich] Thumbnail storage response:", thumbData);
-            const thumbResults = thumbData.results;
-            const urlMap = {};
-            thumbResults.forEach((r, i) => { if (r.url && allVideos[i]) urlMap[allVideos[i].id] = r.url; });
-
-            if (Object.keys(urlMap).length > 0) {
-              const patchTtVideos = (fullUpdate.tiktokData?.recentVideos || []).map(v => {
-                if (urlMap[v.id]) return { ...v, cover: urlMap[v.id], coverUrl: urlMap[v.id] };
-                return v;
-              });
-              const patchIgPosts = (fullUpdate.instagramRecentPosts || payload.instagramRecentPosts || []).map(p => {
-                if (urlMap[p.id]) return { ...p, imageUrl: urlMap[p.id] };
-                return p;
-              });
-              const patchIgReels = (fullUpdate.instagramRecentReels || payload.instagramRecentReels || []).map(r => {
-                if (urlMap[r.id]) return { ...r, coverUrl: urlMap[r.id] };
-                return r;
-              });
-
-              updateCreator(c.id, {
-                tiktokData: { ...(fullUpdate.tiktokData || c.tiktokData), recentVideos: patchTtVideos },
-                instagramRecentPosts: patchIgPosts,
-                instagramRecentReels: patchIgReels,
-              });
-              console.log("[enrich] Stored " + Object.keys(urlMap).length + " permanent thumbnails");
-            }
-          }
-        } catch (e) {
-          console.error("[enrich] Thumbnail storage failed:", e.message);
-        }
-      }
+      // Thumbnails already stored inside pipeline — no need to re-store here
 
       const hasNotesAfter = String(fullUpdate.notes ?? c.notes ?? "").trim();
       if (!hasNotesAfter && payload.aiAnalysis) {
@@ -10323,26 +10300,7 @@ export default function App() {
         }
         updateCreator(cr.id, bulkFull);
 
-        // Store thumbnails for bulk enrich
-        const bulkVideos = [
-          ...(payload.ttData?.recentVideos || []).map(v => ({ id: v.id, cover: v.cover || v.coverUrl })),
-          ...(payload.instagramRecentPosts || []).map(p => ({ id: p.id, cover: p.imageUrl })),
-        ].filter(v => v.cover && !v.cover.includes("supabase.co"));
-        if (bulkVideos.length > 0) {
-          fetch("/api/store-thumbnails", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ creatorHandle: cr.handle?.replace("@", "") || "unknown", videos: bulkVideos }),
-          }).then(r => r.ok ? r.json() : null).then(data => {
-            if (!data?.results) return;
-            const urlMap = {};
-            data.results.forEach((r, i) => { if (r.url && bulkVideos[i]) urlMap[bulkVideos[i].id] = r.url; });
-            if (Object.keys(urlMap).length > 0) {
-              const patchTt = (platformUpdate.tiktokData?.recentVideos || []).map(v => urlMap[v.id] ? { ...v, cover: urlMap[v.id], coverUrl: urlMap[v.id] } : v);
-              updateCreator(cr.id, { tiktokData: { ...platformUpdate.tiktokData, recentVideos: patchTt } });
-            }
-          }).catch(() => {});
-        }
+        // Thumbnails already stored inside pipeline — no need to re-store here
 
         if (payload.discoveredTwitterHandle && !cr.twitterHandle) {
           updateCreator(cr.id, { twitterHandle: payload.discoveredTwitterHandle });
