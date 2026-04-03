@@ -6961,30 +6961,26 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
 class CreatorDetailErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, info: null };
+    this.state = { error: null, errorInfo: null };
   }
   static getDerivedStateFromError(error) {
-    return { error: error.message };
+    return { error: error.message || String(error) };
   }
-  componentDidCatch(error, info) {
-    console.error("[CreatorDetail crash]", error, info);
+  componentDidCatch(error, errorInfo) {
+    console.error("[CreatorDetail] Crash:", error, errorInfo);
+    this.setState({ errorInfo });
   }
   render() {
     if (this.state.error) {
+      const t = this.props.t || { card: "#fff", border: "#e2ded4", text: "#111", textMuted: "#888", green: "#00b87d", red: "#ef4444", shadow: "0 2px 8px rgba(0,0,0,0.04)" };
       return (
-        <div style={{ padding: 40, maxWidth: 800, margin: "0 auto" }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#ff4444", marginBottom: 12 }}>Something went wrong</div>
-          <pre style={{ background: "#1a1a1a", padding: 16, borderRadius: 8, color: "#ff8800", overflow: "auto", fontSize: 12, marginBottom: 16 }}>{this.state.error}</pre>
-          <button
-            type="button"
-            onClick={() => {
-              this.setState({ error: null });
-              window.history.back();
-            }}
-            style={{ padding: "10px 20px", background: "#00b87d", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#fff" }}
-          >
-            ← Go Back
-          </button>
+        <div style={{ maxWidth: 700, margin: "40px auto", padding: "0 24px" }}>
+          <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24, boxShadow: t.shadow }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: t.red || "#ef4444", marginBottom: 8 }}>Creator profile crashed</div>
+            <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>This is a bug — the error has been logged. Try going back and clicking the creator again.</div>
+            <pre style={{ background: "#111", color: "#f97316", padding: 16, borderRadius: 8, fontSize: 11, overflow: "auto", maxHeight: 200, marginBottom: 16 }}>{this.state.error}</pre>
+            <button onClick={() => { this.setState({ error: null, errorInfo: null }); window.history.back(); }} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Go back</button>
+          </div>
         </div>
       );
     }
@@ -7010,6 +7006,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const [expandedBar, setExpandedBar] = useState(null);
   const [expandedRate, setExpandedRate] = useState(null);
   const [igPullBusy, setIgPullBusy] = useState(false);
+
+  useEffect(() => {
+    if (!enriching) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = "Enrichment is still running. Data may be lost if you leave.";
+      return e.returnValue;
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [enriching]);
 
   const campaignNames = useMemo(() => {
     const s = new Set();
@@ -12676,7 +12683,7 @@ export default function App() {
               <div style={{ color: t.textMuted }}>Creator not found.</div>
             </div>
           ) : (
-            <CreatorDetailErrorBoundary>
+            <CreatorDetailErrorBoundary t={t}>
               <CreatorDetailView
                 key={detailCreator.id}
                 c={detailCreator}
