@@ -1756,7 +1756,7 @@ function calculateCreatorCPM(creator, knowledge) {
 
 function calculatePlatformRates(creator, baseCpmData) {
   if (!baseCpmData) return null;
-  const baseRate = baseCpmData.rawRate || ((baseCpmData.rateLow + baseCpmData.rateHigh) / 2);
+  const baseRate = (baseCpmData.rateLow + baseCpmData.rateHigh) / 2;
   const igFollowers = Number(creator.instagramData?.followers) || 0;
   const ttFollowers = Number(creator.tiktokData?.followers) || 0;
   const ytSubscribers = Number(creator.youtubeData?.subscribers) || 0;
@@ -1765,11 +1765,16 @@ function calculatePlatformRates(creator, baseCpmData) {
   const hasIntakeContent = baseCpmData.hasIntakeContent || false;
   const hasShop = creator.tiktokData?.isCommerceUser || creator.tiktokShopData?.hasShop;
 
-  const buildRate = (multiplier, ceiling, floor) => {
+  const buildRate = (multiplier, platformCeiling, platformFloor) => {
+    const cap = platformCeiling || 700;
+    const floor = platformFloor || 50;
     const raw = Math.round(baseRate * multiplier);
-    let low = Math.max(floor || 50, Math.round(raw * 0.8));
-    let high = Math.min(ceiling || 700, Math.round(raw * 1.2));
-    if (low >= high) high = low + 50;
+    let low = Math.max(floor, Math.round(raw * 0.85));
+    let high = Math.max(low + 25, Math.min(cap, Math.round(raw * 1.15)));
+    low = Math.min(low, cap - 25);
+    high = Math.min(high, cap);
+    if (low >= high) low = high - 25;
+    if (low < floor) low = floor;
     return { low, high, display: "$" + low.toLocaleString() + "-" + high.toLocaleString() };
   };
 
