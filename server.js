@@ -265,7 +265,7 @@ app.post("/api/reformat", async (req, res) => {
     // Run FFmpeg
     console.log("[reformat] Processing...");
     await new Promise((ok, no) => {
-      execFile(FFMPEG, ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", out],
+      execFile(FFMPEG, ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "2", "-y", out],
         { timeout: 300000, maxBuffer: 10485760 },
         (e, _, stderr) => e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok());
     });
@@ -394,10 +394,9 @@ app.post("/api/reformat-all", async (req, res) => {
   const ts = Date.now();
 
   try {
-    console.log(`[batch] Processing ${formats.length} formats from ${inp.split("/").pop()}...`);
+    console.log(`[batch] Processing ${formats.length} formats IN PARALLEL from ${inp.split("/").pop()}...`);
 
-    for (let i = 0; i < formats.length; i++) {
-      const fmt = formats[i];
+    const results = await Promise.all(formats.map((fmt, i) => {
       const outPath = path.join(tmp, `${prefix}_${fmt.name}_${ts}_${i}.mp4`);
       const w = fmt.width;
       const h = fmt.height;
@@ -414,25 +413,29 @@ app.post("/api/reformat-all", async (req, res) => {
         ];
       }
 
-      console.log(`[batch] ${fmt.name} (${w}x${h})...`);
+      console.log(`[batch] Starting ${fmt.name} (${w}x${h})...`);
       const formatTimeout = 120000;
-      await Promise.race([
+
+      return Promise.race([
         new Promise((ok, no) => {
           execFile(
             FFMPEG,
-            ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", outPath],
+            ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "2", "-y", outPath],
             { timeout: formatTimeout, maxBuffer: 10485760 },
-            (e, _, stderr) => (e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok()),
+            (e, _, stderr) => {
+              if (e) return no(new Error(stderr?.substring(0, 200) || e.message));
+              console.log(`[batch] ${fmt.name} done.`);
+              ok({ path: outPath, name: `${prefix}_${fmt.name}.mp4` });
+            },
           );
         }),
         new Promise((_, no) =>
           setTimeout(() => no(new Error(`Timed out processing ${fmt.name} (${formatTimeout / 1000}s)`)), formatTimeout),
         ),
       ]);
+    }));
 
-      outputFiles.push({ path: outPath, name: `${prefix}_${fmt.name}.mp4` });
-      console.log(`[batch] ${fmt.name} done.`);
-    }
+    outputFiles.push(...results);
 
     const zipName = `${prefix}_all_formats.zip`;
     res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
