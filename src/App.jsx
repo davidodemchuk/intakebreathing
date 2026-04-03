@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.11.0";
+const APP_VERSION = "6.12.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -1480,6 +1480,18 @@ function pickCpmTierFromKnowledge(totalFollowers, tiers) {
   return { label: last?.label || "Tier", cpm: Number(last?.cpm) || 0 };
 }
 
+function medianOf(arr) {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
+}
+
+function fmtDollar(n) {
+  if (n == null || !Number.isFinite(n)) return "$0";
+  return "$" + Math.round(n).toLocaleString();
+}
+
 function calculateCreatorCPM(creator, knowledge) {
   const k = mergeAiKnowledge(knowledge);
   const cpmCap = k.cpmCap ?? 25;
@@ -1488,37 +1500,42 @@ function calculateCreatorCPM(creator, knowledge) {
   const intakeKeywords = Array.isArray(k.alignmentKeywords) && k.alignmentKeywords.length ? k.alignmentKeywords.map((x) => String(x).toLowerCase()) : getDefaultAiKnowledge().alignmentKeywords.map((x) => x.toLowerCase());
   const competitorKeywords = Array.isArray(k.competitorKeywords) && k.competitorKeywords.length ? k.competitorKeywords.map((x) => String(x).toLowerCase()) : getDefaultAiKnowledge().competitorKeywords.map((x) => x.toLowerCase());
 
-  // ─── Step 1: Get actual view data ───
-  const ttAvgViews = creator.tiktokData?.avgViews || creator.tiktokAvgViews || 0;
+  // ─── Step 1: Get actual view data (MEDIAN, not mean) ───
+  const ttVideosArr = creator.tiktokData?.recentVideos || creator.tiktokRecentVideos || [];
+  const ttViewCounts = ttVideosArr.map(v => v.views || 0).filter(v => v > 0);
+  const ttMedianViews = medianOf(ttViewCounts);
+  const ttMeanViews = ttViewCounts.length > 0 ? Math.round(ttViewCounts.reduce((a, b) => a + b, 0) / ttViewCounts.length) : 0;
+  const ttAvgViews = ttMedianViews || creator.tiktokData?.avgViews || creator.tiktokAvgViews || 0;
+
   const igRecentPosts = creator.instagramRecentPosts || [];
   const igRecentReels = creator.instagramRecentReels || [];
 
-  // Instagram: use reel views if available, otherwise estimate from likes
+  // Instagram: use median reel views if available, otherwise estimate from median likes
+  const igReelViews = igRecentReels.map(r => r.video_view_count || r.view_count || r.views || r.playCount || 0).filter(v => v > 0);
+  const igPostLikes = igRecentPosts.map(p => p.likes || p.like_count || 0).filter(v => v > 0);
+  const igMedianReelViews = medianOf(igReelViews);
+  const igMedianLikes = medianOf(igPostLikes);
+
   let igAvgViews = 0;
-  if (igRecentReels.length > 0) {
-    const reelViews = igRecentReels.map((r) => r.video_view_count || r.view_count || r.views || 0).filter((v) => v > 0);
-    if (reelViews.length > 0) igAvgViews = Math.round(reelViews.reduce((a, b) => a + b, 0) / reelViews.length);
-  }
-  if (igAvgViews === 0 && igRecentPosts.length > 0) {
-    // Conservative estimate: likes × 8 (industry average is 5-12x)
-    const avgLikes = igRecentPosts.reduce((sum, p) => sum + (p.likes || p.like_count || 0), 0) / igRecentPosts.length;
-    igAvgViews = Math.round(avgLikes * 8);
+  if (igMedianReelViews > 0) {
+    igAvgViews = igMedianReelViews;
+  } else if (igMedianLikes > 0) {
+    igAvgViews = Math.round(igMedianLikes * 8);
   }
 
   // Pick the platform with better data
-  let avgViews;
-  let platform;
-  let videoCount;
-  let platformFollowers;
+  let avgViews, platform, videoCount, platformFollowers, meanViews;
   if (ttAvgViews > 0) {
     avgViews = ttAvgViews;
+    meanViews = ttMeanViews;
     platform = "TikTok";
-    videoCount = (creator.tiktokData?.recentVideos || []).length || 15;
+    videoCount = ttViewCounts.length;
     platformFollowers = creator.tiktokData?.followers || 0;
   } else if (igAvgViews > 0) {
     avgViews = igAvgViews;
+    meanViews = igAvgViews;
     platform = "Instagram";
-    videoCount = igRecentReels.length || igRecentPosts.length;
+    videoCount = igReelViews.length || igPostLikes.length;
     platformFollowers = creator.instagramData?.followers || 0;
   } else {
     return null; // No view data — can't calculate
@@ -1646,11 +1663,11 @@ function calculateCreatorCPM(creator, knowledge) {
   rateHigh = Math.min(rateHigh, rateCeiling);
   if (rateLow >= rateHigh) rateHigh = rateLow + 50;
 
-  const rateDisplay = `$${rateLow}-${rateHigh}`;
+  const rateDisplay = "$" + rateLow.toLocaleString() + "-" + rateHigh.toLocaleString();
 
   // ─── Build explanation ───
   const explanation = [
-    `Base: ${formatMetricShort(avgViews)} avg views × $${cpmFinal} CPM (${tier}) = $${Math.round((avgViews / 1000) * cpmFinal)}`,
+    `Base: ${formatMetricShort(avgViews)} median views (mean: ${formatMetricShort(meanViews)}) across ${videoCount} videos on ${platform} × $${cpmFinal} CPM (${tier}) = ${fmtDollar(Math.round((avgViews / 1000) * cpmFinal))}`,
     `Content alignment: ×${alignmentMultiplier.toFixed(2)} ${alignmentReasons.length > 0 ? `(${alignmentReasons.join("; ")})` : "(neutral)"}`,
     `Engagement quality: ×${engMultiplier.toFixed(2)} ${engReasons.length > 0 ? `(${engReasons.join("; ")})` : "(no data)"}`,
     `Raw rate: $${Math.round(rawRate)} → Range: ${rateDisplay}/video`,
@@ -1662,6 +1679,7 @@ function calculateCreatorCPM(creator, knowledge) {
     cpmFinal,
     cpmTier: tier,
     avgViews,
+    meanViews,
     platform,
     videoCount,
     platformFollowers,
@@ -1698,7 +1716,7 @@ function calculatePlatformRates(creator, baseCpmData) {
     let low = Math.max(floor || 50, Math.round(raw * 0.8));
     let high = Math.min(ceiling || 700, Math.round(raw * 1.2));
     if (low >= high) high = low + 50;
-    return { low, high, display: "$" + low + "-" + high };
+    return { low, high, display: "$" + low.toLocaleString() + "-" + high.toLocaleString() };
   };
 
   const rates = {};
@@ -2265,6 +2283,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       ttAvgLikes = Math.round(totalL / count);
       ttAvgComments = Math.round(totalC / count);
       ttAvgShares = Math.round(totalS / count);
+      const ttMedianViewsStored = medianOf(ttRecentVideos.map(v => v.views || 0).filter(v => v > 0));
       const ttFollowerCount = tiktokData?.followers;
       if (ttFollowerCount && ttFollowerCount > 0 && recent.length > 0) {
         const avgEng = ttAvgLikes + ttAvgComments + ttAvgShares;
@@ -2282,6 +2301,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       ...tiktokData,
       recentVideos: ttRecentVideos,
       avgViews: ttAvgViews || null,
+      medianViews: ttMedianViewsStored || null,
       avgLikes: ttAvgLikes || null,
       avgComments: ttAvgComments || null,
       avgShares: ttAvgShares || null,
@@ -2292,6 +2312,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
       ...DEFAULT_TIKTOK_DATA,
       recentVideos: ttRecentVideos,
       avgViews: ttAvgViews || null,
+      medianViews: ttMedianViewsStored || null,
       avgLikes: ttAvgLikes || null,
       avgComments: ttAvgComments || null,
       avgShares: ttAvgShares || null,
@@ -7374,7 +7395,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         const ttF = Number(c.tiktokData?.followers) || 0;
         const ytF = Number(c.youtubeData?.subscribers) || 0;
         const totalReach = igF + ttF + ytF;
-        const avgViews = c.tiktokData?.avgViews || c.tiktokAvgViews || null;
+        const avgViews = medianOf((c.tiktokData?.recentVideos || []).map(v => v.views || 0).filter(v => v > 0)) || c.tiktokData?.medianViews || c.tiktokData?.avgViews || c.tiktokAvgViews || null;
         const engRate = c.engagementRate ?? c.tiktokEngRate ?? c.instagramEngRate ?? null;
         const cpmD = calculateCreatorCPM(c, ak);
         const costDisplay = (String(c.costPerVideo || "").trim() || cpmD?.rateDisplay || "").trim() || null;
@@ -7412,7 +7433,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         }
         const stats = [
           totalReach > 0 ? { value: formatMetricShort(totalReach), label: "Total Reach" } : null,
-          avgViews ? { value: formatMetricShort(avgViews), label: "Avg Views" } : null,
+          avgViews ? { value: formatMetricShort(avgViews), label: "Typical views" } : null,
           engRate != null && Number.isFinite(Number(engRate)) ? { value: `${Number(engRate).toFixed(1)}%`, label: "Eng Rate" } : null,
           costDisplay ? { value: costDisplay.startsWith("$") ? costDisplay : `$${costDisplay}`, label: "Est Rate" } : null,
           postFreq ? { value: postFreq, label: "Post Freq" } : null,
