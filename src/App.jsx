@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.39.0";
+const APP_VERSION = "5.40.0";
 const CHANGELOG = [
   { version: "5.39.0", date: "2026-04-02", changes: [
     "Source of Truth edit matches display — product lines and all sections use stored data only (no hidden hardcoded text)",
@@ -570,6 +570,7 @@ const ROUTES = {
   "/tools": "tools",
   "/tools/video-reformatter": "videotool",
   "/settings": "settings",
+  "/source-of-truth": "sourceOfTruth",
   "/creator": "creatorLogin",
   "/creator/dashboard": "creatorDashboard",
   "/creator/onboard": "creatorOnboard",
@@ -592,6 +593,7 @@ const VIEW_TO_PATH = {
   tools: "/tools",
   videotool: "/tools/video-reformatter",
   settings: "/settings",
+  sourceOfTruth: "/source-of-truth",
   creatorLogin: "/creator",
   creatorDashboard: "/creator/dashboard",
   creatorOnboard: "/creator/onboard",
@@ -3484,9 +3486,9 @@ function UploadOldBrief({ onExtracted, t, extractionPrompt, aiKnowledge }) {
   );
 }
 
-function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage }) {
+function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
   const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : getDefaultAiKnowledge();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!startOpen);
   const [activeSection, setActiveSection] = useState("brand");
   const [editing, setEditing] = useState(null);
   const [editDraft, setEditDraft] = useState("");
@@ -11269,7 +11271,7 @@ export default function App() {
               <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creator Partnerships</div>
               <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 32 }}>Intake Breathing Technology</div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 32 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
                 <div style={cardStyle(t.green)} onClick={() => navigate("ugcDashboard")}
                   onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={hoverOut}>
                   <div style={{ height: 3, width: 40, borderRadius: 2, background: t.green, marginBottom: 16 }} />
@@ -11300,36 +11302,22 @@ export default function App() {
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Video reformatter and team utilities</div>
                   <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>1 tool available</div>
                 </div>
-              </div>
 
-              {/* IB-Ai Source of Truth — same state as brief page; edits sync everywhere */}
-              <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} homepage />
+                <div style={cardStyle(t.purple)} onClick={() => navigate("sourceOfTruth")}
+                  onMouseEnter={(e) => hoverIn(e, t.purple)} onMouseLeave={hoverOut}>
+                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.purple, marginBottom: 16 }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>IB-Ai Source of Truth</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>What IB-Ai knows — products, claims, scoring, rates, outreach</div>
+                  <div style={{ fontSize: 12, color: t.purple, fontWeight: 600 }}>Editable by managers</div>
+                </div>
 
-              <div style={{ maxWidth: 1000, margin: "0 auto", padding: "0 24px 20px" }}>
-                <HomepageSettingsBlock
-                  t={t}
-                  creators={creators}
-                  library={library}
-                  supabase={supabase}
-                  dbSetSetting={dbSetSetting}
-                  apiKey={apiKey}
-                  scrapeKey={scrapeKey}
-                  setApiStatus={setApiStatus}
-                  setApiMsg={setApiMsg}
-                  apiStatus={apiStatus}
-                  apiMsg={apiMsg}
-                  saveApiKey={saveApiKey}
-                  testApi={testApi}
-                  setScrapeStatus={setScrapeStatus}
-                  setScrapeMsg={setScrapeMsg}
-                  scrapeStatus={scrapeStatus}
-                  scrapeMsg={scrapeMsg}
-                  saveScrapeKey={saveScrapeKey}
-                  testScrapeApi={testScrapeApi}
-                  currentRole={currentRole}
-                  setCurrentRole={setCurrentRole}
-                  navigate={navigate}
-                />
+                <div style={cardStyle(t.textMuted)} onClick={() => navigate("settings")}
+                  onMouseEnter={(e) => hoverIn(e, t.textMuted)} onMouseLeave={hoverOut}>
+                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.textMuted, marginBottom: 16 }} />
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Settings</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>API keys, team password, database connection</div>
+                  <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>v{APP_VERSION}</div>
+                </div>
               </div>
 
               <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60" }}>v{APP_VERSION}</div>
@@ -11361,6 +11349,16 @@ export default function App() {
         )}
         {!aiLoading && isCreatorViewAllowed && view === "tools" && <ToolsPage onBack={() => navigate("home")} onOpenVideo={() => navigate("videotool")} />}
         {!aiLoading && isCreatorViewAllowed && view === "videotool" && <VideoReformatter onBack={() => navigate("tools")} />}
+
+        {/* SOURCE OF TRUTH */}
+        {!aiLoading && isCreatorViewAllowed && view === "sourceOfTruth" && (
+          <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
+            <button type="button" onClick={() => navigate("home")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
+            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>IB-Ai Source of Truth</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Everything IB-Ai uses to generate briefs, score creators, calculate rates, and write outreach.</div>
+            <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} startOpen />
+          </div>
+        )}
 
         {/* SETTINGS */}
         {!aiLoading && isCreatorViewAllowed && view === "settings" && (
