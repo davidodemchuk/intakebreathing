@@ -42,8 +42,11 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "5.40.0";
+const APP_VERSION = "6.0.0";
 const CHANGELOG = [
+  { version: "6.0.0", date: "2026-04-03", changes: [
+    "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
+  ]},
   { version: "5.39.0", date: "2026-04-02", changes: [
     "Source of Truth edit matches display — product lines and all sections use stored data only (no hidden hardcoded text)",
   ]},
@@ -505,28 +508,28 @@ const CHANGELOG = [
 
 const THEMES = {
   dark: {
-    bg: "#0a0a0f", card: "#161620", cardAlt: "#111118",
-    border: "#252530", borderLight: "#333",
-    navBg: "rgba(10,10,15,0.95)",
-    text: "#ffffff", textSecondary: "#cccccc", textMuted: "#999999", textFaint: "#666666",
-    inputBg: "#0d0d0d", inputText: "#ffffff",
-    green: "#00FEA9", blue: "#63B7BA", red: "#ff6b6b", orange: "#ffaa3b", purple: "#c084fc",
+    bg: "#060606", card: "#0d0d0d", cardAlt: "#141414",
+    border: "#1e1e1e", borderLight: "#333",
+    navBg: "rgba(6,6,6,0.95)",
+    text: "#f0f0f0", textSecondary: "#cccccc", textMuted: "#777777", textFaint: "#444444",
+    inputBg: "#111111", inputText: "#f0f0f0",
+    green: "#00e09a", blue: "#63B7BA", red: "#ef4444", orange: "#f59200", purple: "#a78bfa",
     discBg: "rgba(0,0,0,0.3)",
     scrollThumb: "#222",
     isLight: false,
-    shadow: "0 2px 8px rgba(0,0,0,0.4)",
+    shadow: "0 2px 8px rgba(0,0,0,0.3)",
   },
   light: {
-    bg: "#f0f0f2", card: "#ffffff", cardAlt: "#f5f5f7",
-    border: "#c8c8cc", borderLight: "#b0b0b5",
-    navBg: "rgba(240,240,242,0.95)",
-    text: "#0a0a0a", textSecondary: "#1a1a1a", textMuted: "#444444", textFaint: "#707070",
-    inputBg: "#ffffff", inputText: "#0a0a0a",
-    green: "#008c56", blue: "#2a7a7d", red: "#c62828", orange: "#b86e00", purple: "#6d28d9",
+    bg: "#f7f5ef", card: "#ffffff", cardAlt: "#f2f0ea",
+    border: "#e2ded4", borderLight: "#d0ccc2",
+    navBg: "rgba(247,245,239,0.95)",
+    text: "#111111", textSecondary: "#333333", textMuted: "#888888", textFaint: "#bbbbbb",
+    inputBg: "#ffffff", inputText: "#111111",
+    green: "#00b87d", blue: "#4a9da0", red: "#dc4444", orange: "#d4890a", purple: "#8b6cc4",
     discBg: "rgba(0,0,0,0.05)",
-    scrollThumb: "#aaa",
+    scrollThumb: "#ccc",
     isLight: true,
-    shadow: "0 1px 4px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.12)",
+    shadow: "0 2px 8px rgba(0,0,0,0.04)",
   },
 };
 
@@ -811,6 +814,82 @@ function Icon({ name, size = 20, color = "currentColor" }) {
   return icons[name] || null;
 }
 
+function CardIcon({ type, color, size = 32 }) {
+  const r = size * 0.25;
+  const bg = color + "12";
+  const icons = {
+    ugc: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <path d="M10 22V14l6-4 6 4v8" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 22v-4h4v4" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+    pipeline: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <rect x="9" y="18" width="4" height="6" rx="1" fill={color+"40"} stroke={color} strokeWidth="1.2"/>
+        <rect x="14" y="14" width="4" height="10" rx="1" fill={color+"40"} stroke={color} strokeWidth="1.2"/>
+        <rect x="19" y="10" width="4" height="14" rx="1" fill={color+"40"} stroke={color} strokeWidth="1.2"/>
+      </svg>
+    ),
+    influencer: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <circle cx="16" cy="14" r="4" stroke={color} strokeWidth="1.5"/>
+        <path d="M11 24c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    tools: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <path d="M12 20l4-8 4 8" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M13 18h6" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+        <circle cx="20" cy="12" r="2" stroke={color} strokeWidth="1.5"/>
+      </svg>
+    ),
+    brain: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <circle cx="16" cy="14" r="5" stroke={color} strokeWidth="1.5"/>
+        <path d="M13 13.5c0-1.7 1.3-3 3-3s3 1.3 3 3" stroke={color} strokeWidth="1.2" strokeLinecap="round"/>
+        <path d="M12 20h8" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M14 23h4" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    settings: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <circle cx="16" cy="16" r="6" stroke={color} strokeWidth="1.5"/>
+        <circle cx="16" cy="16" r="2" fill={color}/>
+        <path d="M16 8v2M16 22v2M8 16h2M22 16h2" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+    video: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <rect x="8" y="11" width="12" height="10" rx="2" stroke={color} strokeWidth="1.5"/>
+        <path d="M20 14l4-2v8l-4-2" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+    brief: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <rect x="10" y="8" width="12" height="16" rx="2" stroke={color} strokeWidth="1.5"/>
+        <path d="M13 13h6M13 16h4M13 19h5" stroke={color} strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+    ),
+    creator: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <circle cx="16" cy="13" r="3.5" stroke={color} strokeWidth="1.5"/>
+        <path d="M10 24c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  };
+  return icons[type] || null;
+}
+
 // ═══════════════════════════════════════════════════════════
 // DYNAMIC STYLES — generated per theme
 // ═══════════════════════════════════════════════════════════
@@ -818,7 +897,7 @@ function Icon({ name, size = 20, color = "currentColor" }) {
 function getS(t) {
   return {
     app: { background: t.bg, minHeight: "100vh", color: t.text, fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif", transition: "background 0.3s, color 0.3s" },
-    nav: { borderBottom: `1px solid ${t.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: t.navBg, backdropFilter: "blur(12px)", zIndex: 100, transition: "background 0.3s", boxShadow: t.isLight ? "0 1px 3px rgba(0,0,0,0.06)" : "none" },
+    nav: { borderBottom: `1px solid ${t.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: t.navBg, backdropFilter: "blur(12px)", zIndex: 100, transition: "background 0.3s", boxShadow: t.shadow },
     navLogo: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer" },
     navTitle: { fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: t.text },
     navSub: { fontSize: 11, color: t.textFaint, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" },
@@ -2020,7 +2099,7 @@ function fitScoreBadgeStyle(score, t) {
 function ibScoreTierColor(score) {
   const n = Number(score);
   if (!Number.isFinite(n)) return "#64748b";
-  if (n >= 90) return "#00FEA9";
+  if (n >= 90) return "#00e09a";
   if (n >= 75) return "#22c55e";
   if (n >= 60) return "#3b82f6";
   if (n >= 40) return "#f59e0b";
@@ -3699,7 +3778,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
         }}
       >
         <div style={{ textAlign: "left" }}>
-          <span>🧠 IB-Ai Source of Truth</span>
+          <span>IB-Ai Source of Truth</span>
           {homepage ? (
             <div style={{ fontSize: 12, fontWeight: 400, color: t.textMuted, marginTop: 2 }}>Everything IB-Ai knows — editable by managers</div>
           ) : null}
@@ -6682,7 +6761,7 @@ class CreatorDetailErrorBoundary extends React.Component {
               this.setState({ error: null });
               window.history.back();
             }}
-            style={{ padding: "10px 20px", background: "#00FEA9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13 }}
+            style={{ padding: "10px 20px", background: "#00b87d", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#fff" }}
           >
             ← Go Back
           </button>
@@ -8296,10 +8375,10 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
 
   const cardStyle = (accent) => ({
     background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24,
-    cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s",
+    cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s", boxShadow: t.shadow,
   });
   const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${accent}08`; };
-  const hoverOut = (e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; };
+  const hoverOut = (e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = t.shadow; };
 
   const goNewBrief = () => (onNewBrief ? onNewBrief() : navigate("create"));
 
@@ -9633,7 +9712,7 @@ function HomepageSettingsBlock(props) {
         }}
       >
         <div style={{ textAlign: "left" }}>
-          <span>⚙️ Settings</span>
+          <span>Settings</span>
           <div style={{ fontSize: 12, fontWeight: 400, color: t.textMuted, marginTop: 2 }}>API keys, team password, database connection</div>
         </div>
         <span style={{ fontSize: 12, color: t.textMuted }}>{open ? "▲" : "▼"}</span>
@@ -11259,61 +11338,78 @@ export default function App() {
         {/* HOME — card grid (managers only; creators use library) */}
         {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
           const activeCreatorCount = creators.filter((c) => c.status === "Active").length;
-          const cardStyle = (accent) => ({
-            background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24,
-            cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s",
+          const homeCard = (accentColor) => ({
+            background: t.card, border: `2px solid ${accentColor}60`, borderRadius: 14, padding: 22,
+            cursor: "pointer", boxShadow: `0 2px 8px ${accentColor}08`,
+            transition: "border-color 0.2s, box-shadow 0.2s",
           });
-          const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${accent}08`; };
-          const hoverOut = (e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = "none"; };
+          const homeHoverIn = (e, accentColor) => { e.currentTarget.style.borderColor = accentColor; e.currentTarget.style.boxShadow = `0 4px 16px ${accentColor}15`; };
+          const homeHoverOut = (e, accentColor) => { e.currentTarget.style.borderColor = accentColor + "60"; e.currentTarget.style.boxShadow = `0 2px 8px ${accentColor}08`; };
 
           return (
             <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creator Partnerships</div>
-              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 32 }}>Intake Breathing Technology</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Intake Breathing</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Partnerships</div>
+
+              {/* Stats row */}
+              <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+                <div style={{ flex: 1, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow }}>
+                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Active creators</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginTop: 2 }}>{activeCreatorCount}</div>
+                </div>
+                <div style={{ flex: 1, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow }}>
+                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Briefs</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginTop: 2 }}>{library.length}</div>
+                </div>
+                <div style={{ flex: 1, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow }}>
+                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Avg IB Score</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: t.green, marginTop: 2 }}>{(() => { const scores = creators.filter(c => c.ibScore).map(c => Number(c.ibScore)); return scores.length ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length) : "\u2014"; })()}</div>
+                </div>
+              </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
-                <div style={cardStyle(t.green)} onClick={() => navigate("ugcDashboard")}
-                  onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={hoverOut}>
-                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.green, marginBottom: 16 }} />
+                <div style={homeCard(t.green)} onClick={() => navigate("ugcDashboard")}
+                  onMouseEnter={(e) => homeHoverIn(e, t.green)} onMouseLeave={(e) => homeHoverOut(e, t.green)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="ugc" color={t.green} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>UGC Army</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create briefs, manage creators, and track content</div>
                   <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{library.length} briefs · {activeCreatorCount} creators</div>
                 </div>
 
-                <div style={cardStyle(t.orange)} onClick={() => navigate("pipeline")}
-                  onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={hoverOut}>
-                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
+                <div style={homeCard(t.orange)} onClick={() => navigate("pipeline")}
+                  onMouseEnter={(e) => homeHoverIn(e, t.orange)} onMouseLeave={(e) => homeHoverOut(e, t.orange)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="pipeline" color={t.orange} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
                   <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
                 </div>
 
-                <div style={{ ...cardStyle(t.purple), cursor: "default", opacity: 0.6 }}>
-                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.purple, marginBottom: 16 }} />
+                <div style={{ ...homeCard(t.textFaint), cursor: "default", opacity: 0.5 }}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.textFaint} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Influencer Buys</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Manage campaigns, rates, and spend</div>
                   <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
                 </div>
 
-                <div style={cardStyle(t.blue)} onClick={() => navigate("tools")}
-                  onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={hoverOut}>
-                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.blue, marginBottom: 16 }} />
+                <div style={homeCard(t.blue)} onClick={() => navigate("tools")}
+                  onMouseEnter={(e) => homeHoverIn(e, t.blue)} onMouseLeave={(e) => homeHoverOut(e, t.blue)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="tools" color={t.blue} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Tools</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Video reformatter and team utilities</div>
                   <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>1 tool available</div>
                 </div>
 
-                <div style={cardStyle(t.purple)} onClick={() => navigate("sourceOfTruth")}
-                  onMouseEnter={(e) => hoverIn(e, t.purple)} onMouseLeave={hoverOut}>
-                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.purple, marginBottom: 16 }} />
+                <div style={homeCard(t.purple)} onClick={() => navigate("sourceOfTruth")}
+                  onMouseEnter={(e) => homeHoverIn(e, t.purple)} onMouseLeave={(e) => homeHoverOut(e, t.purple)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="brain" color={t.purple} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>IB-Ai Source of Truth</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>What IB-Ai knows — products, claims, scoring, rates, outreach</div>
                   <div style={{ fontSize: 12, color: t.purple, fontWeight: 600 }}>Editable by managers</div>
                 </div>
 
-                <div style={cardStyle(t.textMuted)} onClick={() => navigate("settings")}
-                  onMouseEnter={(e) => hoverIn(e, t.textMuted)} onMouseLeave={hoverOut}>
-                  <div style={{ height: 3, width: 40, borderRadius: 2, background: t.textMuted, marginBottom: 16 }} />
+                <div style={homeCard(t.textMuted)} onClick={() => navigate("settings")}
+                  onMouseEnter={(e) => homeHoverIn(e, t.textMuted)} onMouseLeave={(e) => homeHoverOut(e, t.textMuted)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="settings" color={t.textMuted} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Settings</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>API keys, team password, database connection</div>
                   <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>v{APP_VERSION}</div>
