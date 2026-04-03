@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.2.0";
+const APP_VERSION = "6.3.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -574,6 +574,7 @@ const ROUTES = {
   "/tools/video-reformatter": "videotool",
   "/settings": "settings",
   "/source-of-truth": "sourceOfTruth",
+  "/change-requests": "changeRequests",
   "/creator": "creatorLogin",
   "/creator/dashboard": "creatorDashboard",
   "/creator/onboard": "creatorOnboard",
@@ -597,6 +598,7 @@ const VIEW_TO_PATH = {
   videotool: "/tools/video-reformatter",
   settings: "/settings",
   sourceOfTruth: "/source-of-truth",
+  changeRequests: "/change-requests",
   creatorLogin: "/creator",
   creatorDashboard: "/creator/dashboard",
   creatorOnboard: "/creator/onboard",
@@ -9086,7 +9088,90 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
 // CHANGE REQUEST WIDGET (Supabase table: change_requests — see supabase/schema.sql)
 // ═══════════════════════════════════════════════════════════
 
-function ChangeRequestWidget({ currentPage, t }) {
+function ChangeRequestsPage({ t, S, supabase }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("open");
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const query = filter === "all"
+        ? supabase.from("change_requests").select("*").order("created_at", { ascending: false })
+        : supabase.from("change_requests").select("*").eq("status", filter).order("created_at", { ascending: false });
+      const { data } = await query;
+      setRequests(data || []);
+      setLoading(false);
+    })();
+  }, [filter]);
+
+  const markComplete = async (id) => {
+    await supabase.from("change_requests").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id);
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "completed", completed_at: new Date().toISOString() } : r));
+  };
+
+  const deleteRequest = async (id) => {
+    if (!window.confirm("Delete this request permanently?")) return;
+    await supabase.from("change_requests").delete().eq("id", id);
+    setRequests(prev => prev.filter(r => r.id !== id));
+  };
+
+  const priorityColors = { urgent: "#ef4444", high: t.orange, normal: t.textMuted, low: t.textFaint };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {["open", "completed", "all"].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+            border: filter === f ? "2px solid " + t.green + "60" : "1px solid " + t.border,
+            background: filter === f ? t.green + "10" : t.card,
+            color: filter === f ? t.green : t.textMuted,
+            cursor: "pointer", textTransform: "capitalize",
+          }}>{f} {f === "open" ? "(" + requests.filter(r => r.status === "open").length + ")" : ""}</button>
+        ))}
+      </div>
+
+      {loading ? <div style={{ color: t.textFaint, padding: 20 }}>Loading...</div> : requests.length === 0 ? (
+        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 40, textAlign: "center", color: t.textFaint, boxShadow: t.shadow }}>
+          {filter === "open" ? "No open requests — all clear" : "No requests found"}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {requests.map(r => (
+            <div key={r.id} style={{
+              background: t.card, border: "1px solid " + t.border, borderRadius: 12,
+              padding: "16px 20px", boxShadow: t.shadow,
+              borderLeft: r.status === "open" ? "4px solid " + (priorityColors[r.priority] || t.textMuted) : "4px solid " + t.green,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 4 }}>{r.description}</div>
+                  <div style={{ fontSize: 12, color: t.textMuted }}>
+                    {r.requested_by} · {r.page} · {new Date(r.created_at).toLocaleDateString()}
+                    {r.priority && r.priority !== "normal" ? " · " : ""}
+                    {r.priority && r.priority !== "normal" ? <span style={{ color: priorityColors[r.priority], fontWeight: 600 }}>{r.priority}</span> : null}
+                  </div>
+                  {r.status === "completed" && r.completed_at ? (
+                    <div style={{ fontSize: 11, color: t.green, marginTop: 4 }}>Completed {new Date(r.completed_at).toLocaleDateString()}</div>
+                  ) : null}
+                </div>
+                {r.status === "open" ? (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => markComplete(r.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + t.green + "60", background: t.green + "10", color: t.green, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Done</button>
+                    <button onClick={() => deleteRequest(r.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>Delete</button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChangeRequestWidget({ currentPage, t, onRequestSubmitted }) {
   const [open, setOpen] = useState(false);
   const [requests, setRequests] = useState([]);
   const [showAll, setShowAll] = useState(false);
@@ -9137,6 +9222,9 @@ function ChangeRequestWidget({ currentPage, t }) {
       const { data } = await supabase.from("change_requests").select("*").eq("page", currentPage).eq("status", "open").order("created_at", { ascending: false });
       setRequests(data || []);
       refreshPageOpenBadge();
+      // Refresh homepage counter
+      const { data: freshCount } = await supabase.from("change_requests").select("id").eq("status", "open");
+      if (onRequestSubmitted) onRequestSubmitted(freshCount?.length || 0);
     }
     setSubmitting(false);
   };
@@ -9792,6 +9880,7 @@ export default function App() {
   const [currentBrief, setCurrentBrief] = useState(null);
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
+  const [openChangeRequests, setOpenChangeRequests] = useState(0);
   const [formKey, setFormKey] = useState(0);
   const [briefPrefill, setBriefPrefill] = useState(null);
   const [aiKnowledge, setAiKnowledge] = useState(() => getDefaultAiKnowledge());
@@ -9877,6 +9966,16 @@ export default function App() {
     try { localStorage.setItem(key, value); }
     catch {}
   };
+
+  // ── Load open change request count ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("change_requests").select("id").eq("status", "open");
+        if (!error && data) setOpenChangeRequests(data.length);
+      } catch {}
+    })();
+  }, []);
 
   // ── Load from Supabase on mount ──
   useEffect(() => {
@@ -11412,9 +11511,10 @@ export default function App() {
                   <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Briefs</div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginTop: 2 }}>{library.length}</div>
                 </div>
-                <div style={{ flex: 1, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow }}>
-                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Avg IB Score</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: t.green, marginTop: 2 }}>{(() => { const scores = creators.filter(c => c.ibScore).map(c => Number(c.ibScore)); return scores.length ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length) : "\u2014"; })()}</div>
+                <div style={{ flex: 1, background: t.card, border: openChangeRequests > 0 ? "1px solid " + t.orange + "60" : "1px solid " + t.border, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow, cursor: "pointer" }} onClick={() => navigate("changeRequests")}>
+                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Open requests</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: openChangeRequests > 0 ? t.orange : t.textFaint, marginTop: 2 }}>{openChangeRequests}</div>
+                  {openChangeRequests > 0 ? <div style={{ fontSize: 10, color: t.orange }}>needs attention</div> : <div style={{ fontSize: 10, color: t.textFaint }}>all clear</div>}
                 </div>
               </div>
 
@@ -11519,6 +11619,16 @@ export default function App() {
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>IB-Ai Source of Truth</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Everything IB-Ai uses to generate briefs, score creators, calculate rates, and write outreach.</div>
             <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} startOpen />
+          </div>
+        )}
+
+        {/* CHANGE REQUESTS */}
+        {!aiLoading && isCreatorViewAllowed && view === "changeRequests" && (
+          <div style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
+            <button type="button" onClick={() => navigate("home")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
+            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Change Requests</div>
+            <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>All open and completed requests from the team.</div>
+            <ChangeRequestsPage t={t} S={S} supabase={supabase} />
           </div>
         )}
 
@@ -12670,7 +12780,7 @@ export default function App() {
             publicBrief: "Public Brief",
           };
           const currentPage = pageNames[view] || view || "Unknown";
-          return <ChangeRequestWidget currentPage={currentPage} t={t} />;
+          return <ChangeRequestWidget currentPage={currentPage} t={t} onRequestSubmitted={setOpenChangeRequests} />;
         })()}
       </div>
     </ThemeContext.Provider>
