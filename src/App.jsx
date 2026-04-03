@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.8.0";
+const APP_VERSION = "6.9.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -1642,9 +1642,9 @@ function calculateCreatorCPM(creator, knowledge) {
 
   rateLow = Math.max(rateFloor, rateLow);
   rateHigh = Math.max(rateHigh, rateLow + 25);
-  rateLow = Math.min(rateLow, rateCeiling);
+  rateLow = Math.min(rateLow, rateCeiling - 50);
   rateHigh = Math.min(rateHigh, rateCeiling);
-  if (rateLow >= rateHigh) rateHigh = Math.min(rateLow + 25, rateCeiling);
+  if (rateLow >= rateHigh) rateHigh = rateLow + 50;
 
   const rateDisplay = `$${rateLow}-${rateHigh}`;
 
@@ -1680,6 +1680,84 @@ function calculateCreatorCPM(creator, knowledge) {
     hasIntakeContent,
     hasCompetitor: hasCompetitor || hasCompetitorAi,
   };
+}
+
+function calculatePlatformRates(creator, baseCpmData) {
+  if (!baseCpmData) return null;
+  const baseRate = baseCpmData.rawRate || ((baseCpmData.rateLow + baseCpmData.rateHigh) / 2);
+  const igFollowers = Number(creator.instagramData?.followers) || 0;
+  const ttFollowers = Number(creator.tiktokData?.followers) || 0;
+  const ytSubscribers = Number(creator.youtubeData?.subscribers) || 0;
+  const igEngRate = creator.instagramEngRate || 0;
+  const ttAvgViews = creator.tiktokData?.avgViews || creator.tiktokAvgViews || 0;
+  const hasIntakeContent = baseCpmData.hasIntakeContent || false;
+  const hasShop = creator.tiktokData?.isCommerceUser || creator.tiktokShopData?.hasShop;
+
+  const buildRate = (multiplier, ceiling, floor) => {
+    const raw = Math.round(baseRate * multiplier);
+    let low = Math.max(floor || 50, Math.round(raw * 0.8));
+    let high = Math.min(ceiling || 700, Math.round(raw * 1.2));
+    if (low >= high) high = low + 50;
+    return { low, high, display: "$" + low + "-" + high };
+  };
+
+  const rates = {};
+
+  var igReelMult = igFollowers > 0 ? 1.1 * (igEngRate > 3 ? 1.15 : igEngRate > 1 ? 1.0 : 0.85) : 0.9;
+  rates.instagramReel = {
+    ...buildRate(igReelMult, 600, 75),
+    platform: "Instagram", type: "Reel",
+    reasoning: igFollowers > 0
+      ? "Based on " + formatMetricShort(igFollowers) + " followers with " + (igEngRate ? igEngRate.toFixed(1) + "%" : "unknown") + " engagement. Reels get algorithmic distribution beyond followers — top UGC format for Intake. " + (igEngRate > 3 ? "Strong engagement boosts value." : igEngRate > 1 ? "Moderate engagement, room to grow." : "Low engagement reduces value.")
+      : "No Instagram data — estimated from TikTok metrics. Recommend enriching IG handle for accurate pricing.",
+  };
+
+  rates.instagramStory = {
+    ...buildRate(0.4, 250, 50),
+    platform: "Instagram", type: "Story",
+    reasoning: "Stories disappear in 24 hours — lower long-term value but high authenticity signal. Good for behind-the-scenes Intake unboxing or morning routine content. Best used as an add-on to a Reel package, not standalone. Industry avg for stories is $80-250.",
+  };
+
+  rates.instagramFeedPost = {
+    ...buildRate(0.75, 400, 75),
+    platform: "Instagram", type: "Feed post",
+    reasoning: "Permanent content with SEO and profile value. Lower algorithmic reach than Reels but stays on the creator's grid forever. Good for polished product shots or transformation content. " + (igFollowers > 50000 ? "Large audience makes feed posts more valuable as evergreen content." : "Consider bundling with a Reel for better ROI."),
+  };
+
+  var ttMult = ttAvgViews > 100000 ? 1.2 : ttAvgViews > 10000 ? 1.0 : 0.85;
+  rates.tiktokVideo = {
+    ...buildRate(ttMult, 500, 50),
+    platform: "TikTok", type: "Video",
+    reasoning: "Core UGC format. " + (ttAvgViews > 0 ? formatMetricShort(ttAvgViews) + " avg views — " : "No view data — ") + "TikTok's algorithm can push any video to millions regardless of follower count. " + (ttAvgViews > 100000 ? "This creator consistently hits 100K+ views — proven distribution." : ttAvgViews > 10000 ? "Solid view performance across recent videos." : "Lower average views but TikTok is volatile — one video can break out.") + (hasIntakeContent ? " Already creates Intake content — lower risk, proven product knowledge." : ""),
+  };
+
+  rates.tiktokShopVideo = {
+    ...buildRate(hasShop ? 1.35 : 1.15, 700, 100),
+    platform: "TikTok", type: "Shop video",
+    reasoning: hasShop
+      ? "Commerce-enabled creator with TikTok Shop access. Can tag products directly, driving measurable conversions. " + (creator.tiktokShopData?.productCount ? creator.tiktokShopData.productCount + " products in their shop. " : "") + "Higher rate justified by direct attribution to sales."
+      : "Creator doesn't have TikTok Shop yet but can still create commerce-style content. Rate based on standard TikTok performance with a commerce intent premium. Consider helping them set up TikTok Shop for better tracking.",
+  };
+
+  var ytShortMult = ytSubscribers > 10000 ? 1.0 : ytSubscribers > 1000 ? 0.8 : 0.6;
+  rates.youtubeShort = {
+    ...buildRate(ytShortMult, 400, 50),
+    platform: "YouTube", type: "Short",
+    reasoning: ytSubscribers > 0
+      ? formatMetricShort(ytSubscribers) + " subscribers. YouTube Shorts reach a different demographic — typically 25-44, higher purchasing power than TikTok. " + (ytSubscribers > 50000 ? "Strong YouTube presence increases cross-platform value significantly." : ytSubscribers > 5000 ? "Decent YouTube audience adds distribution value." : "Smaller YouTube audience — consider as a bonus repurpose, not primary deliverable.")
+      : "No YouTube data. If creator has a channel, add the handle and re-enrich for accurate pricing. Otherwise, treat as a repurpose of TikTok content at reduced rate.",
+  };
+
+  var ytDedicatedMult = ytSubscribers > 50000 ? 5.0 : ytSubscribers > 10000 ? 3.5 : ytSubscribers > 1000 ? 2.5 : 1.5;
+  rates.youtubeDedicated = {
+    ...buildRate(ytDedicatedMult, 3000, 200),
+    platform: "YouTube", type: "Dedicated video",
+    reasoning: ytSubscribers > 0
+      ? "Long-form content (3-15 min) requires significantly more production time. " + formatMetricShort(ytSubscribers) + " subscribers. " + (ytSubscribers > 50000 ? "With this audience size, a dedicated Intake video could drive substantial traffic and has long-tail SEO value. Worth the premium." : ytSubscribers > 10000 ? "Moderate audience. A dedicated video provides evergreen content but may not justify top rates unless niche alignment is strong." : "Smaller channel — consider a YouTube Short first to test performance before investing in a dedicated video.")
+      : "No YouTube presence. Dedicated YouTube video not recommended until creator establishes a channel. Focus on TikTok and Instagram instead.",
+  };
+
+  return rates;
 }
 
 /** After enrichment, attach cpmData and optionally auto-fill costPerVideo from CPM (or legacy AI rate). */
@@ -6790,6 +6868,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const [enrichMsg, setEnrichMsg] = useState(null);
   const [enrichStepMap, setEnrichStepMap] = useState(null);
   const [expandedBar, setExpandedBar] = useState(null);
+  const [expandedRate, setExpandedRate] = useState(null);
   const [igPullBusy, setIgPullBusy] = useState(false);
 
   const campaignNames = useMemo(() => {
@@ -7989,105 +8068,77 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 16 }}>Rate & platform</div>
+
           {(() => {
-            const cpmData = calculateCreatorCPM(c, ak);
-            const aiRate = ai.estimatedRate;
+            const cpmData = c.cpmData || calculateCreatorCPM(c, ak);
+            if (!cpmData) return null;
+            const platformRates = calculatePlatformRates(c, cpmData);
+            if (!platformRates) return null;
 
-            if (!cpmData && !aiRate) return null;
-
-            if (cpmData) {
-              const vidLabel = cpmData.platform === "Instagram" ? "posts" : "videos";
-              return (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Estimated Rate per Video</div>
-                  <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-                      <span style={{ fontSize: 28, fontWeight: 800, color: t.green }}>{cpmData.rateDisplay}</span>
-                      <span style={{ fontSize: 13, color: t.textMuted }}>per video</span>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginBottom: 14 }}>
-                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>Avg Views</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{formatMetricShort(cpmData.avgViews)}</div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>
-                          {cpmData.videoCount} {cpmData.platform} {vidLabel}
-                        </div>
-                      </div>
-                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>CPM Rate</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>${cpmData.cpmFinal}</div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>{cpmData.cpmTier}</div>
-                      </div>
-                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>Content Fit</div>
-                        <div
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 700,
-                            color: (cpmData.alignmentMultiplier ?? 1) > 1.1 ? t.green : (cpmData.alignmentMultiplier ?? 1) < 0.9 ? t.orange : t.text,
-                          }}
-                        >
-                          ×{(cpmData.alignmentMultiplier ?? 1).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>
-                          {cpmData?.hasIntakeContent ? "Intake creator ✓" : cpmData?.hasCompetitor ? "Competitor ⚠" : "Neutral"}
-                        </div>
-                      </div>
-                      <div style={{ background: t.cardAlt, borderRadius: 8, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", marginBottom: 2 }}>Engagement</div>
-                        <div
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 700,
-                            color: (cpmData.engMultiplier ?? 1) > 1.1 ? t.green : (cpmData.engMultiplier ?? 1) < 0.9 ? t.orange : t.text,
-                          }}
-                        >
-                          ×{(cpmData.engMultiplier ?? 1).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: 10, color: t.textFaint }}>
-                          {cpmData?.engRate != null && Number.isFinite(Number(cpmData?.engRate)) ? `${Number(cpmData?.engRate).toFixed(1)}% rate` : "No data"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {(cpmData?.alignmentReasons?.length > 0 || cpmData?.engReasons?.length > 0) ? (
-                      <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6, marginBottom: 10 }}>
-                        {[...(cpmData?.alignmentReasons || []), ...(cpmData?.engReasons || [])].map((r, i) => (
-                          <div key={i} style={{ color: r.includes("+") ? t.green : r.includes("-") ? t.orange : t.textMuted }}>• {r}</div>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div style={{ fontSize: 10, color: t.textFaint, borderTop: `1px solid ${t.border}`, paddingTop: 8, lineHeight: 1.5 }}>
-                      <strong>Formula:</strong> {formatMetricShort(cpmData.avgViews)} views ÷ 1,000 × ${cpmData.cpmFinal} CPM × {(cpmData.alignmentMultiplier ?? 1).toFixed(2)} fit × {(cpmData.engMultiplier ?? 1).toFixed(2)} eng = ${cpmData?.rawRate}/video
-                      <br />
-                      <strong>Industry avg (2026):</strong> $150-300/video for UGC · Beginner $50-150 · Mid $150-300 · Established $300-500
-                    </div>
-
-                    <ExpandableInsight
-                      t={t}
-                      label=""
-                      value="Full calculation breakdown"
-                      valueColor={t.textMuted}
-                      valueFontSize={12}
-                      explanation={cpmData?.explanation}
-                    />
-                  </div>
-                </div>
-              );
-            }
+            const platforms = [
+              { name: "TikTok", color: t.green, items: ["tiktokVideo", "tiktokShopVideo"] },
+              { name: "Instagram", color: "#E1306C", items: ["instagramReel", "instagramStory", "instagramFeedPost"] },
+              { name: "YouTube", color: "#FF0000", items: ["youtubeShort", "youtubeDedicated"] },
+            ];
 
             return (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Estimated Rate per Video</div>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: t.green, marginBottom: 4 }}>
-                    {af.costPerVideo ? <span style={{ fontSize: 10, color: t.green, marginRight: 4 }}>✦</span> : null}
-                    {aiRate}
-                    <span style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginLeft: 8 }}>per video (AI estimate)</span>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 28, fontWeight: 800, color: t.green }}>{cpmData.rateDisplay}</span>
+                  <span style={{ fontSize: 13, color: t.textMuted }}>avg per video</span>
+                </div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 20 }}>
+                  Based on {formatMetricShort(cpmData.avgViews)} avg views · ${cpmData.cpmFinal} CPM · x{(cpmData.alignmentMultiplier ?? 1).toFixed(2)} fit · x{(cpmData.engMultiplier ?? 1).toFixed(2)} engagement
+                </div>
+
+                {platforms.map(function(plat) {
+                  return (
+                    <div key={plat.name} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: plat.color, marginBottom: 8 }}>{plat.name}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: plat.items.length > 2 ? "1fr 1fr 1fr" : "1fr 1fr", gap: 8 }}>
+                        {plat.items.map(function(key) {
+                          var rate = platformRates[key];
+                          if (!rate) return null;
+                          var isExpanded = expandedRate === key;
+                          return (
+                            <div key={key}
+                              onClick={function() { setExpandedRate(isExpanded ? null : key); }}
+                              style={{
+                                padding: "10px 12px", borderRadius: 10,
+                                border: "1px solid " + (isExpanded ? plat.color + "40" : t.border),
+                                background: isExpanded ? plat.color + "05" : t.cardAlt,
+                                cursor: "pointer", transition: "all 0.2s",
+                              }}>
+                              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>{rate.type}</div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{rate.display}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {plat.items.map(function(key) {
+                        if (expandedRate !== key || !platformRates[key]) return null;
+                        var rate = platformRates[key];
+                        return (
+                          <div key={key + "-detail"} style={{ marginTop: 8, padding: 12, background: t.cardAlt, borderRadius: 8, borderLeft: "3px solid " + plat.color, fontSize: 12, color: t.textMuted, lineHeight: 1.6 }}>
+                            {rate.reasoning}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+
+                <div style={{ borderTop: "1px solid " + t.border, paddingTop: 12, marginTop: 8 }}>
+                  {(cpmData.alignmentReasons && cpmData.alignmentReasons.length > 0) || (cpmData.engReasons && cpmData.engReasons.length > 0) ? (
+                    <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.6, marginBottom: 8 }}>
+                      {[].concat(cpmData.alignmentReasons || []).concat(cpmData.engReasons || []).map(function(r, i) {
+                        return <div key={i} style={{ color: r.includes("+") ? t.green : r.includes("-") ? t.orange : t.textMuted }}>{"• " + r}</div>;
+                      })}
+                    </div>
+                  ) : null}
+                  <div style={{ fontSize: 10, color: t.textFaint, lineHeight: 1.5 }}>
+                    Industry avg UGC (2026): $150-300/video · Beginner $50-150 · Mid $150-300 · Established $300-500 · YouTube dedicated $500-3000+
                   </div>
-                  <div style={{ fontSize: 11, color: t.textFaint }}>Enrich this creator to get a CPM-based calculation from actual video data.</div>
                 </div>
               </div>
             );
