@@ -197,6 +197,26 @@ app.post("/api/cache-video", async (req, res) => {
   }
 });
 
+// ── Thumbnail from cached video ──
+app.get("/api/cache-thumbnail/:cacheId", async (req, res) => {
+  const entry = videoCache.get(req.params.cacheId);
+  if (!entry) return res.status(404).json({ error: "Not cached" });
+  const thumbPath = entry.filePath + ".thumb.jpg";
+  try {
+    if (!fs.existsSync(thumbPath)) {
+      await new Promise((ok, no) => {
+        execFile(FFMPEG, ["-i", entry.filePath, "-ss", "00:00:01", "-vframes", "1", "-vf", "scale=360:-1", "-q:v", "5", "-y", thumbPath],
+          { timeout: 10000 }, (e) => e ? no(e) : ok());
+      });
+    }
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=600");
+    fs.createReadStream(thumbPath).pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Reformat ──
 app.post("/api/reformat", async (req, res) => {
   const { videoUrl, videoUrls, cacheId, width, height, name } = req.body;

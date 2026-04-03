@@ -6009,6 +6009,7 @@ function VideoReformatter({ onBack }) {
                     cachedHeight: cacheData.height,
                     cachedDuration: cacheData.duration,
                     cacheSizeBytes: cacheData.size,
+                    coverUrl: "/api/cache-thumbnail/" + cacheData.cacheId,
                   }
                 : prev,
             );
