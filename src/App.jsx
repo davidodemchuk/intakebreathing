@@ -5901,19 +5901,19 @@ function ToolsPage({ onBack, onOpenVideo }) {
       <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28 }}>Utilities for creators and media.</div>
       <div
         onClick={onOpenVideo}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; e.currentTarget.style.boxShadow = `0 4px 16px ${t.blue}15`; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.blue + "60"; e.currentTarget.style.boxShadow = `0 2px 8px ${t.blue}08`; }}
         style={{
           background: t.card,
-          border: `1px solid ${t.border}`,
-          borderRadius: 16,
-          padding: 28,
+          border: `2px solid ${t.blue}60`,
+          borderRadius: 14,
+          padding: 22,
           cursor: "pointer",
-          boxShadow: t.shadow,
-          transition: "border-color 0.15s",
+          boxShadow: `0 2px 8px ${t.blue}08`,
+          transition: "border-color 0.2s, box-shadow 0.2s",
         }}
       >
-        <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-start" }}><Icon name="video" size={32} color={t.blue} /></div>
+        <div style={{ marginBottom: 14 }}><CardIcon type="video" color={t.blue} /></div>
         <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
           Paste a TikTok or Instagram URL or upload a file — download the original and use the ad format reference for Meta, YouTube, and TikTok placements
@@ -8355,11 +8355,12 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
   const vids = creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0);
 
   const cardStyle = (accent) => ({
-    background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24,
-    cursor: "pointer", transition: "border-color 0.2s, box-shadow 0.2s", boxShadow: t.shadow,
+    background: t.card, border: `2px solid ${accent}60`, borderRadius: 14, padding: 22,
+    cursor: "pointer", boxShadow: `0 2px 8px ${accent}08`,
+    transition: "border-color 0.2s, box-shadow 0.2s",
   });
-  const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent + "50"; e.currentTarget.style.boxShadow = `0 4px 20px ${accent}08`; };
-  const hoverOut = (e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.boxShadow = t.shadow; };
+  const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.boxShadow = `0 4px 16px ${accent}15`; };
+  const hoverOut = (e, accent) => { e.currentTarget.style.borderColor = accent + "60"; e.currentTarget.style.boxShadow = `0 2px 8px ${accent}08`; };
 
   const goNewBrief = () => (onNewBrief ? onNewBrief() : navigate("create"));
 
@@ -8384,39 +8385,39 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 32 }}>
         <div style={cardStyle(t.green)} onClick={() => navigate("creators")}
-          onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={hoverOut}>
-          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.green, marginBottom: 16 }} />
+          onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={(e) => hoverOut(e, t.green)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="creator" color={t.green} /></div>
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creators</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>View, search, and manage your creator roster. Enrich profiles with live data.</div>
           <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{active} active · {scored} scored</div>
         </div>
 
         <div style={cardStyle(t.blue)} onClick={goNewBrief}
-          onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={hoverOut}>
-          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.blue, marginBottom: 16 }} />
+          onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={(e) => hoverOut(e, t.blue)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.blue} /></div>
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>New Brief</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create a new UGC creator brief with IB-Ai or Instant Draft templates.</div>
-          <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>✦ IB-Ai powered</div>
+          <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>IB-Ai powered</div>
         </div>
 
         <div style={cardStyle(t.orange)} onClick={() => navigate("library")}
-          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={hoverOut}>
-          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
+          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={(e) => hoverOut(e, t.orange)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.orange} /></div>
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Library</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Browse, edit, and regenerate your saved briefs.</div>
           <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
         </div>
 
         <div style={cardStyle(t.orange)} onClick={() => navigate("pipeline")}
-          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={hoverOut}>
-          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.orange, marginBottom: 16 }} />
+          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={(e) => hoverOut(e, t.orange)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="pipeline" color={t.orange} /></div>
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
           <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
         </div>
 
-        <div style={{ ...cardStyle(t.textFaint), cursor: "default", opacity: 0.6 }}>
-          <div style={{ height: 3, width: 40, borderRadius: 2, background: t.textFaint, marginBottom: 16 }} />
+        <div style={{ ...cardStyle(t.textFaint), cursor: "default", opacity: 0.5 }}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.textFaint} /></div>
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Track active campaigns, assign creators, and monitor performance.</div>
           <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
