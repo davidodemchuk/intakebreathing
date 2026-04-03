@@ -2938,6 +2938,47 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     twFinal = await fetchOne(`${base}/v1/twitter/profile?handle=${encodeURIComponent(`@${igHandle}`)}`, "twitter");
   }
 
+  // Validate secondary platforms — ScrapeCreators returns 200 for non-existent accounts
+  const validSnap = (() => {
+    if (!snapRaw) return null;
+    const d = snapRaw?.data || snapRaw;
+    const hasName = d?.displayName || d?.display_name || d?.username;
+    const hasScore = d?.snapScore || d?.snap_score;
+    const hasBitmoji = d?.bitmoji || d?.bitmojiUrl;
+    if (!hasName && !hasScore && !hasBitmoji) {
+      console.log("[enrich] Snapchat returned empty profile — marking as not found");
+      onStep?.("snapchat", "skip");
+      return null;
+    }
+    return snapRaw;
+  })();
+
+  const validFb = (() => {
+    if (!fbRaw) return null;
+    const d = fbRaw?.data || fbRaw;
+    const hasFollowers = Number(d?.followers || d?.follower_count || d?.fan_count || 0) > 0;
+    const hasName = d?.name || d?.page_name;
+    if (!hasFollowers && !hasName) {
+      console.log("[enrich] Facebook returned empty profile — marking as not found");
+      onStep?.("facebook", "skip");
+      return null;
+    }
+    return fbRaw;
+  })();
+
+  const validLi = (() => {
+    if (!liRaw) return null;
+    const d = liRaw?.data || liRaw;
+    const hasName = d?.firstName || d?.first_name || d?.headline || d?.name;
+    const hasFollowers = Number(d?.followersCount || d?.followers || d?.follower_count || 0) > 0;
+    if (!hasName && !hasFollowers) {
+      console.log("[enrich] LinkedIn returned empty profile — marking as not found");
+      onStep?.("linkedin", "skip");
+      return null;
+    }
+    return liRaw;
+  })();
+
   // Debug logging — shows actual API response structures
   if (typeof window !== "undefined" && window.console) {
     console.group("[Enrich] Raw API responses for @" + cleanHandle);
@@ -2947,9 +2988,9 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     console.log("IG Posts:", JSON.stringify(igPostsRaw)?.substring(0, 500));
     console.log("YouTube:", JSON.stringify(ytFinal)?.substring(0, 500));
     console.log("Twitter:", JSON.stringify(twFinal)?.substring(0, 500));
-    console.log("LinkedIn:", JSON.stringify(liRaw)?.substring(0, 500));
-    console.log("Snapchat:", JSON.stringify(snapRaw)?.substring(0, 500));
-    console.log("Facebook:", JSON.stringify(fbRaw)?.substring(0, 500));
+    console.log("LinkedIn:", JSON.stringify(validLi)?.substring(0, 500));
+    console.log("Snapchat:", JSON.stringify(validSnap)?.substring(0, 500));
+    console.log("Facebook:", JSON.stringify(validFb)?.substring(0, 500));
     console.groupEnd();
   }
 
@@ -2968,9 +3009,9 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     igReelsRaw,
     ytData: ytFinal,
     twData: twFinal,
-    liData: liRaw,
-    snapData: snapRaw,
-    fbData: fbRaw,
+    liData: validLi,
+    snapData: validSnap,
+    fbData: validFb,
   }, opts?.existingInstagramData || {});
 
   let aiAnalysis = null;
@@ -3016,9 +3057,9 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     igReelsRaw,
     ytFinal,
     twFinal,
-    liRaw,
-    snapRaw,
-    fbRaw,
+    validLi,
+    validSnap,
+    validFb,
   ].filter(Boolean).length;
 
   const discoveredYoutubeHandle =
