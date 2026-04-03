@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.9.0";
+const APP_VERSION = "6.10.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -2363,7 +2363,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
     console.log("[enrichment] IG Posts raw sample:", JSON.stringify(igPosts)?.substring(0, 500));
     const pr = igPosts?.data ?? igPosts;
     const posts = pr.items || pr.edge_owner_to_timeline_media?.edges?.map((e) => e.node) || [];
-    const recent = posts.slice(0, 12);
+    const recent = posts.slice(0, 20);
     if (recent.length > 0) {
       let totalL = 0;
       let totalC = 0;
@@ -2401,7 +2401,7 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
   if (igReels) {
     const rr = igReels?.data ?? igReels;
     const reels = rr.items || rr.reels || [];
-    igRecentReels = reels.slice(0, 10).map((r) => ({
+    igRecentReels = reels.slice(0, 20).map((r) => ({
       id: r.id || r.pk || "",
       caption: r.caption?.text || "",
       playCount: r.play_count || r.video_view_count || 0,
@@ -7031,6 +7031,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       ].filter(v => v.cover && !v.cover.startsWith("https://qaokxufufwbilfultgrk.supabase.co"));
 
       if (allVideos.length > 0) {
+        console.log("[enrich] Attempting to store", allVideos.length, "thumbnails for", cleanHandle);
         try {
           const thumbRes = await fetch("/api/store-thumbnails", {
             method: "POST",
@@ -7038,7 +7039,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             body: JSON.stringify({ creatorHandle: cleanHandle, videos: allVideos }),
           });
           if (thumbRes.ok) {
-            const { results: thumbResults } = await thumbRes.json();
+            const thumbData = await thumbRes.json();
+            console.log("[enrich] Thumbnail storage response:", thumbData);
+            const thumbResults = thumbData.results;
             const urlMap = {};
             thumbResults.forEach((r, i) => { if (r.url && allVideos[i]) urlMap[allVideos[i].id] = r.url; });
 
@@ -7591,6 +7594,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 cover: v.cover || v.coverUrl || "",
                 views: v.views || 0,
                 likes: v.likes || 0,
+                comments: v.comments || 0,
                 caption: v.caption || v.desc || "",
                 url: v.url || "",
                 date: v.date || "",
@@ -7608,8 +7612,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               items: (() => {
                 const posts = (c.instagramRecentPosts || []).map(p => ({
                   cover: p.imageUrl || p.thumbnail_url || "",
-                  views: p.video_view_count || p.view_count || 0,
+                  views: p.video_view_count || p.view_count || (p.mediaType === "video" ? p.playCount : 0) || 0,
                   likes: p.likes || p.like_count || 0,
+                  comments: p.comments || p.comment_count || 0,
                   caption: p.caption || "",
                   url: p.url || "",
                   date: p.date || "",
@@ -7619,6 +7624,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                   cover: r.coverUrl || r.imageUrl || "",
                   views: r.playCount || r.play_count || r.views || 0,
                   likes: r.likes || r.like_count || 0,
+                  comments: r.comments || r.comment_count || 0,
                   caption: r.caption || "",
                   url: r.url || "",
                   date: r.date || "",
@@ -7716,66 +7722,23 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                   {/* Scrollable content row */}
                   <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
                     {plat.items.map((item, ii) => (
-                      <a
-                        key={ii}
-                        href={item.url || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          flexShrink: 0,
-                          width: 130,
-                          textDecoration: "none",
-                          borderRadius: 8,
-                          overflow: "hidden",
-                          border: `1px solid ${t.border}`,
-                          background: t.card,
-                          transition: "border-color 0.2s",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = `${plat.color}50`;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = t.border;
-                        }}
-                      >
+                      <a key={ii} href={item.url || "#"} target="_blank" rel="noopener noreferrer"
+                        style={{ flexShrink: 0, width: 130, textDecoration: "none", borderRadius: 10, overflow: "hidden", border: "1px solid " + t.border, background: t.card, transition: "border-color 0.2s" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = plat.color + "50"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                         <div style={{ width: 130, height: 170, position: "relative", background: t.cardAlt, overflow: "hidden" }}>
-                          {item.cover ? (
-                            <img
-                              src={item.cover}
-                              alt=""
-                              referrerPolicy="no-referrer"
-                              loading="lazy"
-                              style={{ width: 130, height: 170, objectFit: "cover", display: "block" }}
-                              onError={(e) => {
-                                e.target.style.display = "none";
-                                const fallback = e.target.nextSibling;
-                                if (fallback) fallback.style.display = "flex";
-                              }}
-                            />
-                          ) : null}
-                          <div style={{ width: 130, height: 170, display: item.cover ? "none" : "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: t.cardAlt, gap: 4 }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.views > 0 ? formatMetricShort(item.views) : item.likes > 0 ? formatMetricShort(item.likes) : ""}</div>
+                          {item.cover ? <img key={item.cover} src={item.cover} alt="" referrerPolicy="no-referrer" loading="lazy" style={{ width: 130, height: 170, objectFit: "cover", display: "block", position: "relative", zIndex: 1 }} onError={(e) => { e.target.style.opacity = "0"; }} /> : null}
+                          <div style={{ position: "absolute", top: 0, left: 0, width: 130, height: 170, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                            {item.views > 0 ? <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{formatMetricShort(item.views)}</div> : item.likes > 0 ? <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{formatMetricShort(item.likes)}</div> : null}
                             <div style={{ fontSize: 10, color: t.textFaint }}>{item.views > 0 ? "views" : item.likes > 0 ? "likes" : ""}</div>
                             {item.date ? <div style={{ fontSize: 9, color: t.textFaint }}>{item.date}</div> : null}
                           </div>
                         </div>
                         <div style={{ padding: "6px 8px" }}>
-                          {item.views > 0 ? (
-                            <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>
-                              {formatMetricShort(item.views)} ▶
-                            </div>
-                          ) : item.likes > 0 ? (
-                            <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>
-                              {formatMetricShort(item.likes)} ♥
-                            </div>
-                          ) : null}
-                          {item.views > 0 && item.likes > 0 ? <div style={{ fontSize: 10, color: t.textFaint }}>{formatMetricShort(item.likes)} ♥</div> : null}
+                          <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{item.views > 0 ? formatMetricShort(item.views) + " views" : formatMetricShort(item.likes) + " likes"}</div>
+                          {item.views > 0 && item.likes > 0 ? <div style={{ fontSize: 10, color: t.textMuted }}>{formatMetricShort(item.likes)} likes</div> : item.comments > 0 ? <div style={{ fontSize: 10, color: t.textMuted }}>{formatMetricShort(item.comments)} comments</div> : null}
                           {item.date ? <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>{item.date}</div> : null}
-                          {item.caption ? (
-                            <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 114 }}>
-                              {String(item.caption).substring(0, 50)}
-                            </div>
-                          ) : null}
+                          {item.caption ? <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 114 }}>{item.caption.substring(0, 50)}</div> : null}
                         </div>
                       </a>
                     ))}
