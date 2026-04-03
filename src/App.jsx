@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.4.0";
+const APP_VERSION = "6.5.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -9881,6 +9881,7 @@ export default function App() {
   const [currentFormData, setCurrentFormData] = useState(null);
   const [library, setLibrary] = useState([]);
   const [openChangeRequests, setOpenChangeRequests] = useState(0);
+  const [flowChartFullscreen, setFlowChartFullscreen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [briefPrefill, setBriefPrefill] = useState(null);
   const [aiKnowledge, setAiKnowledge] = useState(() => getDefaultAiKnowledge());
@@ -11583,18 +11584,23 @@ export default function App() {
               </div>
 
               <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Creator flow chart</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.08em" }}>Creator flow chart</div>
+                  <button onClick={() => setFlowChartFullscreen(true)} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer", fontWeight: 600 }}>Fullscreen</button>
+                </div>
                 <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, overflow: "hidden", boxShadow: t.shadow }}>
                   <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "75%", overflow: "hidden" }}>
-                    <iframe
-                      loading="lazy"
-                      style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }}
-                      src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362"
-                      allowFullScreen
-                    />
+                    <iframe loading="lazy" style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
                   </div>
                 </div>
               </div>
+
+              {flowChartFullscreen ? (
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: t.bg }}>
+                  <button onClick={() => setFlowChartFullscreen(false)} style={{ position: "fixed", top: 16, right: 16, zIndex: 10000, fontSize: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer", fontWeight: 700, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>Exit fullscreen</button>
+                  <iframe style={{ width: "100%", height: "100%", border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
+                </div>
+              ) : null}
 
               <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60" }}>v{APP_VERSION}</div>
             </div>
