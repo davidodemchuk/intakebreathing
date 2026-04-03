@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.13.0";
+const APP_VERSION = "6.14.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9521,32 +9521,44 @@ function SettingsPanel({
             </div>
           </div>
 
-          {/* Database Connection */}
-          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database Connection</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Test that data can be read and written to Supabase</div>
-            <button type="button" onClick={async () => {
-              try {
-                const { data: readTest, error: readErr } = await supabase.from("creators").select("id").limit(1);
-                if (readErr) throw new Error("Read failed: " + readErr.message);
-                if (readTest && readTest.length > 0) {
-                  const testId = readTest[0].id;
-                  const testVal = new Date().toISOString();
-                  const { error: writeErr } = await supabase.from("creators").update({ last_enriched: testVal }).eq("id", testId);
-                  if (writeErr) throw new Error("Write failed: " + writeErr.message);
-                  const { data: verifyData, error: verifyErr } = await supabase.from("creators").select("last_enriched").eq("id", testId).single();
-                  if (verifyErr) throw new Error("Verify failed: " + verifyErr.message);
-                  if (!verifyData.last_enriched) throw new Error("Write verification failed — value didn't persist");
-                  const wrote = new Date(testVal).getTime();
-                  const read = new Date(verifyData.last_enriched).getTime();
-                  if (Math.abs(wrote - read) > 2000) throw new Error("Write verification failed — timestamps don't match");
-                }
-                alert("Database connection working. Read, write, and verify all passed.");
-              } catch (e) { alert("Database test FAILED: " + e.message); }
-            }} style={{ padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: t.blue, color: "#fff" }}>
-              Test Connection
-            </button>
-            <div style={{ fontSize: 12, color: t.textFaint, marginTop: 8 }}>{creators.length} creators · {library.length} briefs in database</div>
+          {/* Database + Preview Mode side by side */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 16, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database Connection</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 10 }}>Test read/write to Supabase</div>
+              <button type="button" onClick={async () => {
+                try {
+                  const { data: readTest, error: readErr } = await supabase.from("creators").select("id").limit(1);
+                  if (readErr) throw new Error("Read failed: " + readErr.message);
+                  if (readTest && readTest.length > 0) {
+                    const testId = readTest[0].id;
+                    const testVal = new Date().toISOString();
+                    const { error: writeErr } = await supabase.from("creators").update({ last_enriched: testVal }).eq("id", testId);
+                    if (writeErr) throw new Error("Write failed: " + writeErr.message);
+                    const { data: verifyData, error: verifyErr } = await supabase.from("creators").select("last_enriched").eq("id", testId).single();
+                    if (verifyErr) throw new Error("Verify failed: " + verifyErr.message);
+                    if (!verifyData.last_enriched) throw new Error("Write verification failed — value didn't persist");
+                    const wrote = new Date(testVal).getTime();
+                    const read = new Date(verifyData.last_enriched).getTime();
+                    if (Math.abs(wrote - read) > 2000) throw new Error("Write verification failed — timestamps don't match");
+                  }
+                  alert("Database connection working. Read, write, and verify all passed.");
+                } catch (e) { alert("Database test FAILED: " + e.message); }
+              }} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: t.blue, color: "#fff" }}>
+                Test Connection
+              </button>
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>{creators.length} creators · {library.length} briefs</div>
+            </div>
+            <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 16, boxShadow: t.shadow }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Preview Mode</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 10 }}>See what creators see — briefs only</div>
+              <button type="button" onClick={() => {
+                if (currentRole === ROLES.MANAGER) { setCurrentRole(ROLES.CREATOR); navigate("library"); }
+                else { setCurrentRole(ROLES.MANAGER); navigate("home"); }
+              }} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + (currentRole === ROLES.CREATOR ? t.green + "50" : t.border), background: currentRole === ROLES.CREATOR ? t.green + "15" : t.cardAlt, color: currentRole === ROLES.CREATOR ? t.green : t.text, cursor: "pointer" }}>
+                {currentRole === ROLES.CREATOR ? "Back to Manager" : "View as Creator"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -9703,32 +9715,6 @@ function SettingsPanel({
           <div style={{ fontSize: 11, color: t.textFaint }}>Model: Claude Sonnet · ~$0.01-0.02 per brief · ~$0.005 per IB Score · Source of Truth controls all AI behavior</div>
           <div style={{ fontSize: 11, color: t.green, fontWeight: 600 }}>All knowledge editable in Source of Truth</div>
         </div>
-      </div>
-
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginTop: 20, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 6 }}>Preview Mode</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.6 }}>Preview what creators see — they can only view and download briefs from the UGC Army library. All other sections are hidden.</div>
-        <button
-          type="button"
-          onClick={() => {
-            if (currentRole === ROLES.MANAGER) {
-              setCurrentRole(ROLES.CREATOR);
-              navigate("library");
-            } else {
-              setCurrentRole(ROLES.MANAGER);
-              navigate("home");
-            }
-          }}
-          style={{
-            padding: "10px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-            border: `1px solid ${currentRole === ROLES.CREATOR ? t.green + "50" : t.border}`,
-            background: currentRole === ROLES.CREATOR ? t.green + "15" : t.cardAlt,
-            color: currentRole === ROLES.CREATOR ? t.green : t.text,
-            cursor: "pointer",
-          }}
-        >
-          {currentRole === ROLES.CREATOR ? "← Back to Manager view" : "View as Creator"}
-        </button>
       </div>
 
       <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginTop: 20, boxShadow: t.shadow }}>
