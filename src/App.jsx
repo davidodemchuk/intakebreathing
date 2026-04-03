@@ -177,7 +177,7 @@ const CHANGELOG = [
     "Cache status shown to user — know exactly what's happening",
   ]},
   { version: "5.8.0", date: "2026-04-01", changes: [
-    "One-click 'Download All Formats' button — ZIP with 1x1, 4x5, 9x16, 16x9",
+    "One-click 'Download All Formats' button — ZIP with 1:1, 4:5, 9:16, 16:9",
   ]},
   { version: "5.7.0", date: "2026-04-01", changes: [
     "Manager authentication — password-protected dashboard",
@@ -6295,7 +6295,7 @@ function VideoReformatter({ onBack }) {
                     <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Processing 4 formats...</span>
                   </div>
                   <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>
-                    1×1 Square · 4×5 Feed · 9×16 Story · 16×9 Landscape
+                    1:1 Square · 4:5 Feed · 9:16 Story · 16:9 Landscape
                   </div>
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>This takes 1-3 minutes. Don&apos;t close this tab.</div>
                   <button
