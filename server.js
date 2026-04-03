@@ -302,7 +302,7 @@ app.post("/api/reformat", async (req, res) => {
     if (Math.abs(srcA - tgtA) < 0.05) {
       vf = ["-vf", `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black`];
     } else {
-      vf = ["-vf", `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black`];
+      vf = ["-filter_complex", `[0:v]scale=80:-1,scale=${w}:${h},setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`];
     }
 
     // Run FFmpeg
@@ -450,7 +450,7 @@ app.post("/api/reformat-all", async (req, res) => {
       if (Math.abs(srcA - tgtA) < 0.05) {
         vf = ["-vf", "scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease,pad=" + w + ":" + h + ":(ow-iw)/2:(oh-ih)/2:black"];
       } else {
-        vf = ["-vf", "scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease,pad=" + w + ":" + h + ":(ow-iw)/2:(oh-ih)/2:black"];
+        vf = ["-filter_complex", "[0:v]scale=80:-1,scale=" + w + ":" + h + ",setsar=1[bg];[0:v]scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"];
       }
       console.log("[batch] " + fmt.name + " (" + w + "x" + h + ")...");
       await new Promise((ok, no) => {
