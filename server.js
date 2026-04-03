@@ -8,8 +8,12 @@ import { fileURLToPath } from "url";
 import { execFile } from "child_process";
 import archiver from "archiver";
 import { google } from "googleapis";
+import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
+const SUPABASE_URL = "https://qaokxufufwbilfultgrk.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhb2t4dWZ1ZndiaWxmdWx0Z3JrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNDUxMzgsImV4cCI6MjA5MDYyMTEzOH0.TdATJK9H51dQvEu1ubWri-QiMgmJTMOF1L45MDRhFbs";
+const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
 const __dirname = path.dirname(__filename);
 
 // ── Resolve FFmpeg path: bundled npm package first, system fallback ──
@@ -215,6 +219,86 @@ app.get("/api/cache-thumbnail/:cacheId", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Store thumbnails permanently in Supabase Storage ──
+app.post("/api/store-thumbnails", async (req, res) => {
+  const { creatorHandle, videos } = req.body;
+  if (!creatorHandle || !Array.isArray(videos) || !videos.length) {
+    return res.status(400).json({ error: "Missing creatorHandle or videos" });
+  }
+
+  const handle = String(creatorHandle).replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+  const results = [];
+  let stored = 0;
+
+  for (let i = 0; i < videos.length; i++) {
+    const v = videos[i];
+    const coverUrl = v.cover || v.coverUrl || "";
+    if (!coverUrl || coverUrl.startsWith(SUPABASE_URL)) {
+      results.push({ index: i, url: coverUrl || null });
+      continue;
+    }
+
+    try {
+      const imgRes = await new Promise((resolve, reject) => {
+        const client = coverUrl.startsWith("https") ? https : http;
+        const imgReq = client.get(coverUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": coverUrl.includes("tiktok") ? "https://www.tiktok.com/" : "https://www.instagram.com/",
+            "Accept": "image/*",
+          },
+          timeout: 8000,
+        }, (resp) => {
+          if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+            client.get(resp.headers.location, { headers: { "User-Agent": "Mozilla/5.0", Accept: "image/*" }, timeout: 8000 }, (r2) => {
+              const chunks = [];
+              r2.on("data", c => chunks.push(c));
+              r2.on("end", () => resolve(Buffer.concat(chunks)));
+              r2.on("error", reject);
+            }).on("error", reject);
+            return;
+          }
+          if (resp.statusCode !== 200) return reject(new Error("HTTP " + resp.statusCode));
+          const chunks = [];
+          resp.on("data", c => chunks.push(c));
+          resp.on("end", () => resolve(Buffer.concat(chunks)));
+          resp.on("error", reject);
+        });
+        imgReq.on("error", reject);
+        imgReq.on("timeout", () => { imgReq.destroy(); reject(new Error("timeout")); });
+      });
+
+      if (imgRes.length < 500) {
+        results.push({ index: i, url: null });
+        continue;
+      }
+
+      const ext = coverUrl.includes(".webp") ? "webp" : coverUrl.includes(".png") ? "png" : "jpg";
+      const filePath = handle + "/" + (v.id || "v" + i) + "." + ext;
+      const contentType = ext === "webp" ? "image/webp" : ext === "png" ? "image/png" : "image/jpeg";
+
+      const { error: upErr } = await supabaseServer.storage
+        .from("thumbnails")
+        .upload(filePath, imgRes, { contentType, upsert: true });
+
+      if (upErr) {
+        console.error("[thumbs] Upload failed:", filePath, upErr.message);
+        results.push({ index: i, url: null });
+        continue;
+      }
+
+      const { data: pubUrl } = supabaseServer.storage.from("thumbnails").getPublicUrl(filePath);
+      results.push({ index: i, url: pubUrl.publicUrl });
+      stored++;
+    } catch (e) {
+      results.push({ index: i, url: null });
+    }
+  }
+
+  console.log("[thumbs] Stored " + stored + "/" + videos.length + " thumbnails for @" + handle);
+  res.json({ results, stored });
 });
 
 // ── Stream cached video for browser playback ──
