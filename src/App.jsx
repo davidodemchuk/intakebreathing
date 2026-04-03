@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.10.0";
+const APP_VERSION = "6.11.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -9543,23 +9543,22 @@ function SettingsPanel({
                   {apiKey && !apiMsg && <div style={{ fontSize: 11, color: t.green }}>Key saved (synced via Supabase)</div>}
                 </div>
 
-                {/* ScrapeCreators API Key */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 2 }}>ScrapeCreators API Key</div>
-                  <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 10 }}>Creator enrichment and video downloads</div>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <input id={scrapeId} type="password" defaultValue={scrapeKey} placeholder="Your ScrapeCreators key..." style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid " + (scrapeKey ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 13, fontFamily: "monospace", outline: "none", boxSizing: "border-box" }} />
-                    <button type="button" onClick={() => { const el = document.getElementById(scrapeId); const val = el ? el.value.trim() : ""; if (!val) { setScrapeStatus("fail"); setScrapeMsg("Paste your key first."); return; } saveScrapeKey(val); testScrapeApi(val); }} disabled={scrapeStatus === "testing"} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", opacity: scrapeStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap" }}>
-                      {scrapeStatus === "testing" ? "Testing..." : "Save & Test"}
-                    </button>
-                  </div>
-                  {scrapeMsg && <div style={{ fontSize: 11, padding: "8px 10px", borderRadius: 6, background: scrapeStatus === "ok" ? t.green + "10" : t.red + "08", color: scrapeStatus === "ok" ? t.green : t.red, border: "1px solid " + (scrapeStatus === "ok" ? t.green + "25" : t.red + "25") }}>{scrapeMsg}</div>}
-                  {scrapeKey && !scrapeMsg && <div style={{ fontSize: 11, color: t.green }}>Key saved (synced via Supabase)</div>}
-                </div>
-
                 <button onClick={() => setApiKeysUnlocked(false)} style={{ fontSize: 11, color: t.textFaint, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Lock API keys</button>
               </div>
             )}
+          </div>
+
+          {/* ScrapeCreators API Key — always visible */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 2 }}>ScrapeCreators API Key</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Used for creator enrichment (11 platforms) and video downloads. Get from <a href="https://app.scrapecreators.com" target="_blank" rel="noopener noreferrer" style={{ color: t.blue }}>app.scrapecreators.com</a></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input id={scrapeId} type="password" defaultValue={scrapeKey} placeholder="Your ScrapeCreators key..." style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid " + (scrapeKey ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 13, fontFamily: "monospace", outline: "none", boxSizing: "border-box" }} />
+              <button type="button" onClick={() => { const el = document.getElementById(scrapeId); const val = el ? el.value.trim() : ""; if (!val) { setScrapeStatus("fail"); setScrapeMsg("Paste your key first."); return; } saveScrapeKey(val); testScrapeApi(val); }} disabled={scrapeStatus === "testing"} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", opacity: scrapeStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap" }}>
+                {scrapeStatus === "testing" ? "Testing..." : "Save & Test"}
+              </button>
+            </div>
+            {scrapeStatus === "ok" ? <div style={{ fontSize: 12, color: t.green, marginTop: 8 }}>Key saved (synced via Supabase)</div> : scrapeStatus === "fail" ? <div style={{ fontSize: 12, color: t.red || "#ef4444", marginTop: 8 }}>{scrapeMsg || "Failed"}</div> : scrapeKey ? <div style={{ fontSize: 12, color: t.green, marginTop: 8 }}>Key saved (synced via Supabase)</div> : null}
           </div>
 
           {/* Team Password */}
@@ -9585,17 +9584,49 @@ function SettingsPanel({
         </div>
       </div>
 
-      {/* How it works — full width */}
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 16, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>How it works</div>
-        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7 }}>
-          <strong style={{ color: t.green }}>IB-Ai</strong> sends your brief form data to Claude Sonnet, which writes original hooks, story beats, persona descriptions, and creative direction tailored to your specific campaign. Requires an API key.
+      {/* Powered by IB-Ai — full width */}
+      <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 24, marginBottom: 16, boxShadow: t.shadow }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Powered by IB-Ai</div>
+        <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>Built on Anthropic's Claude — here's everything it does for Intake Creators</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.green }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Generation</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Writes complete UGC briefs with original hooks, story beats, persona targeting, platform-specific direction, and compliance guardrails. Every brief is unique to the campaign.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.green }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>IB Score (1-100)</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Scores every creator across 11 platforms. Weighs Instagram (45%), TikTok (30%), cross-platform (10%), and content alignment (15%). Generates partnership notes and risk assessment.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.blue }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Rate Calculator</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Estimates per-video rates for TikTok, Instagram Reels, Stories, YouTube Shorts, and dedicated videos. Uses real CPM data, engagement quality, and content alignment multipliers.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.blue }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Outreach Messages</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Generates personalized Instagram DMs and partnership emails for each creator. References their specific content themes and explains why Intake is a fit.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.purple }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Competitor Detection</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Scans creator bios and content for Breathe Right, Rhinomed, and other competing nasal products. Flags risks and adjusts partnership scoring accordingly.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.purple }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brand Safety</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Evaluates every creator for content risk — flags explicit material, controversial topics, or competitor partnerships. Rates each creator as Safe, Review, or Concern.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.orange }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Import</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Upload any old brief (PDF, image, or text) and IB-Ai reads it, extracts the key information, and rewrites it into Intake's brief format automatically.</div>
+          </div>
+          <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, borderLeft: "3px solid " + t.orange }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Compliance Engine</div>
+            <div style={{ fontSize: 11, color: t.textMuted, lineHeight: 1.5 }}>Auto-suggests approved claims and flags banned language as you build briefs. Ensures every piece of creator content stays within FDA-registered product guidelines.</div>
+          </div>
         </div>
-        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
-          <strong style={{ color: t.textSecondary, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="zap" size={14} color={t.textSecondary} />Instant Draft</strong> uses built-in templates with Intake's playbook data. No API key needed. Fast but less creative.
-        </div>
-        <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7, marginTop: 10 }}>
-          Each IB-Ai call uses roughly 3,000 output tokens (~$0.01-0.02 per brief on Claude Sonnet).
+
+        <div style={{ marginTop: 16, padding: "10px 14px", background: t.cardAlt, borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 11, color: t.textFaint }}>Model: Claude Sonnet · ~$0.01-0.02 per brief · ~$0.005 per IB Score · Source of Truth controls all AI behavior</div>
+          <div style={{ fontSize: 11, color: t.green, fontWeight: 600 }}>All knowledge editable in Source of Truth</div>
         </div>
       </div>
 
