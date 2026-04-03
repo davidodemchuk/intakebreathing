@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.7.0";
+const APP_VERSION = "6.8.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -9374,6 +9374,7 @@ function SettingsPanel({
   library,
   supabase,
   dbSetSetting,
+  dbGetSetting,
   apiKey,
   scrapeKey,
   setApiStatus,
@@ -9395,217 +9396,180 @@ function SettingsPanel({
   const pwId = `${instanceId}-new-password-input`;
   const apiId = `${instanceId}-api-key-input`;
   const scrapeId = `${instanceId}-scrape-key-input`;
+  const unlockId = `${instanceId}-api-unlock-pw`;
+  const [apiKeysUnlocked, setApiKeysUnlocked] = useState(false);
 
   return (
     <>
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database Connection</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12 }}>Test that data can be read and written to Supabase</div>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              const { data: readTest, error: readErr } = await supabase.from("creators").select("id").limit(1);
-              if (readErr) throw new Error(`Read failed: ${readErr.message}`);
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        {/* LEFT COLUMN */}
+        <div>
+          {/* Services Dashboard */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Services</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>External platforms that power this dashboard</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { name: "Supabase", desc: "Database, auth, storage", url: "https://supabase.com/dashboard/project/qaokxufufwbilfultgrk", status: "connected", color: t.green },
+                { name: "Railway", desc: "Server hosting + deploy", url: "https://railway.app", status: "deployed", color: t.green },
+                { name: "Anthropic", desc: "Claude AI for briefs + scoring", url: "https://console.anthropic.com", status: apiKey ? "key set" : "no key", color: apiKey ? t.green : t.orange },
+                { name: "ScrapeCreators", desc: "Creator enrichment (11 platforms)", url: "https://app.scrapecreators.com", status: scrapeKey ? "key set" : "no key", color: scrapeKey ? t.green : t.orange },
+                { name: "Resend", desc: "Email delivery for creator portal", url: "https://resend.com", status: "configured", color: t.green },
+                { name: "Google Sheets", desc: "Channel Pipeline data source", url: "https://docs.google.com/spreadsheets/d/1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak", status: "connected", color: t.green },
+                { name: "GitHub", desc: "Source code repository", url: "https://github.com/davidodemchuk/intakebreathing", status: "active", color: t.green },
+              ].map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, border: "1px solid " + t.border, textDecoration: "none", transition: "border-color 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = s.color + "60"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{s.name}</div>
+                    <div style={{ fontSize: 11, color: t.textMuted }}>{s.desc}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 3, background: s.color }}></div>
+                    <span style={{ fontSize: 10, color: s.color, fontWeight: 600 }}>{s.status}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
 
-              if (readTest && readTest.length > 0) {
-                const testId = readTest[0].id;
-                const testVal = new Date().toISOString();
-                const { error: writeErr } = await supabase
-                  .from("creators")
-                  .update({ last_enriched: testVal })
-                  .eq("id", testId);
-                if (writeErr) throw new Error(`Write failed: ${writeErr.message}`);
-
-                const { data: verifyData, error: verifyErr } = await supabase
-                  .from("creators")
-                  .select("last_enriched")
-                  .eq("id", testId)
-                  .single();
-                if (verifyErr) throw new Error(`Verify failed: ${verifyErr.message}`);
-                if (verifyData.last_enriched !== testVal) {
-                  throw new Error("Write verification failed — value didn't persist");
+          {/* Database Connection */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Database Connection</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Test that data can be read and written to Supabase</div>
+            <button type="button" onClick={async () => {
+              try {
+                const { data: readTest, error: readErr } = await supabase.from("creators").select("id").limit(1);
+                if (readErr) throw new Error("Read failed: " + readErr.message);
+                if (readTest && readTest.length > 0) {
+                  const testId = readTest[0].id;
+                  const testVal = new Date().toISOString();
+                  const { error: writeErr } = await supabase.from("creators").update({ last_enriched: testVal }).eq("id", testId);
+                  if (writeErr) throw new Error("Write failed: " + writeErr.message);
+                  const { data: verifyData, error: verifyErr } = await supabase.from("creators").select("last_enriched").eq("id", testId).single();
+                  if (verifyErr) throw new Error("Verify failed: " + verifyErr.message);
+                  if (verifyData.last_enriched !== testVal) throw new Error("Write verification failed");
                 }
-              }
-
-              alert("✓ Database connection working. Read, write, and verify all passed.");
-            } catch (e) {
-              alert(`✗ Database test FAILED: ${e.message}`);
-            }
-          }}
-          style={{
-            padding: "11px 20px",
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            border: "none",
-            background: t.blue,
-            color: "#fff",
-          }}
-        >
-          Test Connection
-        </button>
-        <div style={{ fontSize: 12, color: t.textFaint, marginTop: 8 }}>
-          {creators.length} creators · {library.length} briefs in database
+                alert("Database connection working. Read, write, and verify all passed.");
+              } catch (e) { alert("Database test FAILED: " + e.message); }
+            }} style={{ padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: t.blue, color: "#fff" }}>
+              Test Connection
+            </button>
+            <div style={{ fontSize: 12, color: t.textFaint, marginTop: 8 }}>{creators.length} creators · {library.length} briefs in database</div>
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: t.textFaint, marginTop: 10, lineHeight: 1.5 }}>
-          API keys are stored in the <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>app_settings</code> table. If saves fail, run the SQL at the end of <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 10 }}>supabase/schema.sql</code> in the Supabase SQL Editor.
+
+        {/* RIGHT COLUMN */}
+        <div>
+          {/* API Keys — Password Protected */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: apiKeysUnlocked ? 16 : 0 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 2 }}>API Keys</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>Protected — changes affect the entire platform</div>
+              </div>
+              {!apiKeysUnlocked ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 6, background: t.orange + "15", border: "1px solid " + t.orange + "30" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: 3, background: t.orange }}></div>
+                  <span style={{ fontSize: 10, color: t.orange, fontWeight: 600 }}>Locked</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 6, background: t.green + "15", border: "1px solid " + t.green + "30" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: 3, background: t.green }}></div>
+                  <span style={{ fontSize: 10, color: t.green, fontWeight: 600 }}>Unlocked</span>
+                </div>
+              )}
+            </div>
+
+            {!apiKeysUnlocked ? (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, color: t.orange, marginBottom: 10, padding: "8px 12px", background: t.orange + "08", borderRadius: 8, border: "1px solid " + t.orange + "20" }}>
+                  Changing API keys will affect all AI features, enrichment, and email delivery. Enter the team password to make changes.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input id={unlockId} type="password" placeholder="Team password" onKeyDown={async (e) => {
+                    if (e.key !== "Enter") return;
+                    const val = e.target.value.trim();
+                    if (!val) return;
+                    const encoder = new TextEncoder();
+                    const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(val));
+                    const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+                    const stored = await dbGetSetting("manager-password-hash");
+                    if (hash === stored) setApiKeysUnlocked(true);
+                    else alert("Incorrect password");
+                  }} style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+                  <button type="button" onClick={async () => {
+                    const el = document.getElementById(unlockId);
+                    const val = el ? el.value.trim() : "";
+                    if (!val) return;
+                    const encoder = new TextEncoder();
+                    const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(val));
+                    const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+                    const stored = await dbGetSetting("manager-password-hash");
+                    if (hash === stored) setApiKeysUnlocked(true);
+                    else alert("Incorrect password");
+                  }} style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: t.orange, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Unlock</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {/* Anthropic API Key */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 2 }}>Anthropic API Key</div>
+                  <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 10 }}>Powers IB-Ai briefs, IB Score, and outreach</div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input id={apiId} type="password" defaultValue={apiKey} placeholder="sk-ant-api03-..." style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid " + (apiKey ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 13, fontFamily: "monospace", outline: "none", boxSizing: "border-box" }} />
+                    <button type="button" onClick={() => { const el = document.getElementById(apiId); const val = el ? el.value.trim() : ""; if (!val) { setApiStatus("fail"); setApiMsg("Paste your key first."); return; } saveApiKey(val); testApi(val); }} disabled={apiStatus === "testing"} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", opacity: apiStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap" }}>
+                      {apiStatus === "testing" ? "Testing..." : "Save & Test"}
+                    </button>
+                  </div>
+                  {apiMsg && <div style={{ fontSize: 11, padding: "8px 10px", borderRadius: 6, background: apiStatus === "ok" ? t.green + "10" : t.red + "08", color: apiStatus === "ok" ? t.green : t.red, border: "1px solid " + (apiStatus === "ok" ? t.green + "25" : t.red + "25") }}>{apiMsg}</div>}
+                  {apiKey && !apiMsg && <div style={{ fontSize: 11, color: t.green }}>Key saved (synced via Supabase)</div>}
+                </div>
+
+                {/* ScrapeCreators API Key */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 2 }}>ScrapeCreators API Key</div>
+                  <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 10 }}>Creator enrichment and video downloads</div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input id={scrapeId} type="password" defaultValue={scrapeKey} placeholder="Your ScrapeCreators key..." style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid " + (scrapeKey ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 13, fontFamily: "monospace", outline: "none", boxSizing: "border-box" }} />
+                    <button type="button" onClick={() => { const el = document.getElementById(scrapeId); const val = el ? el.value.trim() : ""; if (!val) { setScrapeStatus("fail"); setScrapeMsg("Paste your key first."); return; } saveScrapeKey(val); testScrapeApi(val); }} disabled={scrapeStatus === "testing"} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", opacity: scrapeStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap" }}>
+                      {scrapeStatus === "testing" ? "Testing..." : "Save & Test"}
+                    </button>
+                  </div>
+                  {scrapeMsg && <div style={{ fontSize: 11, padding: "8px 10px", borderRadius: 6, background: scrapeStatus === "ok" ? t.green + "10" : t.red + "08", color: scrapeStatus === "ok" ? t.green : t.red, border: "1px solid " + (scrapeStatus === "ok" ? t.green + "25" : t.red + "25") }}>{scrapeMsg}</div>}
+                  {scrapeKey && !scrapeMsg && <div style={{ fontSize: 11, color: t.green }}>Key saved (synced via Supabase)</div>}
+                </div>
+
+                <button onClick={() => setApiKeysUnlocked(false)} style={{ fontSize: 11, color: t.textFaint, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Lock API keys</button>
+              </div>
+            )}
+          </div>
+
+          {/* Team Password */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Team Password</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Change the shared password for manager access</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input id={pwId} type="password" placeholder="New team password" style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              <button type="button" onClick={async () => {
+                const el = document.getElementById(pwId);
+                const val = el ? el.value.trim() : "";
+                if (!val || val.length < 4) { alert("Password must be at least 4 characters."); return; }
+                const encoder = new TextEncoder();
+                const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(val));
+                const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+                await dbSetSetting("manager-password-hash", hash);
+                localStorage.setItem("intake-manager-auth", hash);
+                if (el) el.value = "";
+                alert("Password updated. All team members will need to re-login with the new password.");
+              }} style={{ padding: "10px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", whiteSpace: "nowrap" }}>Update</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Team Password</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>Change the shared password for manager access (SHA-256 hash stored in Supabase).</div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <input
-            id={pwId}
-            type="password"
-            placeholder="New team password"
-            style={{ flex: 1, padding: "11px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" }}
-          />
-          <button
-            type="button"
-            onClick={async () => {
-              const el = document.getElementById(pwId);
-              const val = el ? el.value.trim() : "";
-              if (!val || val.length < 4) { alert("Password must be at least 4 characters."); return; }
-              const encoder = new TextEncoder();
-              const data = encoder.encode(val);
-              const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-              const hashArray = Array.from(new Uint8Array(hashBuffer));
-              const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-              await dbSetSetting("manager-password-hash", hash);
-              localStorage.setItem("intake-manager-auth", hash);
-              if (el) el.value = "";
-              alert("Password updated. All team members will need to re-login with the new password.");
-            }}
-            style={{ padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", whiteSpace: "nowrap" }}
-          >
-            Update
-          </button>
-        </div>
-      </div>
-
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Anthropic API Key</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-          Get your key from <span style={{ color: t.blue, fontWeight: 600 }}>console.anthropic.com → API Keys</span>. It starts with <code style={{ background: t.cardAlt, padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>sk-ant-</code>
-        </div>
-        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          <input
-            id={apiId}
-            type="password"
-            defaultValue={apiKey}
-            placeholder="sk-ant-api03-..."
-            style={{
-              flex: 1, padding: "11px 14px", borderRadius: 8, border: `1px solid ${apiKey ? t.green+"50" : t.border}`,
-              background: t.inputBg, color: t.inputText, fontSize: 14, fontFamily: "monospace", outline: "none", boxSizing: "border-box",
-            }}
-            onFocus={e => { e.target.style.borderColor = t.green; }}
-            onBlur={e => { e.target.style.borderColor = apiKey ? t.green+"50" : t.border; }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById(apiId);
-              const val = el ? el.value.trim() : "";
-              if (!val) { setApiStatus("fail"); setApiMsg("Paste your key first."); return; }
-              saveApiKey(val);
-              testApi(val);
-            }}
-            disabled={apiStatus === "testing"}
-            style={{
-              padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-              cursor: apiStatus === "testing" ? "not-allowed" : "pointer",
-              border: "none", background: t.green, color: t.isLight ? "#fff" : "#000",
-              opacity: apiStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap",
-            }}
-          >
-            {apiStatus === "testing" ? "Testing…" : "Save & Test"}
-          </button>
-        </div>
-
-        {apiMsg && (
-          <div style={{
-            fontSize: 12, padding: "10px 12px", borderRadius: 8, lineHeight: 1.5, fontFamily: "monospace", wordBreak: "break-word",
-            background: apiStatus === "ok" ? t.green+"10" : t.red+"08",
-            color: apiStatus === "ok" ? t.green : t.red,
-            border: `1px solid ${apiStatus === "ok" ? t.green+"25" : t.red+"25"}`,
-          }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{apiStatus === "ok" ? <Icon name="checkSm" size={12} color={t.green} /> : <Icon name="x" size={12} color={t.red} />}{apiMsg}</span>
-          </div>
-        )}
-        {!apiKey && !apiMsg && (
-          <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
-            Saved to Supabase (shared across browsers) and cached locally. Sent to Anthropic only to authenticate your API calls.
-          </div>
-        )}
-        {apiKey && !apiMsg && (
-          <div style={{ fontSize: 12, color: t.green }}>✓ Key saved (synced via Supabase)</div>
-        )}
-      </div>
-
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 20, boxShadow: t.shadow }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>ScrapeCreators API Key</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-          Used for creator enrichment and fetching TikTok and Instagram videos (e.g. Video Reformatter). Get your key from{" "}
-          <span style={{ color: t.blue, fontWeight: 600 }}>app.scrapecreators.com</span>.
-        </div>
-        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          <input
-            id={scrapeId}
-            type="password"
-            defaultValue={scrapeKey}
-            placeholder="Your ScrapeCreators API key…"
-            style={{
-              flex: 1, padding: "11px 14px", borderRadius: 8, border: `1px solid ${scrapeKey ? t.green+"50" : t.border}`,
-              background: t.inputBg, color: t.inputText, fontSize: 14, fontFamily: "monospace", outline: "none", boxSizing: "border-box",
-            }}
-            onFocus={e => { e.target.style.borderColor = t.green; }}
-            onBlur={e => { e.target.style.borderColor = scrapeKey ? t.green+"50" : t.border; }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById(scrapeId);
-              const val = el ? el.value.trim() : "";
-              if (!val) { setScrapeStatus("fail"); setScrapeMsg("Paste your key first."); return; }
-              saveScrapeKey(val);
-              testScrapeApi(val);
-            }}
-            disabled={scrapeStatus === "testing"}
-            style={{
-              padding: "11px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-              cursor: scrapeStatus === "testing" ? "not-allowed" : "pointer",
-              border: "none", background: t.green, color: t.isLight ? "#fff" : "#000",
-              opacity: scrapeStatus === "testing" ? 0.6 : 1, whiteSpace: "nowrap",
-            }}
-          >
-            {scrapeStatus === "testing" ? "Testing…" : "Save & Test"}
-          </button>
-        </div>
-        {scrapeMsg && (
-          <div style={{
-            fontSize: 12, padding: "10px 12px", borderRadius: 8, lineHeight: 1.5, fontFamily: "monospace", wordBreak: "break-word",
-            background: scrapeStatus === "ok" ? t.green+"10" : t.red+"08",
-            color: scrapeStatus === "ok" ? t.green : t.red,
-            border: `1px solid ${scrapeStatus === "ok" ? t.green+"25" : t.red+"25"}`,
-          }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{scrapeStatus === "ok" ? <Icon name="checkSm" size={12} color={t.green} /> : <Icon name="x" size={12} color={t.red} />}{scrapeMsg}</span>
-          </div>
-        )}
-        {!scrapeKey && !scrapeMsg && (
-          <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
-            Saved to Supabase (shared across browsers) and cached locally. Sent only to ScrapeCreators when you enrich or fetch videos or test the connection.
-          </div>
-        )}
-        {scrapeKey && !scrapeMsg && (
-          <div style={{ fontSize: 12, color: t.green }}>✓ Key saved (synced via Supabase)</div>
-        )}
-      </div>
-
-      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, boxShadow: t.shadow }}>
+      {/* How it works — full width */}
+      <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 24, marginBottom: 16, boxShadow: t.shadow }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>How it works</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.7 }}>
           <strong style={{ color: t.green }}>IB-Ai</strong> sends your brief form data to Claude Sonnet, which writes original hooks, story beats, persona descriptions, and creative direction tailored to your specific campaign. Requires an API key.
@@ -9657,6 +9621,25 @@ function SettingsPanel({
             ))}
           </div>
         ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+        <div style={{ flex: 1, background: t.cardAlt, borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontSize: 11, color: t.textFaint }}>Version</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{APP_VERSION}</div>
+        </div>
+        <div style={{ flex: 1, background: t.cardAlt, borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontSize: 11, color: t.textFaint }}>Creators</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{creators.length}</div>
+        </div>
+        <div style={{ flex: 1, background: t.cardAlt, borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontSize: 11, color: t.textFaint }}>Briefs</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{library.length}</div>
+        </div>
+        <div style={{ flex: 1, background: t.cardAlt, borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ fontSize: 11, color: t.textFaint }}>Stack</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>React + Express + Supabase</div>
+        </div>
       </div>
     </>
   );
@@ -11502,7 +11485,7 @@ export default function App() {
 
         {/* SETTINGS */}
         {!aiLoading && isCreatorViewAllowed && view === "settings" && (
-          <div style={{ maxWidth: 600, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
             <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure API keys, team password, and database.</div>
@@ -11514,6 +11497,7 @@ export default function App() {
               library={library}
               supabase={supabase}
               dbSetSetting={dbSetSetting}
+              dbGetSetting={dbGetSetting}
               apiKey={apiKey}
               scrapeKey={scrapeKey}
               setApiStatus={setApiStatus}
