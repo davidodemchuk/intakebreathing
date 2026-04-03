@@ -5897,16 +5897,32 @@ function VideoReformatter({ onBack }) {
         const ad = data.aweme_detail || data.data?.aweme_detail || data;
         const v = ad?.video;
         const brSorted = [...(v?.bit_rate || [])].sort((a, b) => (b.bit_rate || 0) - (a.bit_rate || 0));
-        const videoUrls = [
-          ...(v?.download_addr?.url_list || []),
-          ...brSorted.flatMap((br) => br.play_addr?.url_list || []),
-          ...(v?.play_addr?.url_list || []),
-        ].filter(Boolean);
-        if (ad?.download_url) videoUrls.unshift(ad.download_url);
-        if (data.download_url) videoUrls.unshift(data.download_url);
-        if (data.video_url) videoUrls.unshift(data.video_url);
-        const uniqueUrls = [...new Set(videoUrls)];
-        console.log("[VideoReformatter] Found", uniqueUrls.length, "video URLs");
+
+        // Priority order: watermark-free first, watermarked last
+        const videoUrls = [];
+
+        // 1. ScrapeCreators top-level fields — usually watermark-free
+        if (data.video_url) videoUrls.push(data.video_url);
+        if (data.download_url) videoUrls.push(data.download_url);
+        if (data.nwm_video_url) videoUrls.push(data.nwm_video_url);
+        if (data.no_watermark_url) videoUrls.push(data.no_watermark_url);
+        if (ad?.download_url) videoUrls.push(ad.download_url);
+        if (ad?.nwm_video_url) videoUrls.push(ad.nwm_video_url);
+        if (ad?.no_watermark_url) videoUrls.push(ad.no_watermark_url);
+
+        // 2. play_addr — playback URL, typically NO watermark
+        if (v?.play_addr?.url_list) videoUrls.push(...v.play_addr.url_list);
+
+        // 3. bit_rate variants — sorted by quality, play_addr versions (no watermark)
+        for (const br of brSorted) {
+          if (br.play_addr?.url_list) videoUrls.push(...br.play_addr.url_list);
+        }
+
+        // 4. download_addr — LAST because this is the WATERMARKED version
+        if (v?.download_addr?.url_list) videoUrls.push(...v.download_addr.url_list);
+
+        const uniqueUrls = [...new Set(videoUrls.filter(Boolean))];
+        console.log("[VideoReformatter] URL priority (first = best):", uniqueUrls.map((u, i) => `${i}: ${u.substring(0, 80)}...`));
 
         parsed = {
           platform: "TikTok",
