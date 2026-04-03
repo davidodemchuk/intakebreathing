@@ -9447,7 +9447,10 @@ function SettingsPanel({
                   if (writeErr) throw new Error("Write failed: " + writeErr.message);
                   const { data: verifyData, error: verifyErr } = await supabase.from("creators").select("last_enriched").eq("id", testId).single();
                   if (verifyErr) throw new Error("Verify failed: " + verifyErr.message);
-                  if (verifyData.last_enriched !== testVal) throw new Error("Write verification failed");
+                  if (!verifyData.last_enriched) throw new Error("Write verification failed — value didn't persist");
+                  const wrote = new Date(testVal).getTime();
+                  const read = new Date(verifyData.last_enriched).getTime();
+                  if (Math.abs(wrote - read) > 2000) throw new Error("Write verification failed — timestamps don't match");
                 }
                 alert("Database connection working. Read, write, and verify all passed.");
               } catch (e) { alert("Database test FAILED: " + e.message); }
