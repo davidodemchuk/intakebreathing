@@ -6225,7 +6225,7 @@ function VideoReformatter({ onBack }) {
             <div style={{ width: 180, flexShrink: 0 }}>
               <div style={{ width: 180, height: 240, borderRadius: 8, overflow: "hidden", background: t.cardAlt, position: "relative" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: t.textFaint }}>▶</div>
-                {video.coverUrl && <img key={video.coverUrl} src={video.coverUrl} alt="" referrerPolicy="no-referrer" style={{ width: 180, height: 240, objectFit: "cover", display: "block", position: "relative", zIndex: 1 }} onError={(e) => { e.target.remove(); }} />}
+                {video.coverUrl && <img key={video.coverUrl} src={video.coverUrl} alt="" referrerPolicy="no-referrer" style={{ width: 180, height: 240, objectFit: "cover", display: "block", position: "relative", zIndex: 1 }} onError={(e) => { e.target.style.opacity = "0"; }} />}
               </div>
             </div>
 
