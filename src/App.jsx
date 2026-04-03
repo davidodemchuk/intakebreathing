@@ -5918,19 +5918,30 @@ function VideoReformatter({ onBack }) {
           if (br.play_addr?.url_list) videoUrls.push(...br.play_addr.url_list);
         }
 
-        // 4. download_addr — LAST because this is the WATERMARKED version
-        if (v?.download_addr?.url_list) videoUrls.push(...v.download_addr.url_list);
-
         const uniqueUrls = [...new Set(videoUrls.filter(Boolean))];
-        console.log("[VideoReformatter] URL priority (first = best):", uniqueUrls.map((u, i) => `${i}: ${u.substring(0, 80)}...`));
+
+        // Filter out any URLs that are known watermarked paths
+        const cleanUrls = uniqueUrls.filter(u => {
+          const lower = u.toLowerCase();
+          // TikTok watermarked URLs often contain these patterns
+          if (lower.includes("/download/") && lower.includes("watermark=1")) return false;
+          if (lower.includes("download_addr")) return false;
+          return true;
+        });
+
+        if (cleanUrls.length === 0) {
+          throw new Error("Could not find a watermark-free video URL. Try opening the video in TikTok and sharing the direct link, or download it manually from TikTok without watermark using a third-party tool.");
+        }
+
+        console.log("[VideoReformatter] Clean URLs (no watermark):", cleanUrls.length, "of", uniqueUrls.length, "total");
 
         parsed = {
           platform: "TikTok",
           author: ad?.author?.nickname || "Unknown",
           authorHandle: ad?.author?.unique_id || "",
           caption: ad?.desc || "",
-          videoUrl: uniqueUrls[0] || "",
-          videoUrls: uniqueUrls,
+          videoUrl: cleanUrls[0] || "",
+          videoUrls: cleanUrls,
           coverUrl: v?.cover?.url_list?.[0] || v?.origin_cover?.url_list?.[0] || v?.dynamic_cover?.url_list?.[0] || "",
           width: v?.width || 0,
           height: v?.height || 0,
