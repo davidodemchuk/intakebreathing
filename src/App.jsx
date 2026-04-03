@@ -44,6 +44,60 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 const APP_VERSION = "6.13.0";
 const CHANGELOG = [
+  { version: "6.11.0", date: "2026-04-03", changes: [
+    "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
+  ]},
+  { version: "6.10.0", date: "2026-04-03", changes: [
+    "Rate calculator uses median views instead of mean — eliminates viral outlier skew",
+    "Dollar amounts show commas for readability ($124,180 not $124180)",
+    "Quick stats show 'Typical views' (median) instead of misleading average",
+  ]},
+  { version: "6.9.0", date: "2026-04-03", changes: [
+    "Enrichment UI redesigned — grid layout with progress bar, do-not-leave warning",
+    "Snapchat, Facebook, LinkedIn false positives filtered — validates real data before marking green",
+    "Thumbnail storage moved earlier in pipeline — captures CDN URLs before they expire",
+  ]},
+  { version: "6.8.0", date: "2026-04-03", changes: [
+    "Settings V2 — services dashboard with links, password-protected API keys, 2-column layout",
+    "ScrapeCreators key always visible (not locked behind password)",
+    "Powered by IB-Ai overview replaces old How It Works section",
+  ]},
+  { version: "6.7.0", date: "2026-04-03", changes: [
+    "Rate calculator V3 — per-platform breakdown (TikTok, IG Reel, Story, Feed, YT Short, YT Dedicated)",
+    "Each rate shows AI reasoning when clicked — references creator's actual metrics",
+    "Fixed $500-500 display bug",
+    "Database test fixed — compares timestamps by value not string format",
+  ]},
+  { version: "6.6.0", date: "2026-04-03", changes: [
+    "Change Requests page — filter by open/completed/all, mark done, delete",
+    "Homepage stat card shows open request count instead of avg IB score",
+    "Change requests stored in Supabase — survive all deploys",
+  ]},
+  { version: "6.5.0", date: "2026-04-03", changes: [
+    "Creator Flow Chart (Lucidchart) with fullscreen mode",
+    "2025 In Review (Canva) presentation embedded on homepage",
+    "Section titles enlarged for readability",
+  ]},
+  { version: "6.4.0", date: "2026-04-03", changes: [
+    "Permanent thumbnail storage via Supabase Storage — TikTok covers no longer expire",
+    "TikTok videos increased from 15 to 30, display up to 15",
+  ]},
+  { version: "6.3.0", date: "2026-04-03", changes: [
+    "Source of Truth and Settings are homepage cards with own pages (not collapsible blocks)",
+    "Source of Truth page at /source-of-truth with startOpen prop",
+  ]},
+  { version: "6.2.0", date: "2026-04-03", changes: [
+    "All sub-page cards match homepage V2 style — full accent borders, CardIcons, shadows",
+    "Instagram Reels row removed — merged into Instagram Posts (deduped)",
+    "Top Performer moved into Recent Content section",
+    "Format labels use colon notation (1:1, 4:5, 9:16, 16:9)",
+  ]},
+  { version: "6.1.0", date: "2026-04-03", changes: [
+    "Video reformatter — watermark-free downloads prioritized, blurred zoom background on reformats",
+    "Playable video preview with server streaming + thumbnail poster",
+    "Batch reformat 5x faster — ultrafast preset, chunked processing",
+    "TikTok download never uses watermarked source — errors instead",
+  ]},
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
   ]},
