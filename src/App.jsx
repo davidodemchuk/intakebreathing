@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.12.0";
+const APP_VERSION = "6.13.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -9782,6 +9782,8 @@ export default function App() {
   const [library, setLibrary] = useState([]);
   const [openChangeRequests, setOpenChangeRequests] = useState(0);
   const [flowChartFullscreen, setFlowChartFullscreen] = useState(false);
+  const [flowChartLoaded, setFlowChartLoaded] = useState(false);
+  const [canvaLoaded, setCanvaLoaded] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [briefPrefill, setBriefPrefill] = useState(null);
   const [aiKnowledge, setAiKnowledge] = useState(() => getDefaultAiKnowledge());
@@ -11474,8 +11476,18 @@ export default function App() {
                   <button onClick={() => setFlowChartFullscreen(true)} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer", fontWeight: 600 }}>Fullscreen</button>
                 </div>
                 <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, overflow: "hidden", boxShadow: t.shadow }}>
-                  <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "75%", overflow: "hidden" }}>
-                    <iframe loading="lazy" style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
+                  <div style={{ position: "relative", overflow: "hidden", borderRadius: 14 }}>
+                    <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "75%", overflow: "hidden", filter: flowChartLoaded ? "none" : "blur(8px)", transition: "filter 0.5s", pointerEvents: flowChartLoaded ? "auto" : "none" }}>
+                      <iframe loading="lazy" style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
+                    </div>
+                    {!flowChartLoaded ? (
+                      <div onClick={() => setFlowChartLoaded(true)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2, background: "linear-gradient(180deg, " + t.card + "90, " + t.card + "60)", backdropFilter: "blur(4px)", transition: "opacity 0.3s" }}>
+                        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "20px 32px", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Partnerships Flow Chart</div>
+                          <div style={{ fontSize: 12, color: t.textMuted }}>Click to load interactive diagram</div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -11483,14 +11495,18 @@ export default function App() {
               <div style={{ marginBottom: 24 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", marginBottom: 10 }}>2025 In Review</div>
                 <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, overflow: "hidden", boxShadow: t.shadow }}>
-                  <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "56.25%", overflow: "hidden" }}>
-                    <iframe
-                      loading="lazy"
-                      style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }}
-                      src="https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view?embed"
-                      allowFullScreen
-                      allow="fullscreen"
-                    />
+                  <div style={{ position: "relative", overflow: "hidden", borderRadius: 14 }}>
+                    <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "56.25%", overflow: "hidden", filter: canvaLoaded ? "none" : "blur(8px)", transition: "filter 0.5s", pointerEvents: canvaLoaded ? "auto" : "none" }}>
+                      <iframe loading="lazy" style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }} src="https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view?embed" allowFullScreen allow="fullscreen" />
+                    </div>
+                    {!canvaLoaded ? (
+                      <div onClick={() => setCanvaLoaded(true)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2, background: "linear-gradient(180deg, " + t.card + "90, " + t.card + "60)", backdropFilter: "blur(4px)", transition: "opacity 0.3s" }}>
+                        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "20px 32px", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>2025 In Review</div>
+                          <div style={{ fontSize: 12, color: t.textMuted }}>Click to load presentation</div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
