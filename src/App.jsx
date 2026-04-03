@@ -6223,9 +6223,21 @@ function VideoReformatter({ onBack }) {
             
             {/* Left: thumbnail (TikTok blocks direct <video> playback in browser) */}
             <div style={{ width: 180, flexShrink: 0 }}>
-              <div style={{ width: 180, height: 240, borderRadius: 8, overflow: "hidden", background: t.cardAlt, position: "relative" }}>
-                <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: t.textFaint }}>▶</div>
-                {video.coverUrl && <img key={video.coverUrl} src={video.coverUrl} alt="" referrerPolicy="no-referrer" style={{ width: 180, height: 240, objectFit: "cover", display: "block", position: "relative", zIndex: 1 }} onError={(e) => { e.target.style.opacity = "0"; }} />}
+              <div style={{ width: 180, height: 320, borderRadius: 8, overflow: "hidden", background: t.cardAlt, position: "relative", flexShrink: 0 }}>
+                {video.cacheId ? (
+                  <video
+                    src={"/api/cache-video/" + video.cacheId}
+                    poster={video.coverUrl || ""}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    style={{ width: 180, height: 320, objectFit: "cover", display: "block", borderRadius: 8 }}
+                  />
+                ) : video.coverUrl ? (
+                  <img key={video.coverUrl} src={video.coverUrl} alt="" referrerPolicy="no-referrer" style={{ width: 180, height: 320, objectFit: "cover", display: "block" }} onError={(e) => { e.target.style.opacity = "0"; }} />
+                ) : (
+                  <div style={{ width: 180, height: 320, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: t.textFaint }}>▶</div>
+                )}
               </div>
             </div>
 

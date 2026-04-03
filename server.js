@@ -217,6 +217,29 @@ app.get("/api/cache-thumbnail/:cacheId", async (req, res) => {
   }
 });
 
+// ── Stream cached video for browser playback ──
+app.get("/api/cache-video/:cacheId", (req, res) => {
+  const entry = videoCache.get(req.params.cacheId);
+  if (!entry || !fs.existsSync(entry.filePath)) return res.status(404).json({ error: "Not cached" });
+  const stat = fs.statSync(entry.filePath);
+  const range = req.headers.range;
+  if (range) {
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+    res.writeHead(206, {
+      "Content-Range": "bytes " + start + "-" + end + "/" + stat.size,
+      "Accept-Ranges": "bytes",
+      "Content-Length": end - start + 1,
+      "Content-Type": "video/mp4",
+    });
+    fs.createReadStream(entry.filePath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, { "Content-Length": stat.size, "Content-Type": "video/mp4" });
+    fs.createReadStream(entry.filePath).pipe(res);
+  }
+});
+
 // ── Reformat ──
 app.post("/api/reformat", async (req, res) => {
   const { videoUrl, videoUrls, cacheId, width, height, name } = req.body;
