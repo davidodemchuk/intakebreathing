@@ -6223,33 +6223,9 @@ function VideoReformatter({ onBack }) {
             
             {/* Left: thumbnail (TikTok blocks direct <video> playback in browser) */}
             <div style={{ width: 180, flexShrink: 0 }}>
-              {video.coverUrl ? (
-                <img
-                  src={video.coverUrl}
-                  alt="Video thumbnail"
-                  referrerPolicy="no-referrer"
-                  style={{ width: 180, maxHeight: 320, objectFit: "cover", borderRadius: 8, background: t.cardAlt, display: "block" }}
-                  onError={(e) => {
-                    e.target.style.display = "none";
-                    const ph = e.target.nextElementSibling;
-                    if (ph) ph.style.display = "flex";
-                  }}
-                />
-              ) : null}
-              <div
-                style={{
-                  width: 180,
-                  height: 240,
-                  borderRadius: 8,
-                  background: t.cardAlt,
-                  display: video.coverUrl ? "none" : "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 32,
-                  color: t.textFaint,
-                }}
-              >
-                ▶
+              <div style={{ width: 180, height: 240, borderRadius: 8, overflow: "hidden", background: t.cardAlt, position: "relative" }}>
+                <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: t.textFaint }}>▶</div>
+                {video.coverUrl && <img key={video.coverUrl} src={video.coverUrl} alt="" referrerPolicy="no-referrer" style={{ width: 180, height: 240, objectFit: "cover", display: "block", position: "relative", zIndex: 1 }} onError={(e) => { e.target.remove(); }} />}
               </div>
             </div>
 
