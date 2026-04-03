@@ -7449,8 +7449,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         {/* ═══ Recent Content — by Platform ═══ */}
         {(() => {
           const ttVideos = (c.tiktokData?.recentVideos || c.tiktokRecentVideos || []).slice(0, 8);
-          const igPosts = (c.instagramRecentPosts || []).slice(0, 8);
-          const igReels = (c.instagramRecentReels || []).slice(0, 8);
 
           const platforms = [
             {
@@ -7472,40 +7470,41 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               })),
             },
             {
-              name: "Instagram Reels",
+              name: "Instagram",
               color: "#E1306C",
               icon: "◎",
               avatar: c.instagramData?.avatarUrl || "",
               handle: c.instagramHandle || c.handle?.replace("@", "") || "",
-              profileUrl: c.instagramHandle ? `https://www.instagram.com/${c.instagramHandle}/reels/` : "",
-              followers: c.instagramData?.followers,
-              items: igReels.map((r) => ({
-                cover: r.coverUrl || r.imageUrl || "",
-                views: r.playCount || r.play_count || r.views || 0,
-                likes: r.likes || 0,
-                caption: r.caption || "",
-                url: r.url || "",
-                date: r.date || "",
-                type: "reel",
-              })),
-            },
-            {
-              name: "Instagram Posts",
-              color: "#E1306C",
-              icon: "▣",
-              avatar: c.instagramData?.avatarUrl || "",
-              handle: c.instagramHandle || c.handle?.replace("@", "") || "",
               profileUrl: c.instagramHandle ? `https://www.instagram.com/${c.instagramHandle}/` : "",
-              followers: null, // Don't repeat followers for second IG row
-              items: igPosts.map((p) => ({
-                cover: p.imageUrl || p.thumbnail_url || "",
-                views: 0, // Posts don't have view counts typically
-                likes: p.likes || 0,
-                caption: p.caption || "",
-                url: p.url || "",
-                date: p.date || "",
-                type: p.mediaType === "video" ? "video" : "post",
-              })),
+              followers: c.instagramData?.followers,
+              items: (() => {
+                const posts = (c.instagramRecentPosts || []).map(p => ({
+                  cover: p.imageUrl || p.thumbnail_url || "",
+                  views: p.video_view_count || p.view_count || 0,
+                  likes: p.likes || p.like_count || 0,
+                  caption: p.caption || "",
+                  url: p.url || "",
+                  date: p.date || "",
+                  type: p.mediaType === "video" ? "reel" : "post",
+                }));
+                const reels = (c.instagramRecentReels || []).map(r => ({
+                  cover: r.coverUrl || r.imageUrl || "",
+                  views: r.playCount || r.play_count || r.views || 0,
+                  likes: r.likes || r.like_count || 0,
+                  caption: r.caption || "",
+                  url: r.url || "",
+                  date: r.date || "",
+                  type: "reel",
+                }));
+                const all = [...posts, ...reels];
+                const seen = new Set();
+                return all.filter(item => {
+                  const key = item.url || (item.date + "-" + item.likes);
+                  if (seen.has(key)) return false;
+                  seen.add(key);
+                  return true;
+                }).sort((a, b) => (b.views || b.likes || 0) - (a.views || a.likes || 0)).slice(0, 8);
+              })(),
             },
           ].filter((p) => p.items.length > 0);
 
@@ -7514,6 +7513,22 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           return (
             <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Content</div>
+
+              {bestHighlight && bestHighlight.url ? (
+                <a href={bestHighlight.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "flex", gap: 14, alignItems: "center", padding: "12px 16px", background: t.cardAlt, borderRadius: 10, marginBottom: 14, border: "1px solid " + t.border, transition: "border-color 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 4, background: t.green, flexShrink: 0 }}></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Top performer</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>
+                      {bestHighlight.kind === "tt"
+                        ? formatMetricShort(bestHighlight.views) + " views · " + formatMetricShort(bestHighlight.likes) + " likes"
+                        : formatMetricShort(bestHighlight.likes) + " likes · " + formatMetricShort(bestHighlight.comments) + " comments"}
+                    </div>
+                    <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bestHighlight.caption || ""}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: t.blue, flexShrink: 0 }}>View on {bestHighlight.kind === "tt" ? "TikTok" : "Instagram"} →</span>
+                </a>
+              ) : null}
 
               {platforms.map((plat, pi) => (
                 <div key={pi} style={{ marginBottom: 16 }}>
@@ -7610,25 +7625,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                               }}
                             />
                           ) : null}
-                          <div
-                            style={{
-                              width: 130,
-                              height: 170,
-                              display: item.cover ? "none" : "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              background: `linear-gradient(135deg, ${plat.color}15, ${t.cardAlt})`,
-                              gap: 6,
-                            }}
-                          >
-                            <span style={{ fontSize: 28, opacity: 0.4 }}>{item.type === "post" ? "📷" : "🎬"}</span>
-                            {item.views > 0 ? (
-                              <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{formatMetricShort(item.views)} ▶</span>
-                            ) : item.likes > 0 ? (
-                              <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{formatMetricShort(item.likes)} ♥</span>
-                            ) : null}
-                            {item.date ? <span style={{ fontSize: 9, color: t.textFaint }}>{item.date}</span> : null}
+                          <div style={{ width: 130, height: 170, display: item.cover ? "none" : "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: t.cardAlt, gap: 4 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{item.views > 0 ? formatMetricShort(item.views) : item.likes > 0 ? formatMetricShort(item.likes) : ""}</div>
+                            <div style={{ fontSize: 10, color: t.textFaint }}>{item.views > 0 ? "views" : item.likes > 0 ? "likes" : ""}</div>
+                            {item.date ? <div style={{ fontSize: 9, color: t.textFaint }}>{item.date}</div> : null}
                           </div>
                         </div>
                         <div style={{ padding: "6px 8px" }}>
@@ -8071,25 +8071,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           <button type="button" disabled={enriching} onClick={reanalyzeOnly} style={{ ...S.btnS, fontSize: 12, padding: "8px 14px", marginTop: 8 }}>Recalculate IB Score</button>
         </div>
         </>
-      ) : null}
-
-      {bestHighlight && bestHighlight.url ? (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>Top Performer</div>
-            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>
-                {bestHighlight.kind === "tt"
-                  ? `${formatMetricShort(bestHighlight.views)} views · ${formatMetricShort(bestHighlight.likes)} likes`
-                  : `${formatMetricShort(bestHighlight.likes)} likes · ${formatMetricShort(bestHighlight.comments)} comments`}
-              </div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bestHighlight.caption || "—"}</div>
-            </div>
-            <a href={bestHighlight.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.blue, textDecoration: "none", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-              View →
-            </a>
-          </div>
-        </div>
       ) : null}
 
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
