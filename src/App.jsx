@@ -7096,7 +7096,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 src={attempts[0]}
                 alt=""
                 referrerPolicy="no-referrer"
-                crossOrigin="anonymous"
                 data-av-idx="0"
                 style={{ width: 48, height: 48, borderRadius: 24, objectFit: "cover", background: t.cardAlt, border: `1px solid ${t.border}`, flexShrink: 0, display: "block" }}
                 onError={(e) => {
@@ -7455,7 +7454,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                         src={plat.avatar}
                         alt=""
                         referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
                         style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", border: `2px solid ${plat.color}30`, flexShrink: 0 }}
                         onError={(e) => {
                           e.target.style.display = "none";
@@ -7533,7 +7531,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                               src={item.cover}
                               alt=""
                               referrerPolicy="no-referrer"
-                              crossOrigin="anonymous"
                               loading="lazy"
                               style={{ width: 130, height: 170, objectFit: "cover", display: "block" }}
                               onError={(e) => {
@@ -11780,7 +11777,6 @@ export default function App() {
                         src={attempts[0]}
                         alt=""
                         referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
                         data-av-idx="0"
                         style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", background: t.cardAlt, display: "block" }}
                         onError={(e) => {
