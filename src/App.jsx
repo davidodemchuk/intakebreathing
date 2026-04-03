@@ -42,7 +42,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.1.0";
+const APP_VERSION = "6.2.0";
 const CHANGELOG = [
   { version: "6.0.0", date: "2026-04-03", changes: [
     "UI V2 — warm beige theme, full accent card borders, custom SVG icons, polished shadows across entire app",
@@ -11464,6 +11464,21 @@ export default function App() {
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Settings</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>API keys, team password, database connection</div>
                   <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>v{APP_VERSION}</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>2025 in review</div>
+                <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, overflow: "hidden", boxShadow: t.shadow }}>
+                  <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "56.25%", overflow: "hidden" }}>
+                    <iframe
+                      loading="lazy"
+                      style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }}
+                      src="https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view?embed"
+                      allowFullScreen
+                      allow="fullscreen"
+                    />
+                  </div>
                 </div>
               </div>
 
