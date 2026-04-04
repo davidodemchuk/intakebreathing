@@ -319,6 +319,29 @@ export async function dbAssignCreator(creatorId, teamMemberId, assignedBy) {
   return { error };
 }
 
+export async function dbLoadCreatorAssignments() {
+  const { data, error } = await supabase.from("creator_assignments").select("*").order("assigned_at");
+  if (error) { console.error("[db] Load assignments error:", error); return []; }
+  return data || [];
+}
+
+export async function dbAssignCreatorMulti(creatorId, teamMemberId, assignedBy) {
+  const { data, error } = await supabase.from("creator_assignments").upsert({
+    creator_id: creatorId,
+    team_member_id: teamMemberId,
+    assigned_by: assignedBy || "manager",
+    assigned_at: new Date().toISOString(),
+  }, { onConflict: "creator_id,team_member_id" }).select().single();
+  if (error) console.error("[db] Assign error:", error);
+  return { data, error };
+}
+
+export async function dbUnassignCreator(creatorId, teamMemberId) {
+  const { error } = await supabase.from("creator_assignments").delete().match({ creator_id: creatorId, team_member_id: teamMemberId });
+  if (error) console.error("[db] Unassign error:", error);
+  return { error };
+}
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")

@@ -15,6 +15,9 @@ import {
   dbSetSetting,
   dbLoadTeamMembers,
   dbAssignCreator,
+  dbLoadCreatorAssignments,
+  dbAssignCreatorMulti,
+  dbUnassignCreator,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -45,7 +48,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.20.0";
+const APP_VERSION = "6.21.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -7008,7 +7011,7 @@ class CreatorDetailErrorBoundary extends React.Component {
   }
 }
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge, teamMembers = [], setTeamMembers = () => {} }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge, teamMembers = [], setTeamMembers = () => {}, getCreatorOwners = () => [], creatorAssignments = [], setCreatorAssignments = () => {} }) {
   const ak = mergeAiKnowledge(aiKnowledge);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
@@ -7487,55 +7490,31 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
 
       <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: t.shadow }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: ai.oneSentence || enrichMsg ? 10 : 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: getCreatorOwners(c.id).length > 0 || ai.oneSentence || enrichMsg ? 10 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
-            <div style={{ position: "relative", display: "inline-block" }} onClick={(e) => e.stopPropagation()}>
-              <div onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", borderRadius: 8, border: "1px solid " + (c.assignedTo ? t.green + "50" : t.border), background: c.assignedTo ? t.green + "08" : t.inputBg, cursor: "pointer", minWidth: 140 }}>
-                {(() => {
-                  const member = teamMembers.find(m => m.id === c.assignedTo);
-                  if (!member) return <span style={{ fontSize: 12, color: t.textFaint }}>Unassigned</span>;
-                  return (
-                    <>
-                      {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: 10, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
-                      <span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{member.name}</span>
-                    </>
-                  );
-                })()}
-                <span style={{ fontSize: 10, color: t.textFaint, marginLeft: "auto" }}>▼</span>
+            {getCreatorOwners(c.id).map(member => (
+              <div key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 8, background: t.green + "10", border: "1px solid " + t.green + "30" }}>
+                {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: 10, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 20, height: 20, borderRadius: 10, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green }}>{member.name?.[0]}</div>}
+                <span style={{ fontSize: 11, fontWeight: 600, color: t.text }}>{member.name.split(" ")[0]}</span>
+                {member.slack_id ? <a href={"slack://user?id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ display: "flex", opacity: 0.5 }} title={"Message " + member.name.split(" ")[0] + " on Slack"}><svg width="10" height="10" viewBox="0 0 24 24" fill={t.textMuted}><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z"/></svg></a> : null}
+                <button onClick={async (e) => { e.stopPropagation(); await dbUnassignCreator(c.id, member.id); setCreatorAssignments(prev => prev.filter(a => !(a.creator_id === c.id && a.team_member_id === member.id))); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, color: t.textFaint, lineHeight: 1 }} title="Remove">×</button>
               </div>
-              {ownerDropdownOpen ? (
-                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden" }}>
-                  <div onClick={async () => { updateCreator(c.id, { assignedTo: null, assignedAt: null }); await dbAssignCreator(c.id, null, "manager"); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, color: t.textFaint, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                    Unassigned
+            ))}
+            {getCreatorOwners(c.id).length === 0 ? <span style={{ fontSize: 12, color: t.textFaint }}>Unassigned</span> : null}
+          </div>
+          <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.cardAlt, color: t.textMuted, cursor: "pointer" }}>+ Add</button>
+            {ownerDropdownOpen ? (
+              <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
+                {teamMembers.filter(m => !getCreatorOwners(c.id).find(o => o.id === m.id)).map(m => (
+                  <div key={m.id} onClick={async () => { await dbAssignCreatorMulti(c.id, m.id, "manager"); setCreatorAssignments(prev => [...prev, { creator_id: c.id, team_member_id: m.id, assigned_at: new Date().toISOString() }]); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                    {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{m.name?.[0]}</div>}
+                    <div><div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>{m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}</div>
                   </div>
-                  {teamMembers.map(m => (
-                    <div key={m.id} onClick={async () => { updateCreator(c.id, { assignedTo: m.id, assignedAt: new Date().toISOString() }); await dbAssignCreator(c.id, m.id, "manager"); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: c.assignedTo === m.id ? t.green + "10" : "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.assignedTo === m.id ? t.green + "15" : t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.assignedTo === m.id ? t.green + "10" : "transparent"; }}>
-                      {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{m.name?.[0] || "?"}</div>}
-                      <div>
-                        <div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>
-                        {m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}
-                      </div>
-                    </div>
-                  ))}
-                  <div onClick={async () => { const newName = prompt("Enter new team member name:"); if (!newName || !newName.trim()) return; const { data, error } = await supabase.from("team_members").insert({ name: newName.trim(), role: "manager" }).select().single(); if (error) { alert("Failed to add: " + error.message); return; } setTeamMembers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name))); updateCreator(c.id, { assignedTo: data.id, assignedAt: new Date().toISOString() }); await dbAssignCreator(c.id, data.id, "manager"); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, color: t.green, cursor: "pointer", borderTop: "1px solid " + t.border, fontWeight: 600 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                    + Add team member
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            {c.assignedAt ? <div style={{ fontSize: 10, color: t.textFaint }}>since {new Date(c.assignedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div> : null}
-            {(() => { const member = teamMembers.find(m => m.id === c.assignedTo); if (!member?.slack_id) return null; return (
-              <a href={"slack://user?id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: t.blue + "10", border: "1px solid " + t.blue + "30", color: t.blue, textDecoration: "none", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.blue + "20"; }} onMouseLeave={(e) => { e.currentTarget.style.background = t.blue + "10"; }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z" fill="currentColor" opacity="0.8"/></svg>
-                Slack
-              </a>
-            ); })()}
-            {(() => { const member = teamMembers.find(m => m.id === c.assignedTo); if (!member) return null; return (
-              <button onClick={(e) => { e.stopPropagation(); const msg = "Hey " + member.name.split(" ")[0] + "! Check out " + (c.handle || c.instagramHandle || "this creator") + " on Intake Creators: https://www.intakecreators.com/ugc-army/creator?id=" + c.id; navigator.clipboard.writeText(msg).then(() => { const btn = e.currentTarget; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy message"; }, 2000); }); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: "transparent", border: "1px solid " + t.border, color: t.textMuted, cursor: "pointer" }}>
-                Copy message
-              </button>
-            ); })()}
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
         {ai.oneSentence ? <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", lineHeight: 1.6 }}>{ai.oneSentence}</div> : null}
@@ -9959,6 +9938,7 @@ export default function App() {
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All", owner: "All" });
   const [teamMembers, setTeamMembers] = useState([]);
+  const [creatorAssignments, setCreatorAssignments] = useState([]);
   const [colWidths, setColWidths] = useState(() => {
     const w = {};
     CREATOR_COLUMNS.forEach((col) => {
@@ -9966,6 +9946,16 @@ export default function App() {
     });
     return w;
   });
+  const getCreatorOwners = useCallback((creatorId) => {
+    return creatorAssignments
+      .filter(a => a.creator_id === creatorId)
+      .map(a => {
+        const member = teamMembers.find(m => m.id === a.team_member_id);
+        return member ? { ...member, assignedAt: a.assigned_at } : null;
+      })
+      .filter(Boolean);
+  }, [creatorAssignments, teamMembers]);
+
   const handleColResize = useCallback((key, startX, startWidth) => {
     const onMove = (e) => {
       const diff = e.clientX - startX;
@@ -10056,6 +10046,8 @@ export default function App() {
 
       const members = await dbLoadTeamMembers();
       if (!cancelled) setTeamMembers(members);
+      const assignments = await dbLoadCreatorAssignments();
+      if (!cancelled) setCreatorAssignments(assignments);
 
       const dbBriefs = await dbLoadBriefs();
       if (!cancelled && dbBriefs && dbBriefs.length > 0) {
@@ -11131,8 +11123,8 @@ export default function App() {
     }
     if (filters.owner !== "All") {
       list = list.filter(c => {
-        const member = teamMembers.find(m => m.id === c.assignedTo);
-        return member?.name === filters.owner;
+        const owners = getCreatorOwners(c.id);
+        return owners.some(o => o.name === filters.owner);
       });
     }
     if (creatorSearch.trim()) {
@@ -12101,23 +12093,23 @@ export default function App() {
               );
             }
             if (col.key === "owner") {
-              const member = teamMembers.find(m => m.id === c.assignedTo);
+              const owners = getCreatorOwners(c.id);
               return (
-                <div key={col.key} style={{ ...base, display: "flex", alignItems: "center", gap: 6 }}>
-                  {member ? (
-                    <>
-                      {member.avatar_url ? (
-                        <img src={member.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: 11, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />
-                      ) : (
-                        <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green }}>{member.name?.[0]}</div>
-                      )}
-                      <span style={{ fontSize: 11, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.name.split(" ")[0]}</span>
-                      {member?.slack_id ? (
-                        <a href={"slack://user?id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ marginLeft: 4, opacity: 0.4, transition: "opacity 0.2s", display: "flex" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.4"; }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill={t.textMuted}><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z"/></svg>
-                        </a>
-                      ) : null}
-                    </>
+                <div key={col.key} style={{ ...base, display: "flex", alignItems: "center" }}>
+                  {owners.length > 0 ? (
+                    <div style={{ display: "flex", alignItems: "center" }}>
+                      {owners.slice(0, 3).map((member, i) => (
+                        <div key={member.id} style={{ marginLeft: i > 0 ? -8 : 0, zIndex: 3 - i }}>
+                          {member.avatar_url ? (
+                            <img src={member.avatar_url} alt="" title={member.name} style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", border: "2px solid " + t.card }} onError={(e) => { e.target.style.display = "none"; }} />
+                          ) : (
+                            <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green, border: "2px solid " + t.card }} title={member.name}>{member.name?.[0]}</div>
+                          )}
+                        </div>
+                      ))}
+                      {owners.length > 3 ? <span style={{ fontSize: 9, color: t.textFaint, marginLeft: 4 }}>+{owners.length - 3}</span> : null}
+                      {owners.length <= 2 ? <span style={{ fontSize: 10, color: t.text, marginLeft: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{owners.map(o => o.name.split(" ")[0]).join(", ")}</span> : null}
+                    </div>
                   ) : (
                     <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
                   )}
@@ -12815,6 +12807,9 @@ export default function App() {
                 aiKnowledge={aiKnowledge}
                 teamMembers={teamMembers}
                 setTeamMembers={setTeamMembers}
+                getCreatorOwners={getCreatorOwners}
+                creatorAssignments={creatorAssignments}
+                setCreatorAssignments={setCreatorAssignments}
               />
             </CreatorDetailErrorBoundary>
           )
