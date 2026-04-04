@@ -58,12 +58,40 @@ function ManagerCreatorChat({ creatorId, t }) {
   );
 }
 
+function ProfilePreview({ profile, platform, t }) {
+  if (!profile) return null;
+  const fmtNum = (n) => { if (n == null) return "—"; if (n >= 1e6) return (n / 1e6).toFixed(1) + "M"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "K"; return String(n); };
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: 10, background: t.green + "08", border: "1px solid " + t.green + "25", marginTop: 8 }}>
+      {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", border: "2px solid " + t.green + "40" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{platform}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: t.green, background: t.green + "15", padding: "2px 7px", borderRadius: 6 }}>Verified</span>
+        </div>
+        <div style={{ fontSize: 12, color: t.textMuted }}>{fmtNum(profile.followers)} followers{profile.bio ? " · " + profile.bio.slice(0, 60) + (profile.bio.length > 60 ? "..." : "") : ""}</div>
+      </div>
+    </div>
+  );
+}
+
 function CreatorLogin({ navigate, t }) {
   const [mode, setMode] = useState("login");
+  const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [igHandle, setIgHandle] = useState("");
+  const [ttHandle, setTtHandle] = useState("");
+  const [ytHandle, setYtHandle] = useState("");
+  const [otherPlatforms, setOtherPlatforms] = useState("");
+  const [igProfile, setIgProfile] = useState(null);
+  const [ttProfile, setTtProfile] = useState(null);
+  const [verifyingIg, setVerifyingIg] = useState(false);
+  const [verifyingTt, setVerifyingTt] = useState(false);
+  const [igError, setIgError] = useState(null);
+  const [ttError, setTtError] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -79,22 +107,74 @@ function CreatorLogin({ navigate, t }) {
     })();
   }, []);
 
-  const handleSignUp = async () => {
+  const getScrapeKey = async () => {
+    const { data } = await supabase.from("app_settings").select("value").eq("key", "scrapecreators-api-key").maybeSingle();
+    return data?.value || "";
+  };
+
+  const verifySocial = async (platform, handle, setProfile, setVerifying, setVerifyError) => {
+    const clean = String(handle || "").replace(/^@/, "").trim();
+    if (!clean) { setVerifyError("Enter a handle first."); return; }
+    setVerifying(true); setVerifyError(null); setProfile(null);
+    try {
+      const key = await getScrapeKey();
+      if (!key) { setVerifyError("Verification unavailable. Continue anyway."); setVerifying(false); return; }
+      const endpoint = platform === "tiktok"
+        ? `https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(clean)}`
+        : `https://api.scrapecreators.com/v1/instagram/profile?handle=${encodeURIComponent(clean)}`;
+      const res = await Promise.race([
+        fetch(endpoint, { headers: { "x-api-key": key } }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 15000)),
+      ]);
+      if (!res.ok) { setVerifyError("Profile not found. Check the handle and try again."); setVerifying(false); return; }
+      const raw = await res.json();
+      const data = raw?.data ?? raw;
+      if (platform === "tiktok") {
+        const user = data?.user ?? data;
+        const stats = data?.stats ?? data;
+        setProfile({ followers: stats?.followerCount ?? stats?.follower_count ?? null, bio: user?.signature ?? user?.bio ?? "", avatarUrl: user?.avatarMedium ?? user?.avatarLarger ?? user?.avatarThumb ?? "" });
+      } else {
+        setProfile({ followers: data?.follower_count ?? data?.edge_followed_by?.count ?? null, bio: data?.biography ?? "", avatarUrl: data?.profile_pic_url_hd ?? data?.profile_pic_url ?? "" });
+      }
+    } catch (e) { setVerifyError(e.message === "TIMEOUT" ? "Verification timed out. Try again." : "Verification failed."); }
+    setVerifying(false);
+  };
+
+  const handleStep1Next = () => {
     setError(null);
     if (!name.trim()) { setError("Enter your name."); return; }
     if (!email.trim() || !email.includes("@")) { setError("Enter a valid email."); return; }
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
+    setStep(2);
+  };
+
+  const handleSignUpStep2 = async () => {
+    setError(null);
+    const igClean = igHandle.replace(/^@/, "").trim();
+    if (!igClean) { setError("Instagram handle is required."); return; }
     setLoading(true);
     try {
       const { error: authErr } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: name.trim() } } });
       if (authErr) throw authErr;
       const userEmail = email.trim().toLowerCase();
+      const ttClean = ttHandle.replace(/^@/, "").trim();
+      const ytClean = ytHandle.replace(/^@/, "").trim();
+      const handle = igClean;
+      const socialData = {
+        instagramHandle: igClean,
+        tiktokHandle: ttClean || null,
+        youtubeHandle: ytClean || null,
+        otherPlatforms: otherPlatforms.trim() || null,
+      };
+      if (igProfile) { socialData.igFollowers = igProfile.followers; socialData.igBio = igProfile.bio; socialData.igAvatarUrl = igProfile.avatarUrl; }
+      if (ttProfile) { socialData.ttFollowers = ttProfile.followers; socialData.ttBio = ttProfile.bio; socialData.ttAvatarUrl = ttProfile.avatarUrl; }
+
       let { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", userEmail).maybeSingle();
-      if (creator) { if (!creator.name) await supabase.from("creators").update({ name: name.trim() }).eq("id", creator.id); }
-      else {
-        const handle = userEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
-        const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: name.trim(), status: "Active", onboarded: false }).select().single();
+      if (creator) {
+        await supabase.from("creators").update({ name: name.trim(), handle, ...socialData }).eq("id", creator.id);
+      } else {
+        const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: name.trim(), status: "Active", onboarded: false, ...socialData }).select().single();
         if (ie) { setError("Account created but profile setup failed. Try logging in."); setLoading(false); return; }
         creator = nc;
       }
@@ -129,26 +209,84 @@ function CreatorLogin({ navigate, t }) {
 
   const inp = { width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 15, outline: "none", boxSizing: "border-box" };
   const btn = { width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 700, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1 };
+  const verifyBtn = (verifying) => ({ padding: "10px 18px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontSize: 13, fontWeight: 700, cursor: verifying ? "wait" : "pointer", opacity: verifying ? 0.6 : 1, whiteSpace: "nowrap" });
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 420 }}>
+      <div style={{ width: "100%", maxWidth: 460 }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>Creator Portal</div>
           <div style={{ fontSize: 14, color: t.textMuted, marginTop: 6 }}>Intake Breathing Technology</div>
         </div>
         <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 16, padding: 32, boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
           <div style={{ display: "flex", marginBottom: 24, borderRadius: 10, overflow: "hidden", border: "1px solid " + t.border }}>
-            <button onClick={() => { setMode("login"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "login" ? t.green : "transparent", color: mode === "login" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Log in</button>
+            <button onClick={() => { setMode("login"); setStep(1); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "login" ? t.green : "transparent", color: mode === "login" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Log in</button>
             <button onClick={() => { setMode("signup"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "signup" ? t.green : "transparent", color: mode === "signup" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Sign up</button>
           </div>
+
           {mode === "signup" ? (
             <>
-              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Full name</div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus style={inp} /></div>
-              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" style={inp} /></div>
-              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" style={inp} /></div>
-              <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Confirm password</div><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" onKeyDown={(e) => e.key === "Enter" && handleSignUp()} style={inp} /></div>
-              <button onClick={handleSignUp} disabled={loading} style={btn}>{loading ? "Creating account..." : "Create account"}</button>
+              {/* Step indicator */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+                <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>1</div>
+                <div style={{ flex: 1, height: 2, background: step >= 2 ? t.green : t.border, borderRadius: 1, transition: "background 0.3s" }} />
+                <div style={{ width: 24, height: 24, borderRadius: 12, background: step >= 2 ? t.green : t.border, color: step >= 2 ? (t.isLight ? "#fff" : "#000") : t.textFaint, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.3s, color 0.3s" }}>2</div>
+              </div>
+
+              {step === 1 ? (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Account details</div>
+                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Full name</div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus style={inp} /></div>
+                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" style={inp} /></div>
+                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" style={inp} /></div>
+                  <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Confirm password</div><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" onKeyDown={(e) => e.key === "Enter" && handleStep1Next()} style={inp} /></div>
+                  <button onClick={handleStep1Next} style={{ ...btn, cursor: "pointer", opacity: 1 }}>Continue</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Connect your socials</div>
+                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 18 }}>We verify your profiles so brands can discover you.</div>
+
+                  {/* Instagram — required */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Instagram handle <span style={{ color: t.red || "#ef4444" }}>*</span></div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input type="text" value={igHandle} onChange={(e) => { setIgHandle(e.target.value); setIgProfile(null); setIgError(null); }} placeholder="@yourhandle" style={{ ...inp, flex: 1 }} onKeyDown={(e) => e.key === "Enter" && verifySocial("instagram", igHandle, setIgProfile, setVerifyingIg, setIgError)} />
+                      <button onClick={() => verifySocial("instagram", igHandle, setIgProfile, setVerifyingIg, setIgError)} disabled={verifyingIg} style={verifyBtn(verifyingIg)}>{verifyingIg ? "..." : igProfile ? "Re-verify" : "Verify"}</button>
+                    </div>
+                    {igError ? <div style={{ fontSize: 12, color: t.orange, marginTop: 4 }}>{igError}</div> : null}
+                    <ProfilePreview profile={igProfile} platform="Instagram" t={t} />
+                  </div>
+
+                  {/* TikTok — optional */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>TikTok handle <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input type="text" value={ttHandle} onChange={(e) => { setTtHandle(e.target.value); setTtProfile(null); setTtError(null); }} placeholder="@yourhandle" style={{ ...inp, flex: 1 }} onKeyDown={(e) => e.key === "Enter" && ttHandle.trim() && verifySocial("tiktok", ttHandle, setTtProfile, setVerifyingTt, setTtError)} />
+                      {ttHandle.trim() ? <button onClick={() => verifySocial("tiktok", ttHandle, setTtProfile, setVerifyingTt, setTtError)} disabled={verifyingTt} style={verifyBtn(verifyingTt)}>{verifyingTt ? "..." : ttProfile ? "Re-verify" : "Verify"}</button> : null}
+                    </div>
+                    {ttError ? <div style={{ fontSize: 12, color: t.orange, marginTop: 4 }}>{ttError}</div> : null}
+                    <ProfilePreview profile={ttProfile} platform="TikTok" t={t} />
+                  </div>
+
+                  {/* YouTube — optional, no verify */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>YouTube channel <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+                    <input type="text" value={ytHandle} onChange={(e) => setYtHandle(e.target.value)} placeholder="@channel or URL" style={inp} />
+                  </div>
+
+                  {/* Other platforms */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Other platforms <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+                    <input type="text" value={otherPlatforms} onChange={(e) => setOtherPlatforms(e.target.value)} placeholder="Snapchat, Twitter, etc." style={inp} />
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button onClick={() => { setStep(1); setError(null); }} style={{ flex: "0 0 auto", padding: "14px 20px", borderRadius: 10, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Back</button>
+                    <button onClick={handleSignUpStep2} disabled={loading} style={{ ...btn, flex: 1 }}>{loading ? "Creating account..." : "Create account"}</button>
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <>
