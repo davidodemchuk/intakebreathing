@@ -8847,7 +8847,6 @@ function TtsNativeTab({ t, S, teamMembers }) {
     const va = Number(d.videos_approved) || 0;
     const imp = Number(d.impressions) || 0;
     const orgImp = Number(d.organic_impressions) || 0;
-    const clicks = Number(d.clicks) || 0;
     const orders = Number(d.orders) || 0;
     const gmv = Number(d.tts_gmv) || 0;
     const adSpend = Number(d.ad_spend) || 0;
@@ -8864,8 +8863,6 @@ function TtsNativeTab({ t, S, teamMembers }) {
       roas: adSpend > 0 ? (gmv / adSpend).toFixed(2) + "x" : "\u2014",
       net_revenue: "$" + Math.round(gmv - totalCost - commission).toLocaleString(),
       net_per_video: vp > 0 ? "$" + Math.round((gmv - totalCost - commission) / vp).toLocaleString() : "\u2014",
-      click_rate: imp > 0 ? ((clicks / imp) * 100).toFixed(2) + "%" : "\u2014",
-      conversion_rate: clicks > 0 ? ((orders / clicks) * 100).toFixed(2) + "%" : "\u2014",
       avg_order_value: orders > 0 ? "$" + (gmv / orders).toFixed(2) : "\u2014",
     };
   };
@@ -8893,7 +8890,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
   const newWeekForm = () => {
     const monday = getMonday(new Date());
-    setFormData({ week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, clicks: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
+    setFormData({ week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
     setEditingRow(null);
     setShowForm(true);
   };
@@ -9106,7 +9103,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Performance</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                {inputField("Impressions", "impressions")}{inputField("Organic imp.", "organic_impressions")}{inputField("Clicks", "clicks")}{inputField("Orders", "orders")}
+                {inputField("Impressions", "impressions")}{inputField("Organic imp.", "organic_impressions")}{inputField("Orders", "orders")}
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Revenue & spend</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
@@ -9148,7 +9145,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
-                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
+                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
                       <th key={i} style={{ padding: "10px 12px", textAlign: i < 2 ? "left" : "right", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>{h}</th>
                     ))}
                   </tr>
@@ -9169,7 +9166,6 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         <EditableCell rowId={w.id} column="samples_posted" value={w.samples_posted} format={fmtNum} style={cs} />
                         <EditableCell rowId={w.id} column="videos_posted" value={w.videos_posted} format={fmtNum} style={cs} />
                         <EditableCell rowId={w.id} column="impressions" value={w.impressions} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</EditableCell>
-                        <EditableCell rowId={w.id} column="clicks" value={w.clicks} format={fmtNum} style={cs} />
                         <EditableCell rowId={w.id} column="orders" value={w.orders} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</EditableCell>
                         <EditableCell rowId={w.id} column="tts_gmv" value={w.tts_gmv} format={fmtDol} step="0.01" style={{ ...cs, fontWeight: 700, fontSize: 13, color: t.green }}>{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</EditableCell>
                         <EditableCell rowId={w.id} column="ad_spend" value={w.ad_spend} format={fmtDol} step="0.01" style={{ ...cs, color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</EditableCell>
