@@ -10869,24 +10869,122 @@ export default function App() {
             return <div key={col.key} style={base} />;
           };
 
+          const _programMeta = {
+            ugc: { name: "UGC Army", color: "#00FEA9", desc: "Branded content creators making videos for campaign briefs" },
+            tts: { name: "TTS Creators", color: "#63B7BA", desc: "TikTok Shop affiliates driving product sales and GMV" },
+            alist: { name: "A-Listers", color: "#F59E0B", desc: "Proven high-tier influencers with major reach" },
+            celebrity: { name: "Celebrities", color: "#8B5CF6", desc: "Athletes, public figures, and famous personalities" },
+            rising: { name: "Rising Stars", color: "#3B82F6", desc: "Regular creators proving themselves and growing" },
+            superfiliate: { name: "Superfiliate", color: "#EC4899", desc: "Affiliate program members with referral links" },
+          };
+          const _activeMeta = programFilter && programFilter !== "all" ? _programMeta[programFilter] : null;
+          const _progCreators = _activeMeta ? creators.filter(c => (c.programs || []).includes(programFilter)) : creators;
+
           return (
           <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-            <button type="button" onClick={() => navigate("creatorHub")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
-                <div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
-                  <div style={{ fontSize: 13, color: t.textMuted }}>
-                    {creators.filter((cr) => cr.status === "Active").length} active · {creators.filter((cr) => cr.ibScore != null).length} scored · {creators.length} total
+
+            {/* Program-specific header */}
+            {_activeMeta ? (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <button onClick={() => { setProgramFilter("all"); navigate("creatorHub"); }} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>← Creator Hub</button>
+                  <div style={{ width: 4, height: 24, borderRadius: 2, background: _activeMeta.color }} />
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{_activeMeta.name}</div>
+                    <div style={{ fontSize: 12, color: t.textMuted }}>{_activeMeta.desc} · {_progCreators.length} creators</div>
                   </div>
-                  {creators.length > 0 &&
-                    creators.filter((c) => c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl).length < creators.length * 0.3 && (
-                      <div style={{ fontSize: 11, color: t.orange, marginTop: 4 }}>
-                        Most creators need enrichment to show avatars. Use Bulk Enrich or click into each profile → Refresh Metrics.
-                      </div>
-                    )}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+
+                {/* Program-specific stats */}
+                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                  {programFilter === "ugc" ? (
+                    <>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => c.ibScore != null).length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Scored</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.blue }}>{_progCreators.filter(c => Number(c.ibScore) >= 7).length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Score 7+</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.orange }}>{_progCreators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0)}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Videos tracked</div>
+                      </div>
+                    </>
+                  ) : programFilter === "tts" ? (
+                    <>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: "#63B7BA" }}>{_progCreators.length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>TTS creators</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => c.tiktokShopData).length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>With shop data</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center" }}>
+                        <button onClick={() => { window.history.pushState(null, "", "/channel-pipeline/tts-native"); navigate("pipeline"); }} style={{ background: "none", border: "none", color: t.blue, fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 }}>View TTS Pipeline →</button>
+                      </div>
+                    </>
+                  ) : (programFilter === "alist" || programFilter === "celebrity") ? (
+                    <>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: _activeMeta.color }}>{_progCreators.length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>{_activeMeta.name}</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => Number(c.tiktokData?.followers || 0) + Number(c.instagramData?.followers || 0) > 100000).length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>100K+ followers</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.orange }}>{_progCreators.filter(c => Number(c.tiktokData?.followers || 0) + Number(c.instagramData?.followers || 0) > 1000000).length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>1M+ followers</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: _activeMeta.color }}>{_progCreators.length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>In program</div>
+                      </div>
+                      <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => c.ibScore != null).length}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Scored</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Quick actions */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => navigate("create")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: _activeMeta.color, color: "#fff", cursor: "pointer" }}>+ New Brief</button>
+                  <button onClick={() => navigate("campaigns")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>Launch Campaign</button>
+                </div>
+              </div>
+            ) : (
+              /* Default header — all creators */
+              <>
+                <button type="button" onClick={() => navigate("creatorHub")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+                    <div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
+                      <div style={{ fontSize: 13, color: t.textMuted }}>
+                        {creators.filter((cr) => cr.status === "Active").length} active · {creators.filter((cr) => cr.ibScore != null).length} scored · {creators.length} total
+                      </div>
+                      {creators.length > 0 &&
+                        creators.filter((c) => c.instagramData?.avatarUrl || c.tiktokData?.avatarUrl).length < creators.length * 0.3 && (
+                          <div style={{ fontSize: 11, color: t.orange, marginTop: 4 }}>
+                            Most creators need enrichment to show avatars. Use Bulk Enrich or click into each profile → Refresh Metrics.
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
                   <button
                     type="button"
                     onClick={() => {
@@ -10914,8 +11012,6 @@ export default function App() {
                       e.target.value = "";
                     }}
                   />
-                </div>
-              </div>
             </div>
             <div style={{ display: "flex", gap: 4, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
               {CREATOR_PROGRAMS.map(prog => {
