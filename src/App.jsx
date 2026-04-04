@@ -9321,11 +9321,11 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                       if (q !== curQ) {
                         if (curMonth && mWeeks.length) { grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); mWeeks = []; }
                         if (curQ && qWeeks.length) { grouped.push({ type: "qt", label: curQ, ws: [...qWeeks] }); grouped.push({ type: "sp" }); qWeeks = []; }
-                        curQ = q; grouped.push({ type: "qh", label: q });
-                        curMonth = month; grouped.push({ type: "mh", label: month });
+                        curQ = q;
+                        curMonth = month;
                       } else if (month !== curMonth) {
                         if (curMonth && mWeeks.length) { grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); mWeeks = []; }
-                        curMonth = month; grouped.push({ type: "mh", label: month });
+                        curMonth = month;
                       }
                       mWeeks.push(w); qWeeks.push(w);
                       grouped.push({ type: "w", data: w, pw: null });
@@ -9338,8 +9338,6 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
 
                     return grouped.map((row, ri) => {
                       if (row.type === "sp") return <tr key={"sp" + ri}><td colSpan={99} style={{ padding: 6, borderBottom: "none" }}></td></tr>;
-                      if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: t.isLight ? "#d4e8db" : "#162b1e" }}><td colSpan={99} style={{ padding: "12px 14px", fontSize: 14, fontWeight: 800, color: t.isLight ? "#1a5c35" : "#4ade80", letterSpacing: "-0.01em", borderBottom: "none" }}>{row.label}</td></tr>;
-                      if (row.type === "mh") return <tr key={"mh" + ri} style={{ background: t.isLight ? "#e6f5ee" : "#0d2818" }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, color: t.isLight ? "#0a6e3a" : "#4ade80", borderBottom: "1px solid " + (t.isLight ? "#c8e6d6" : "#1a4a2a") }}>{row.label}</td></tr>;
                       if (row.type === "ms") { const ms = row.data; const member = teamMembers.find(m => m.id === ms.team_member_id); return <tr key={"ms-" + ms.id} style={{ background: t.isLight ? "#eff6ff" : "#0c1929" }}><td colSpan={99} style={{ padding: "8px 14px", borderBottom: "1px solid " + (t.isLight ? "#bfdbfe" : "#1e3a5f") }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: t.blue, flexShrink: 0 }}></div>{member?.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} /> : null}<span style={{ fontSize: 12, fontWeight: 700, color: t.isLight ? "#1e40af" : "#60a5fa" }}>{ms.label}</span>{member ? <span style={{ fontSize: 10, color: t.isLight ? "#6b7280" : "#9ca3af" }}>— {member.name}</span> : null}<button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this milestone?")) dbDeleteTtsMilestone(ms.id).then(() => setMilestones(prev => prev.filter(m => m.id !== ms.id))); }} style={{ marginLeft: "auto", background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 10 }}>remove</button></div></td></tr>; }
                       if (row.type === "mt") {
                         const ws = row.ws; const tg = sumW(ws,"tts_gmv"); const ta = sumW(ws,"ad_spend"); const tv = sumW(ws,"videos_posted"); const ti = sumW(ws,"impressions"); const to = sumW(ws,"orders");
@@ -9495,7 +9493,6 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                       if (q !== curQ) {
                         if (curQ) { rows.push(mkQTotal(curQ)); rows.push(<tr key={"qsp-" + curQ} style={{ height: 12 }}><td colSpan={99} style={{ border: "none" }}></td></tr>); }
                         curQ = q;
-                        rows.push(<tr key={"qh-" + q} style={{ background: t.isLight ? "#d4e8db" : "#162b1e" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: t.isLight ? "#1a5c35" : "#4ade80", letterSpacing: "-0.01em" }}>{q}</td></tr>);
                       }
                       const gmv = Number(m.tts_gmv) || 0; const adSpend = Number(m.ad_spend) || 0; const netRev = Number(m.net_revenue) || 0;
                       const roas = m.roas ? m.roas + "x" : (adSpend > 0 ? (gmv / adSpend).toFixed(2) + "x" : "\u2014");
