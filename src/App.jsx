@@ -43,6 +43,7 @@ import {
   dbSaveCampaignCreator,
   dbDeleteCampaignCreator,
 } from "./supabaseDb.js";
+import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
 import { supabase } from "./supabase.js";
 
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
@@ -75,7 +76,7 @@ function buildCreatorGridTemplate(colWidths) {
 async function notifySlack(type, data) { try { await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, data }) }); } catch (e) { console.log("[slack-notify] Failed:", e.message); } }
 async function notifyOwners(creatorId, creatorHandle, messageType, extra = {}) { try { await fetch("/api/notify-owners", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creatorId, creatorHandle, messageType, ...extra }) }); } catch (e) { console.log("[notify] Failed:", e.message); } }
 
-const APP_VERSION = "6.56.0";
+const APP_VERSION = "6.57.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -1190,25 +1191,7 @@ function buildRejectionsArray(d, defaultRejectionsOverride) {
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
 const CREATOR_ALLOWED_VIEWS = ["library", "display"];
 
-function parseCSVLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    if (line[i] === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (line[i] === "," && !inQuotes) {
-      result.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += line[i];
-  }
-  result.push(current.trim());
-  return result;
-}
+// parseCSVLine moved to utils/helpers.js
 
 function normalizeHandleKey(h) {
   return String(h || "").trim().toLowerCase().replace(/^@/, "");
@@ -1477,13 +1460,7 @@ function shouldBulkEnrichCreator(c, mode) {
 }
 
 /** Compact e.g. 4.1M, 127K */
-function formatMetricShort(n) {
-  if (n == null || Number.isNaN(Number(n))) return "—";
-  const x = Number(n);
-  if (x < 1000) return String(Math.round(x));
-  if (x < 1_000_000) return `${(x / 1000).toFixed(x >= 10_000 ? 0 : 1)}K`;
-  return `${(x / 1_000_000).toFixed(x >= 10_000_000 ? 1 : 2)}M`.replace(/\.0M$/, "M");
-}
+// formatMetricShort moved to utils/helpers.js
 
 /** Profile pic URLs to try (IG, TT, YT, FB). */
 function creatorAvatarUrlCandidates(c) {
@@ -1635,17 +1612,7 @@ function pickCpmTierFromKnowledge(totalFollowers, tiers) {
   return { label: last?.label || "Tier", cpm: Number(last?.cpm) || 0 };
 }
 
-function medianOf(arr) {
-  if (!arr.length) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
-}
-
-function fmtDollar(n) {
-  if (n == null || !Number.isFinite(n)) return "$0";
-  return "$" + Math.round(n).toLocaleString();
-}
+// medianOf, fmtDollar moved to utils/helpers.js
 
 function calculateCreatorCPM(creator, knowledge) {
   const k = mergeAiKnowledge(knowledge);
@@ -3322,11 +3289,7 @@ function sortCreatorsList(arr, sortKey) {
   }
 }
 
-function genShareId() {
-  return typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `share-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
+// genShareId moved to utils/helpers.js
 
 const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
 
@@ -3370,28 +3333,9 @@ const VIDEO_REFORMAT_GROUPS = [
   },
 ];
 
-function formatCount(n) {
-  const x = Number(n);
-  if (!x || x === 0) return "0";
-  if (x >= 1000000) return (x / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (x >= 1000) return (x / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(Math.round(x));
-}
+// formatCount moved to utils/helpers.js
 
-function durationToSeconds(d) {
-  if (typeof d === "number") return d > 1000 ? Math.round(d / 1000) : d;
-  return 0;
-}
-
-function gcd(a, b) {
-  return b === 0 ? a : gcd(b, a % b);
-}
-
-function aspectRatioLabel(w, h) {
-  if (!w || !h) return "—";
-  const g = gcd(w, h);
-  return `${w / g}:${h / g}`;
-}
+// durationToSeconds, gcd, aspectRatioLabel moved to utils/helpers.js
 
 const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
