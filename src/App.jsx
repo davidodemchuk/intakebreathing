@@ -54,7 +54,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.31.0";
+const APP_VERSION = "6.32.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8827,6 +8827,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [targetFormData, setTargetFormData] = useState({});
   const [editingCell, setEditingCell] = useState(null);
   const [editingValue, setEditingValue] = useState("");
+  const [entererDropdownOpen, setEntererDropdownOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -8838,6 +8839,13 @@ function TtsNativeTab({ t, S, teamMembers }) {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!entererDropdownOpen) return;
+    const handler = () => setEntererDropdownOpen(false);
+    setTimeout(() => document.addEventListener("click", handler), 0);
+    return () => document.removeEventListener("click", handler);
+  }, [entererDropdownOpen]);
 
   const calc = (d) => {
     const vp = Number(d.videos_posted) || 0;
@@ -9079,13 +9087,24 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{editingRow ? "Edit week" : "New week entry"}</div>
             <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 18, color: t.textFaint, cursor: "pointer" }}>x</button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, position: "relative" }} onClick={(e) => e.stopPropagation()}>
             <span style={{ fontSize: 12, color: t.textFaint }}>Entering as</span>
-            <select value={currentEnterer} onChange={(e) => { setCurrentEnterer(e.target.value); try { localStorage.setItem("tts_enterer", e.target.value); } catch {} }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 12, border: "1px solid " + t.border, background: t.inputBg, color: t.text, cursor: "pointer" }}>
-              <option value="">Select your name</option>
-              {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            {(() => { const member = teamMembers.find(m => m.id === currentEnterer); if (!member?.avatar_url) return null; return <img src={member.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} />; })()}
+            <div onClick={() => setEntererDropdownOpen(prev => !prev)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", borderRadius: 8, border: "1px solid " + (currentEnterer ? t.green + "50" : t.border), background: currentEnterer ? t.green + "08" : t.inputBg, cursor: "pointer", minWidth: 160 }}>
+              {(() => { const member = teamMembers.find(m => m.id === currentEnterer); if (!member) return <span style={{ fontSize: 12, color: t.textFaint }}>Select your name</span>; return <>{member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: 11, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}<span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{member.name}</span></>; })()}
+              <span style={{ fontSize: 10, color: t.textFaint, marginLeft: "auto" }}>{"\u25BC"}</span>
+            </div>
+            {currentEnterer ? (() => { const member = teamMembers.find(m => m.id === currentEnterer); if (!member?.slack_id) return null; return <a href={"slack://user?team=TFC94FVGF&id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 6, background: t.blue + "10", border: "1px solid " + t.blue + "30", textDecoration: "none", fontSize: 10, fontWeight: 600, color: t.blue }}><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" opacity="0.8"><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z"/></svg>Slack</a>; })() : null}
+            {entererDropdownOpen ? (
+              <div style={{ position: "absolute", top: "100%", left: 70, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 240, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
+                {teamMembers.map(m => (
+                  <div key={m.id} onClick={() => { setCurrentEnterer(m.id); try { localStorage.setItem("tts_enterer", m.id); } catch {} setEntererDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: currentEnterer === m.id ? t.green + "10" : "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = currentEnterer === m.id ? t.green + "15" : t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = currentEnterer === m.id ? t.green + "10" : "transparent"; }}>
+                    {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 28, height: 28, borderRadius: 14, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.green }}>{m.name?.[0]}</div>}
+                    <div><div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>{m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}</div>
+                    {currentEnterer === m.id ? <span style={{ marginLeft: "auto", color: t.green, fontSize: 14 }}>{"\u2713"}</span> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div style={{ display: "flex", gap: 24 }}>
             <div style={{ flex: 1 }}>
