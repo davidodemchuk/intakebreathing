@@ -437,6 +437,43 @@ export async function dbDeleteTtsMilestone(id) {
   return { error };
 }
 
+// ── Creator Messaging ──
+export async function dbGetOrCreateConversation(creatorId) {
+  const { data: existing } = await supabase.from("creator_conversations").select("*").eq("creator_id", creatorId).maybeSingle();
+  if (existing) return existing;
+  const { data, error } = await supabase.from("creator_conversations").insert({ creator_id: creatorId }).select().single();
+  if (error) { console.error("[db] Create conversation error:", error); return null; }
+  return data;
+}
+
+export async function dbLoadMessages(conversationId) {
+  const { data, error } = await supabase.from("creator_messages").select("*").eq("conversation_id", conversationId).order("created_at", { ascending: true });
+  if (error) { console.error("[db] Load messages error:", error); return []; }
+  return data || [];
+}
+
+export async function dbSaveMessage(msg) {
+  if (msg.id) { const { error } = await supabase.from("creator_messages").update(msg).eq("id", msg.id); return { error }; }
+  const { data, error } = await supabase.from("creator_messages").insert(msg).select().single();
+  return { data, error };
+}
+
+export async function dbDeleteMessage(id) {
+  const { error } = await supabase.from("creator_messages").delete().eq("id", id);
+  return { error };
+}
+
+export async function dbLoadTemplates() {
+  const { data, error } = await supabase.from("message_templates").select("*").order("usage_count", { ascending: false });
+  if (error) { console.error("[db] Load templates error:", error); return []; }
+  return data || [];
+}
+
+export async function dbUpdateConversation(id, updates) {
+  const { error } = await supabase.from("creator_conversations").update(updates).eq("id", id);
+  return { error };
+}
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")

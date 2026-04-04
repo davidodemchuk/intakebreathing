@@ -30,6 +30,12 @@ import {
   dbLoadTtsCreatorWeekly,
   dbSaveTtsCreatorWeekly,
   dbDeleteTtsCreatorWeekly,
+  dbGetOrCreateConversation,
+  dbLoadMessages,
+  dbSaveMessage,
+  dbDeleteMessage,
+  dbLoadTemplates,
+  dbUpdateConversation,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -60,7 +66,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.51.0";
+const APP_VERSION = "6.52.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -7104,6 +7110,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const [expandedRate, setExpandedRate] = useState(null);
   const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false);
   const [igPullBusy, setIgPullBusy] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [msgConv, setMsgConv] = useState(null);
+  const [msgList, setMsgList] = useState([]);
+  const [msgTemplates, setMsgTemplates] = useState([]);
+  const [msgCompose, setMsgCompose] = useState("");
+  const [msgSubject, setMsgSubject] = useState("");
+  const [msgChannel, setMsgChannel] = useState("email");
+  const [msgSending, setMsgSending] = useState(false);
+  const [msgDrafting, setMsgDrafting] = useState(false);
+  const [msgSelTemplate, setMsgSelTemplate] = useState("");
+  const msgEndRef = useRef(null);
 
   useEffect(() => {
     if (!ownerDropdownOpen) return;
@@ -7464,6 +7481,49 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const fbD = c.facebookData || {};
   const shop = c.tiktokShopData || {};
   const af = c.aiAutoFilled || { niche: false, quality: false, costPerVideo: false };
+  const openMessages = async () => {
+    setShowMessages(true);
+    if (!msgConv) {
+      const conv = await dbGetOrCreateConversation(c.id);
+      setMsgConv(conv);
+      if (conv) { const msgs = await dbLoadMessages(conv.id); setMsgList(msgs); }
+      const tmpls = await dbLoadTemplates();
+      setMsgTemplates(tmpls);
+    }
+  };
+  const sendMsg = async (status) => {
+    if (!msgCompose.trim() || !msgConv) return;
+    setMsgSending(true);
+    const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "outbound", channel: msgChannel, subject: msgSubject, body: msgCompose.trim(), status, sent_at: status === "sent" ? new Date().toISOString() : null, template_id: msgSelTemplate || null });
+    if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); setMsgSelTemplate(""); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); }
+    setMsgSending(false);
+  };
+  const addMsgNote = async () => {
+    if (!msgCompose.trim() || !msgConv) return;
+    setMsgSending(true);
+    const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "internal_note", channel: "manual", body: msgCompose.trim(), status: "sent", sent_at: new Date().toISOString() });
+    if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); }
+    setMsgSending(false);
+  };
+  const draftMsgWithAi = async () => {
+    setMsgDrafting(true);
+    try {
+      const apiKey = await dbGetSetting("anthropic-api-key");
+      if (!apiKey) { alert("No API key."); setMsgDrafting(false); return; }
+      const cn = c.tiktokData?.displayName || c.instagramData?.fullName || c.handle || "Creator";
+      const ch = c.tiktokHandle || c.instagramHandle || c.handle || "";
+      const prev = msgList.slice(-5).map(m => m.direction + ": " + m.body.substring(0, 200)).join("\n");
+      const prompt = "You are a creator partnerships manager at Intake Breathing. Write a friendly, authentic outreach message to a TikTok/Instagram creator. Reference their specific content. Keep under 150 words.\n\nCREATOR: " + cn + " (@" + ch + ")\nTikTok followers: " + (c.tiktokData?.followers || "unknown") + "\nIG followers: " + (c.instagramData?.followers || "unknown") + "\nIB Score: " + (c.ibScore?.overall || "not scored") + "\n" + (prev ? "\nPREVIOUS MESSAGES:\n" + prev : "First outreach.") + "\n\nWrite ONLY the message body.";
+      const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 500, messages: [{ role: "user", content: prompt }] }) });
+      if (!res.ok) throw new Error("API " + res.status);
+      const data = await res.json();
+      setMsgCompose(data.content?.[0]?.text || "");
+      if (!msgSubject) setMsgSubject("Partnership opportunity with Intake Breathing");
+    } catch (e) { alert("AI draft failed: " + e.message); }
+    setMsgDrafting(false);
+  };
+  useEffect(() => { if (showMessages) msgEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgList, showMessages]);
+
   const bestHighlight = useMemo(() => pickBestContentHighlight(c), [c]);
 
   return (
@@ -7567,6 +7627,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: getCreatorOwners(c.id).length > 0 ? 10 : 0 }}>
           <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
           <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={openMessages} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.blue + "40", background: showMessages ? t.blue + "15" : t.blue + "08", color: t.blue, cursor: "pointer" }}>Messages{msgList.length > 0 ? " (" + msgList.length + ")" : ""}</button>
             <button onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.cardAlt, color: t.textMuted, cursor: "pointer" }}>+ Add</button>
             {ownerDropdownOpen ? (
               <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
@@ -7599,6 +7660,56 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           {getCreatorOwners(c.id).length === 0 ? <span style={{ fontSize: 12, color: t.textFaint }}>Unassigned</span> : null}
         </div>
       </div>
+
+      {showMessages ? (
+        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, marginBottom: 16, boxShadow: t.shadow, overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid " + t.border }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Messages with @{c.tiktokHandle || c.instagramHandle || c.handle}</div>
+            <button onClick={() => setShowMessages(false)} style={{ background: "none", border: "none", fontSize: 16, color: t.textFaint, cursor: "pointer" }}>x</button>
+          </div>
+          <div style={{ maxHeight: 300, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+            {msgList.length === 0 ? <div style={{ textAlign: "center", color: t.textFaint, padding: 20, fontSize: 12 }}>No messages yet. Start a conversation below.</div> : msgList.map(msg => {
+              const isOut = msg.direction === "outbound"; const isNote = msg.direction === "internal_note";
+              return (
+                <div key={msg.id} style={{ maxWidth: isNote ? "100%" : "75%", alignSelf: isOut ? "flex-end" : isNote ? "center" : "flex-start", background: isNote ? (t.isLight ? "#fef9c3" : "#1a1a0a") : isOut ? t.green + "12" : (t.isLight ? "#f3f4f6" : "#1e1e1e"), border: "1px solid " + (isNote ? (t.isLight ? "#fde68a" : "#3d3d0f") : isOut ? t.green + "30" : t.border), borderRadius: 12, padding: "10px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: isNote ? (t.isLight ? "#92400e" : "#fbbf24") : isOut ? t.green : t.blue, textTransform: "uppercase" }}>{isNote ? "Note" : isOut ? "Sent via " + msg.channel : "Received"}</span>
+                    <span style={{ fontSize: 9, color: t.textFaint }}>{msg.sent_at ? new Date(msg.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Draft"}</span>
+                  </div>
+                  {msg.subject ? <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 4 }}>{msg.subject}</div> : null}
+                  <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{msg.body}</div>
+                  <div style={{ textAlign: "right", marginTop: 4 }}><button onClick={async () => { if (window.confirm("Delete?")) { await dbDeleteMessage(msg.id); setMsgList(prev => prev.filter(m => m.id !== msg.id)); } }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 9, opacity: 0.5 }}>delete</button></div>
+                </div>
+              );
+            })}
+            <div ref={msgEndRef} />
+          </div>
+          <div style={{ borderTop: "1px solid " + t.border, padding: "12px 16px", background: t.cardAlt }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <select value={msgSelTemplate} onChange={(e) => { if (e.target.value) { const tmpl = msgTemplates.find(tp => tp.id === e.target.value); if (tmpl) { let b = tmpl.body.replace(/\{\{creator_name\}\}/g, c.tiktokData?.displayName || c.handle || "").replace(/\{\{handle\}\}/g, c.tiktokHandle || c.handle || ""); setMsgCompose(b); setMsgSubject((tmpl.subject || "").replace(/\{\{creator_name\}\}/g, c.tiktokData?.displayName || c.handle || "")); } } setMsgSelTemplate(e.target.value); }} style={{ flex: 1, padding: "5px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11 }}>
+                <option value="">Use a template...</option>
+                {msgTemplates.map(tp => <option key={tp.id} value={tp.id}>{tp.name}</option>)}
+              </select>
+              <select value={msgChannel} onChange={(e) => setMsgChannel(e.target.value)} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, width: 120 }}>
+                <option value="email">Email</option><option value="instagram_dm">IG DM</option><option value="tiktok_dm">TT DM</option><option value="sms">SMS</option><option value="manual">Manual</option>
+              </select>
+            </div>
+            {msgChannel === "email" ? <input value={msgSubject} onChange={(e) => setMsgSubject(e.target.value)} placeholder="Subject line..." style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, marginBottom: 8, boxSizing: "border-box" }} /> : null}
+            <textarea value={msgCompose} onChange={(e) => setMsgCompose(e.target.value)} placeholder={"Write a message to @" + (c.tiktokHandle || c.handle || "") + "..."} style={{ width: "100%", minHeight: 80, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6 }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={draftMsgWithAi} disabled={msgDrafting} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer", opacity: msgDrafting ? 0.6 : 1 }}>{msgDrafting ? "Drafting..." : "Draft with IB-Ai"}</button>
+                <button onClick={addMsgNote} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + (t.isLight ? "#fde68a" : "#3d3d0f"), background: t.isLight ? "#fef9c350" : "#1a1a0a", color: t.isLight ? "#92400e" : "#fbbf24", cursor: "pointer" }}>Save as note</button>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => sendMsg("draft")} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Save draft</button>
+                <button onClick={() => sendMsg("sent")} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer", opacity: msgSending ? 0.6 : 1 }}>{msgSending ? "Sending..." : "Mark as sent"}</button>
+              </div>
+            </div>
+            <div style={{ fontSize: 9, color: t.textFaint, marginTop: 6 }}>Messages logged for tracking. Actual email/SMS sending coming in Phase 2.</div>
+          </div>
+        </div>
+      ) : null}
 
       {(() => {
         const igF = Number(c.instagramData?.followers) || 0;
