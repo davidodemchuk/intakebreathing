@@ -228,92 +228,80 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
 
 function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
   const [assignments, setAssignments] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("home");
 
   useEffect(() => {
     if (!cp?.id) return;
     (async () => {
-      const { data: a } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false });
-      setAssignments(a || []);
-      const { count } = await supabase.from("messages").select("id", { count: "exact", head: true }).eq("creator_id", cp.id).eq("sender", "manager").eq("read", false);
-      setUnread(count || 0);
+      try {
+        const { data: a } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false });
+        setAssignments(a || []);
+        const { data: cc } = await supabase.from("campaign_creators").select("*, campaigns(*)").eq("creator_id", cp.id).order("invited_at", { ascending: false });
+        setCampaigns(cc || []);
+      } catch {}
       setLoading(false);
     })();
   }, [cp?.id]);
 
+  const pendingCampaigns = campaigns.filter(c => c.status === "invited");
+  const activeCampaigns = campaigns.filter(c => c.status === "accepted");
+  const newBriefs = assignments.filter(a => a.status === "assigned");
+
   if (loading) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading...</div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: t.bg, padding: 24 }}>
-      <div style={{ maxWidth: 660, margin: "0 auto", paddingTop: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>Hey, {cp?.name?.split(" ")[0] || "Creator"}</div>
-            <div style={{ fontSize: 13, color: t.textMuted }}>Intake Breathing</div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => navigate("creatorProfile")} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Profile</button>
-            <button
-              type="button"
-              onClick={async () => {
-                await supabase.auth.signOut();
-                navigate("creatorLogin");
-              }}
-              style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}
-            >
-              Sign Out
-            </button>
+    <div style={{ minHeight: "100vh", background: t.bg }}>
+      <div style={{ background: t.card, borderBottom: "1px solid " + t.border, padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: t.text, padding: "14px 0" }}>Intake</span>
+          <div style={{ display: "flex", gap: 2 }}>
+            {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent" }}>
+                {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: t.green, color: "#fff", fontWeight: 700 }}>{tab.count}</span> : null}
+              </button>
+            ))}
           </div>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={() => navigate("creatorProfile")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: t.green }}>{(cp?.name || "C")[0]}</div>
+            {cp?.name?.split(" ")[0] || "Profile"}
+          </button>
+        </div>
+      </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
-          {[
-            { v: assignments.length, l: "Briefs", c: t.blue, click: null },
-            { v: unread, l: "Messages", c: t.orange, click: () => navigate("creatorMessages") },
-            { v: cp?.ibScore ?? "—", l: "IB Score", c: t.green, click: null },
-          ].map((s, i) => (
-            <div
-              key={i}
-              onClick={s.click || undefined}
-              style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16, textAlign: "center", cursor: s.click ? "pointer" : "default", position: "relative" }}
-            >
-              <div style={{ fontSize: 22, fontWeight: 800, color: s.c }}>{s.v}</div>
-              <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{s.l}</div>
-              {s.l === "Messages" && unread > 0 ? <div style={{ position: "absolute", top: 6, right: 6, width: 8, height: 8, borderRadius: 4, background: t.red }} /> : null}
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 20px" }}>
+        {activeTab === "home" ? (
+          <>
+            <div style={{ background: "linear-gradient(135deg, " + t.green + "15, " + t.blue + "10)", border: "1px solid " + t.green + "25", borderRadius: 14, padding: "20px 24px", marginBottom: 20 }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>Hey, {cp?.name?.split(" ")[0] || "Creator"}</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Welcome to your Intake Breathing dashboard</div>
+              {pendingCampaigns.length > 0 ? <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: t.orange + "15", border: "1px solid " + t.orange + "30", fontSize: 12, color: t.orange, fontWeight: 600, cursor: "pointer" }} onClick={() => setActiveTab("campaigns")}>{pendingCampaigns.length} campaign invite{pendingCampaigns.length > 1 ? "s" : ""} waiting</div> : null}
             </div>
-          ))}
-        </div>
-
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 10 }}>Your Briefs</div>
-        {assignments.length === 0 ? (
-          <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 24, textAlign: "center", color: t.textFaint, fontSize: 13 }}>No briefs yet. Your manager will assign them when ready.</div>
-        ) : (
-          assignments.map((a) => {
-            const br = a.briefs;
-            const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple, approved: t.green, revision: t.red }[a.status] || t.textFaint;
-            return (
-              <div
-                key={a.id}
-                onClick={() => {
-                  if (a.status === "assigned") supabase.from("brief_assignments").update({ status: "viewed", viewed_at: new Date().toISOString() }).eq("id", a.id);
-                  navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id });
-                }}
-                style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}
-              >
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div>
-                  <div style={{ fontSize: 11, color: t.textFaint }}>
-                    {(br?.created_by ?? br?.form_data?.manager) || ""} · {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}
-                  </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+              {[{ v: assignments.length, l: "Briefs", c: t.blue }, { v: activeCampaigns.length, l: "Active campaigns", c: t.green }, { v: pendingCampaigns.length, l: "Pending invites", c: t.orange }].map((s, i) => (
+                <div key={i} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: s.c }}>{s.v}</div>
+                  <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.l}</div>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 10, background: sc + "15", color: sc }}>{a.status === "assigned" ? "New" : a.status}</span>
-              </div>
-            );
-          })
-        )}
+              ))}
+            </div>
+            {assignments.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8 }}>Recent briefs</div>{assignments.slice(0, 3).map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div><div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</div> : null}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div onClick={() => navigate("creatorMessages")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Messages</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Chat with your manager</div></div>
+              <div onClick={() => navigate("creatorProfile")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Edit profile</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Update your info</div></div>
+            </div>
+          </>
+        ) : null}
+        {activeTab === "briefs" ? (
+          <>{assignments.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}><div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No briefs yet</div><div style={{ fontSize: 12 }}>Your manager will assign briefs when campaigns are ready.</div></div> : assignments.map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</>
+        ) : null}
+        {activeTab === "campaigns" ? (
+          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 700, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 700, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div></div>; })}</div> : null}</>}</>
+        ) : null}
       </div>
     </div>
   );
