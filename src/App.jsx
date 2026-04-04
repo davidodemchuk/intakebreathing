@@ -52,7 +52,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.24.0";
+const APP_VERSION = "6.25.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8817,6 +8817,8 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("table");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -8934,10 +8936,30 @@ function TtsNativeTab({ t, S, teamMembers }) {
           ))}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={async () => {
+            if (!window.confirm("Import all historical TTS data from Google Sheets? This won't overwrite existing weeks.")) return;
+            setImporting(true); setImportResult(null);
+            try {
+              const res = await fetch("/api/import-tts-from-sheets", { method: "POST" });
+              const data = await res.json();
+              if (res.ok) { setImportResult(data); const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]); setWeeks(refreshed); setMonthly(refreshedMonthly); }
+              else { setImportResult({ error: data.error || "Import failed" }); }
+            } catch (e) { setImportResult({ error: e.message }); }
+            setImporting(false);
+          }} disabled={importing} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.orange + "40", background: t.orange + "08", color: t.orange, cursor: importing ? "wait" : "pointer", opacity: importing ? 0.6 : 1 }}>
+            {importing ? "Importing..." : "Sync from Google Sheets"}
+          </button>
           {weeks.length > 0 ? <button onClick={copyLastWeek} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Copy last week</button> : null}
           <button onClick={newWeekForm} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New week</button>
         </div>
       </div>
+
+      {importResult ? (
+        <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12, background: importResult.error ? (t.red || "#ef4444") + "10" : t.green + "10", color: importResult.error ? (t.red || "#ef4444") : t.green, border: "1px solid " + (importResult.error ? (t.red || "#ef4444") + "30" : t.green + "30") }}>
+          {importResult.error ? "Import failed: " + importResult.error : "Imported " + importResult.imported + " weeks, skipped " + importResult.skipped + " (already exist). Parsed " + importResult.total + " rows from sheet."}
+          <button onClick={() => setImportResult(null)} style={{ marginLeft: 12, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "inherit", textDecoration: "underline" }}>Dismiss</button>
+        </div>
+      ) : null}
 
       {/* Entry form */}
       {showForm ? (

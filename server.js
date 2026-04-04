@@ -301,6 +301,97 @@ app.post("/api/store-thumbnails", async (req, res) => {
   res.json({ results, stored });
 });
 
+// ── Import TTS data from Google Sheets ──
+app.post("/api/import-tts-from-sheets", async (req, res) => {
+  try {
+    const sheets = getSheetsClient();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: "1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak",
+      range: "TTS Weekly!A1:Z200",
+    });
+    const rows = response.data.values || [];
+    if (rows.length < 2) return res.json({ imported: 0, skipped: 0, total: 0, message: "No data found in sheet" });
+
+    const headers = rows[0].map(h => String(h).trim().toLowerCase());
+    console.log("[import-tts] Headers found:", headers.join(", "));
+
+    const dataRows = rows.slice(1).filter(r => r.length > 0 && r[0]);
+    const results = [];
+
+    for (const row of dataRows) {
+      const rowMap = {};
+      headers.forEach((h, i) => { rowMap[h] = (row[i] || "").trim(); });
+
+      const weekStartRaw = rowMap["week start"] || rowMap["week_start"] || rowMap["week"] || rowMap["date"] || rowMap["start"] || row[0];
+      if (!weekStartRaw) continue;
+
+      let weekStart;
+      try {
+        const d = new Date(weekStartRaw);
+        if (isNaN(d.getTime())) continue;
+        weekStart = d.toISOString().split("T")[0];
+      } catch { continue; }
+
+      const weekEndDate = new Date(weekStart);
+      weekEndDate.setDate(weekEndDate.getDate() + 6);
+      const weekEnd = weekEndDate.toISOString().split("T")[0];
+
+      const num = (keys) => {
+        for (const k of (Array.isArray(keys) ? keys : [keys])) {
+          const v = rowMap[k.toLowerCase()];
+          if (v != null && v !== "") {
+            const cleaned = String(v).replace(/[$,%]/g, "").replace(/,/g, "").trim();
+            const n = Number(cleaned);
+            if (!isNaN(n)) return n;
+          }
+        }
+        return 0;
+      };
+
+      results.push({
+        week_start: weekStart,
+        week_end: weekEnd,
+        samples_sent: num(["samples sent", "samples_sent", "sent"]),
+        samples_received: num(["samples received", "samples_received", "received"]),
+        samples_posted: num(["samples posted", "samples_posted", "posted samples"]),
+        videos_posted: num(["videos posted", "videos_posted", "videos", "new videos"]),
+        videos_approved: num(["videos approved", "videos_approved", "approved"]),
+        videos_rejected: num(["videos rejected", "videos_rejected", "rejected"]),
+        impressions: num(["impressions", "total impressions", "views", "total views"]),
+        organic_impressions: num(["organic impressions", "organic_impressions", "organic"]),
+        clicks: num(["clicks", "product clicks"]),
+        orders: num(["orders", "total orders", "conversions"]),
+        tts_gmv: num(["gmv", "tts gmv", "tts_gmv", "gross merchandise value", "revenue", "total revenue"]),
+        tts_commission: num(["commission", "tts commission", "tts_commission", "creator commission"]),
+        ad_spend: num(["ad spend", "ad_spend", "ads spend", "total ad spend", "spend"]),
+        sample_cost: num(["sample cost", "sample_cost", "sampling cost"]),
+        creator_payments: num(["creator payments", "creator_payments", "creator pay"]),
+        new_creators_added: num(["new creators", "new_creators_added", "new creators added"]),
+        active_creators: num(["active creators", "active_creators"]),
+        total_creators: num(["total creators", "total_creators", "creator count"]),
+        notes: rowMap["notes"] || rowMap["note"] || "",
+        gmv_source: "google_sheets_import",
+      });
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    for (const entry of results) {
+      const { data: existing } = await supabaseServer.from("tts_weekly").select("id").eq("week_start", entry.week_start).maybeSingle();
+      if (existing) { skipped++; continue; }
+      const { error } = await supabaseServer.from("tts_weekly").insert(entry);
+      if (error) { console.error("[import-tts] Insert error for", entry.week_start, error.message); }
+      else { imported++; }
+    }
+
+    console.log("[import-tts] Done: " + imported + " imported, " + skipped + " skipped, " + results.length + " total");
+    res.json({ imported, skipped, total: results.length, headers });
+  } catch (e) {
+    console.error("[import-tts] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Stream cached video for browser playback ──
 app.get("/api/cache-video/:cacheId", (req, res) => {
   const entry = videoCache.get(req.params.cacheId);
