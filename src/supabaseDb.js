@@ -383,6 +383,23 @@ export async function dbSaveTtsTarget(row) {
   return { data, error: null };
 }
 
+export async function dbLoadTtsMilestones() {
+  const { data, error } = await supabase.from("tts_milestones").select("*").order("week_start", { ascending: false });
+  if (error) { console.error("[db] Load TTS milestones error:", error); return []; }
+  return data || [];
+}
+
+export async function dbSaveTtsMilestone(row) {
+  const { data, error } = await supabase.from("tts_milestones").insert(row).select().single();
+  if (error) { console.error("[db] Save milestone error:", error); return { error }; }
+  return { data, error: null };
+}
+
+export async function dbDeleteTtsMilestone(id) {
+  const { error } = await supabase.from("tts_milestones").delete().eq("id", id);
+  return { error };
+}
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")

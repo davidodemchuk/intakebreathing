@@ -24,6 +24,9 @@ import {
   dbLoadTtsMonthly,
   dbLoadTtsTargets,
   dbSaveTtsTarget,
+  dbLoadTtsMilestones,
+  dbSaveTtsMilestone,
+  dbDeleteTtsMilestone,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -54,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.34.0";
+const APP_VERSION = "6.35.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8829,14 +8832,18 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [editingValue, setEditingValue] = useState("");
   const [entererDropdownOpen, setEntererDropdownOpen] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState(null);
+  const [milestones, setMilestones] = useState([]);
+  const [showMilestoneForm, setShowMilestoneForm] = useState(false);
+  const [milestoneFormData, setMilestoneFormData] = useState({});
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [w, m, tgts] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly(), dbLoadTtsTargets()]);
+      const [w, m, tgts, ms] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly(), dbLoadTtsTargets(), dbLoadTtsMilestones()]);
       setWeeks(w);
       setMonthly(m);
       setTargets(tgts);
+      setMilestones(ms);
       setLoading(false);
     })();
   }, []);
@@ -9073,6 +9080,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <button key={m} onClick={() => setViewMode(m)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: viewMode === m ? "2px solid " + t.green + "60" : "1px solid " + t.border, background: viewMode === m ? t.green + "10" : t.card, color: viewMode === m ? t.green : t.textMuted, textTransform: "capitalize" }}>{m === "monthly" ? "Monthly rollups" : "Weekly data"}</button>
           ))}
           <button onClick={() => { const thisMonth = new Date().toISOString().substring(0, 7); const existing = targets.find(tg => tg.month === thisMonth); setTargetFormData(existing || { month: thisMonth, target_gmv: 0, target_videos: 0, target_creators: 0, target_roas: 0, target_orders: 0, notes: "" }); setShowTargetForm(true); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + (t.purple || "#8b6cc4") + "40", background: (t.purple || "#8b6cc4") + "08", color: t.purple || "#8b6cc4", cursor: "pointer" }}>Set monthly target</button>
+          <button onClick={() => { setMilestoneFormData({ week_start: getMonday(new Date()), team_member_id: "", label: "", type: "join" }); setShowMilestoneForm(true); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.blue + "40", background: t.blue + "08", color: t.blue, cursor: "pointer" }}>+ Milestone</button>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={async () => {
@@ -9098,6 +9106,24 @@ function TtsNativeTab({ t, S, teamMembers }) {
         <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12, background: importResult.error ? (t.red || "#ef4444") + "10" : t.green + "10", color: importResult.error ? (t.red || "#ef4444") : t.green, border: "1px solid " + (importResult.error ? (t.red || "#ef4444") + "30" : t.green + "30") }}>
           {importResult.error ? "Import failed: " + importResult.error : "Imported " + importResult.imported + " weeks, skipped " + importResult.skipped + " (already exist). Parsed " + importResult.total + " rows from sheet."}
           <button onClick={() => setImportResult(null)} style={{ marginLeft: 12, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "inherit", textDecoration: "underline" }}>Dismiss</button>
+        </div>
+      ) : null}
+
+      {showMilestoneForm ? (
+        <div style={{ background: t.card, border: "2px solid " + t.blue + "40", borderRadius: 14, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Add milestone</div>
+            <button onClick={() => setShowMilestoneForm(false)} style={{ background: "none", border: "none", fontSize: 18, color: t.textFaint, cursor: "pointer" }}>x</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 10 }}>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Week</div><input type="date" value={milestoneFormData.week_start || ""} onChange={(e) => setMilestoneFormData(prev => ({ ...prev, week_start: e.target.value }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Team member</div><select value={milestoneFormData.team_member_id || ""} onChange={(e) => setMilestoneFormData(prev => ({ ...prev, team_member_id: e.target.value }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }}><option value="">Select person</option>{teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Label</div><input type="text" value={milestoneFormData.label || ""} onChange={(e) => setMilestoneFormData(prev => ({ ...prev, label: e.target.value }))} placeholder="e.g. Beau joins TTS, Ashleigh takes over UGC" style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <button onClick={() => setShowMilestoneForm(false)} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Cancel</button>
+            <button onClick={async () => { if (!milestoneFormData.label?.trim()) { alert("Enter a label"); return; } const result = await dbSaveTtsMilestone(milestoneFormData); if (!result.error) { setMilestones(prev => [...prev, result.data].sort((a, b) => b.week_start.localeCompare(a.week_start))); setShowMilestoneForm(false); } }} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.blue, color: "#fff", cursor: "pointer" }}>Add milestone</button>
+          </div>
         </div>
       ) : null}
 
@@ -9231,6 +9257,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                       }
                       mWeeks.push(w); qWeeks.push(w);
                       grouped.push({ type: "w", data: w, pw: null });
+                      milestones.filter(ms => ms.week_start === w.week_start).forEach(ms => grouped.push({ type: "ms", data: ms }));
                     });
                     if (mWeeks.length) grouped.push({ type: "mt", label: curMonth, ws: mWeeks });
                     if (qWeeks.length) grouped.push({ type: "qt", label: curQ, ws: qWeeks });
@@ -9239,14 +9266,15 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
                     return grouped.map((row, ri) => {
                       if (row.type === "sp") return <tr key={"sp" + ri}><td colSpan={99} style={{ padding: 6, borderBottom: "none" }}></td></tr>;
-                      if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: t.isLight ? "#d4d0c5" : "#2a2a2a" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", borderBottom: "2px solid " + t.border }}>{row.label}</td></tr>;
-                      if (row.type === "mh") return <tr key={"mh" + ri} style={{ background: t.isLight ? "#e2ded4" : "#222222" }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, color: t.textSecondary || t.text, borderBottom: "1px solid " + t.border }}>{row.label}</td></tr>;
+                      if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: "#1a3a2a" }}><td colSpan={99} style={{ padding: "12px 14px", fontSize: 14, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em", borderBottom: "none" }}>{row.label}</td></tr>;
+                      if (row.type === "mh") return <tr key={"mh" + ri} style={{ background: t.isLight ? "#e6f5ee" : "#0d2818" }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, color: t.isLight ? "#0a6e3a" : "#4ade80", borderBottom: "1px solid " + (t.isLight ? "#c8e6d6" : "#1a3a2a") }}>{row.label}</td></tr>;
+                      if (row.type === "ms") { const ms = row.data; const member = teamMembers.find(m => m.id === ms.team_member_id); return <tr key={"ms-" + ms.id} style={{ background: t.isLight ? "#eff6ff" : "#0c1929" }}><td colSpan={99} style={{ padding: "8px 14px", borderBottom: "1px solid " + (t.isLight ? "#bfdbfe" : "#1e3a5f") }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: t.blue, flexShrink: 0 }}></div>{member?.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} /> : null}<span style={{ fontSize: 12, fontWeight: 700, color: t.isLight ? "#1e40af" : "#60a5fa" }}>{ms.label}</span>{member ? <span style={{ fontSize: 10, color: t.isLight ? "#6b7280" : "#9ca3af" }}>— {member.name}</span> : null}<button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this milestone?")) dbDeleteTtsMilestone(ms.id).then(() => setMilestones(prev => prev.filter(m => m.id !== ms.id))); }} style={{ marginLeft: "auto", background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 10 }}>remove</button></div></td></tr>; }
                       if (row.type === "mt") {
                         const ws = row.ws; const tg = sumW(ws,"tts_gmv"); const ta = sumW(ws,"ad_spend"); const tv = sumW(ws,"videos_posted"); const ti = sumW(ws,"impressions"); const to = sumW(ws,"orders");
                         const nr = tg - ta - sumW(ws,"sample_cost") - sumW(ws,"creator_payments") - sumW(ws,"tts_commission");
                         const roas = ta > 0 ? (tg/ta).toFixed(2)+"x" : "\u2014";
-                        const mtb = "2px solid " + t.border; const mts = { padding: "8px 12px", fontSize: 11, fontWeight: 700, textAlign: "right", color: t.textMuted, borderBottom: mtb };
-                        return <tr key={"mt"+ri} style={{ background: t.isLight ? "#ece9e0" : "#1c1c1c" }}>
+                        const mtb = "2px solid " + (t.isLight ? "#f0d9a8" : "#3d2f0f"); const mtc = t.isLight ? "#92600a" : "#fbbf24"; const mts = { padding: "8px 12px", fontSize: 11, fontWeight: 700, textAlign: "right", color: mtc, borderBottom: mtb };
+                        return <tr key={"mt"+ri} style={{ background: t.isLight ? "#fef3e2" : "#2a1f0a" }}>
                           <td style={{ ...mts, textAlign: "left" }}>{row.label} total</td>
                           <td style={mts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={mts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={mts}>{fmtNum(sumW(ws,"samples_posted"))}</td><td style={mts}>{fmtNum(tv)}</td>
                           <td style={mts}>{fmtNum(ti)}</td><td style={mts}>{fmtNum(to)}</td>
@@ -9260,15 +9288,15 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         const ws = row.ws; const tg = sumW(ws,"tts_gmv"); const ta = sumW(ws,"ad_spend");
                         const nr = tg - ta - sumW(ws,"sample_cost") - sumW(ws,"creator_payments") - sumW(ws,"tts_commission");
                         const roas = ta > 0 ? (tg/ta).toFixed(2)+"x" : "\u2014";
-                        const qtb = "3px solid " + t.border; const qts = { padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "right", color: t.text, borderBottom: qtb };
-                        return <tr key={"qt"+ri} style={{ background: t.isLight ? "#d4d0c5" : "#2a2a2a" }}>
+                        const qtb = "3px solid " + (t.isLight ? "#aaa79c" : "#444"); const qts = { padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "right", color: "#fff", borderBottom: qtb };
+                        return <tr key={"qt"+ri} style={{ background: "#0f2e1f" }}>
                           <td style={{ ...qts, textAlign: "left", padding: "10px 14px" }}>{row.label} total</td>
                           <td colSpan={4} style={{ borderBottom: qtb }}></td>
                           <td style={qts}>{fmtNum(sumW(ws,"impressions"))}</td><td style={qts}>{fmtNum(sumW(ws,"orders"))}</td>
-                          <td style={{ ...qts, color: t.green }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(ta)}</td><td style={{ borderBottom: qtb }}></td>
-                          <td style={{ ...qts, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? t.green : t.text }}>{roas}</td>
+                          <td style={{ ...qts, fontSize: 14, color: "#4ade80" }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(ta)}</td><td style={{ borderBottom: qtb }}></td>
+                          <td style={{ ...qts, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? "#4ade80" : "#fff" }}>{roas}</td>
                           <td colSpan={2} style={{ borderBottom: qtb }}></td>
-                          <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? t.green : (t.red||"#ef4444") }}>{"$"+Math.round(nr).toLocaleString()}</td>
+                          <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? "#4ade80" : "#ef4444" }}>{"$"+Math.round(nr).toLocaleString()}</td>
                           <td colSpan={2} style={{ borderBottom: qtb }}></td>
                         </tr>;
                       }
