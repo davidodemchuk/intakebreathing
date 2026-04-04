@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.40.0";
+const APP_VERSION = "6.41.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8948,6 +8948,19 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const fmtNum = (n) => n != null && n !== 0 ? Number(n).toLocaleString() : "0";
   const fmtDol = (n) => n != null ? "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "$0.00";
 
+  const scrollToWeek = (weekStart) => {
+    setViewMode("table");
+    setTimeout(() => {
+      const row = document.querySelector('[data-week="' + weekStart + '"]');
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        row.style.transition = "background 0.3s";
+        row.style.background = t.isLight ? "#d4f5e2" : "#0a3d1f";
+        setTimeout(() => { row.style.background = ""; }, 2000);
+      }
+    }, 100);
+  };
+
   const EditableCell = ({ rowId, column, value, format, align, style: cellStyle, step, children }) => {
     const isEditing = editingCell?.rowId === rowId && editingCell?.column === column;
     const displayVal = format ? format(value) : value;
@@ -9060,16 +9073,17 @@ function TtsNativeTab({ t, S, teamMembers }) {
                 {totalChange !== 0 ? <div style={{ fontSize: 11, fontWeight: 700, color: totalChange > 0 ? t.green : (t.red || "#ef4444") }}>{totalChange > 0 ? "+" : ""}{totalChange}% overall</div> : null}
               </div>
               <div style={{ position: "relative" }}
-                onMouseMove={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const mx = (e.clientX - rect.left) / (rect.width / cW); let cl = points[0]; let cd = Infinity; points.forEach(p => { const d = Math.abs(p.x - mx); if (d < cd) { cd = d; cl = p; } }); const tt = e.currentTarget.querySelector("[data-tooltip]"); const dot = e.currentTarget.querySelector("[data-hover-dot]"); const ln = e.currentTarget.querySelector("[data-hover-line]"); if (tt) { tt.style.display = "block"; tt.style.left = (cl.x / cW * 100) + "%"; tt.innerHTML = '<div style="font-weight:700;font-size:12px;color:' + chart.color + '">' + chart.format(cl.val) + '</div><div style="font-size:10px;color:' + t.textFaint + '">' + cl.fullDate + '</div>'; } if (dot) { dot.setAttribute("cx", cl.x); dot.setAttribute("cy", cl.y); dot.style.display = "block"; } if (ln) { ln.setAttribute("x1", cl.x); ln.setAttribute("x2", cl.x); ln.style.display = "block"; } }}
+                onMouseMove={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const mx = (e.clientX - rect.left) / (rect.width / cW); let cl = points[0]; let cd = Infinity; points.forEach(p => { const d = Math.abs(p.x - mx); if (d < cd) { cd = d; cl = p; } }); const tt = e.currentTarget.querySelector("[data-tooltip]"); const dot = e.currentTarget.querySelector("[data-hover-dot]"); const ln = e.currentTarget.querySelector("[data-hover-line]"); if (tt) { tt.style.display = "block"; tt.style.left = (cl.x / cW * 100) + "%"; tt.innerHTML = '<div style="font-weight:700;font-size:12px;color:' + chart.color + '">' + chart.format(cl.val) + '</div><div style="font-size:10px;color:' + t.textFaint + '">' + cl.fullDate + '</div><div style="font-size:9px;color:' + t.textFaint + ';margin-top:2px">Click to view week</div>'; } if (dot) { dot.setAttribute("cx", cl.x); dot.setAttribute("cy", cl.y); dot.style.display = "block"; } if (ln) { ln.setAttribute("x1", cl.x); ln.setAttribute("x2", cl.x); ln.style.display = "block"; } }}
                 onMouseLeave={(e) => { const tt = e.currentTarget.querySelector("[data-tooltip]"); const dot = e.currentTarget.querySelector("[data-hover-dot]"); const ln = e.currentTarget.querySelector("[data-hover-line]"); if (tt) tt.style.display = "none"; if (dot) dot.style.display = "none"; if (ln) ln.style.display = "none"; }}>
                 <div data-tooltip style={{ display: "none", position: "absolute", top: -8, transform: "translateX(-50%)", background: t.card, border: "1px solid " + t.border, borderRadius: 8, padding: "6px 10px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", pointerEvents: "none", zIndex: 10, textAlign: "center", whiteSpace: "nowrap" }}></div>
-                <svg width="100%" viewBox={"0 0 " + cW + " " + (cH + 18)} preserveAspectRatio="none" style={{ display: "block", cursor: "crosshair" }}>
+                <svg width="100%" viewBox={"0 0 " + cW + " " + (cH + 18)} preserveAspectRatio="none" style={{ display: "block", cursor: "crosshair" }}
+                  onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const mx = (e.clientX - rect.left) / (rect.width / cW); let ci = 0; let cd = Infinity; points.forEach((p, i) => { const d = Math.abs(p.x - mx); if (d < cd) { cd = d; ci = i; } }); scrollToWeek(sorted[ci].week_start); }}>
                   <line x1={pL} y1={8} x2={cW - pR} y2={8} stroke={t.border} strokeWidth="0.5" />
                   <line x1={pL} y1={cH / 2} x2={cW - pR} y2={cH / 2} stroke={t.border} strokeWidth="0.5" strokeDasharray="4 4" />
                   <line x1={pL} y1={cH - 8} x2={cW - pR} y2={cH - 8} stroke={t.border} strokeWidth="0.5" />
                   <path d={areaD} fill={chart.color} opacity="0.06" />
                   <path d={pathD} fill="none" stroke={chart.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 4 : 2} fill={chart.color} opacity={i === points.length - 1 ? 1 : 0.4} />)}
+                  {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 5 : 3} fill={chart.color} opacity={i === points.length - 1 ? 1 : 0.5} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); scrollToWeek(sorted[i].week_start); }} />)}
                   <circle data-hover-dot cx="0" cy="0" r="5" fill={chart.color} stroke={t.card} strokeWidth="2" style={{ display: "none" }} />
                   <line data-hover-line x1="0" y1="4" x2="0" y2={cH - 4} stroke={chart.color} strokeWidth="0.5" strokeDasharray="3 3" style={{ display: "none" }} />
                   {xLabels.map((lbl, i) => <text key={i} x={lbl.x} y={cH + 12} fill={t.textFaint} fontSize="9" textAnchor="middle" fontWeight="500">{lbl.label}</text>)}
@@ -9298,7 +9312,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         const bb = "1px solid " + t.border + "40";
                         const cs = { padding: "10px 12px", borderBottom: bb, textAlign: "right", fontSize: 12 };
                         return [
-                          <tr key={"w-"+w.id} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                          <tr key={"w-"+w.id} data-week={w.week_start} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                             <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
                             <EditableCell rowId={w.id} column="superfiliate_invites" value={w.superfiliate_invites} format={fmtNum} style={cs} />
                             <EditableCell rowId={w.id} column="sample_requests" value={w.sample_requests} format={fmtNum} style={cs} />
