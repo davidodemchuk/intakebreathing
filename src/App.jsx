@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.39.0";
+const APP_VERSION = "6.40.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9275,7 +9275,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
                     return grouped.map((row, ri) => {
                       if (row.type === "sp") return <tr key={"sp" + ri}><td colSpan={99} style={{ padding: 6, borderBottom: "none" }}></td></tr>;
-                      if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: t.isLight ? "#2d6b4a" : "#1a3a2a" }}><td colSpan={99} style={{ padding: "12px 14px", fontSize: 14, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em", borderBottom: "none" }}>{row.label}</td></tr>;
+                      if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: t.isLight ? "#d4e8db" : "#162b1e" }}><td colSpan={99} style={{ padding: "12px 14px", fontSize: 14, fontWeight: 800, color: t.isLight ? "#1a5c35" : "#4ade80", letterSpacing: "-0.01em", borderBottom: "none" }}>{row.label}</td></tr>;
                       if (row.type === "mh") return <tr key={"mh" + ri} style={{ background: t.isLight ? "#e6f5ee" : "#0d2818" }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, color: t.isLight ? "#0a6e3a" : "#4ade80", borderBottom: "1px solid " + (t.isLight ? "#c8e6d6" : "#1a4a2a") }}>{row.label}</td></tr>;
                       if (row.type === "ms") { const ms = row.data; const member = teamMembers.find(m => m.id === ms.team_member_id); return <tr key={"ms-" + ms.id} style={{ background: t.isLight ? "#eff6ff" : "#0c1929" }}><td colSpan={99} style={{ padding: "8px 14px", borderBottom: "1px solid " + (t.isLight ? "#bfdbfe" : "#1e3a5f") }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: t.blue, flexShrink: 0 }}></div>{member?.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} /> : null}<span style={{ fontSize: 12, fontWeight: 700, color: t.isLight ? "#1e40af" : "#60a5fa" }}>{ms.label}</span>{member ? <span style={{ fontSize: 10, color: t.isLight ? "#6b7280" : "#9ca3af" }}>— {member.name}</span> : null}<button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this milestone?")) dbDeleteTtsMilestone(ms.id).then(() => setMilestones(prev => prev.filter(m => m.id !== ms.id))); }} style={{ marginLeft: "auto", background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 10 }}>remove</button></div></td></tr>; }
                       if (row.type === "mt") {
@@ -9300,16 +9300,16 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         const sv = tsp > 0 && tv > 0 ? (tsp / tv).toFixed(2) : "\u2014";
                         const cpm = ti > 0 ? "$" + (ta / (ti / 1000)).toFixed(2) : "\u2014";
                         const npv = tv > 0 ? "$" + Math.round(nr / tv).toLocaleString() : "\u2014";
-                        const qtb = "3px solid " + (t.isLight ? "#aaa79c" : "#444"); const qts = { padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "right", color: "#fff", borderBottom: qtb };
-                        return <tr key={"qt"+ri} style={{ background: t.isLight ? "#347a56" : "#1a3a2a" }}>
+                        const qtb = "3px solid " + (t.isLight ? "#b8d4c0" : "#2a4a32"); const qtc = t.isLight ? "#145a30" : "#4ade80"; const qts = { padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "right", color: qtc, borderBottom: qtb };
+                        return <tr key={"qt"+ri} style={{ background: t.isLight ? "#c2dccb" : "#1a3322" }}>
                           <td style={{ ...qts, textAlign: "left", padding: "10px 14px" }}>{row.label} total</td>
                           <td style={qts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={qts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={qts}>{fmtNum(tsp)}</td><td style={qts}>{fmtNum(tv)}</td>
                           <td style={qts}>{fmtNum(ti)}</td><td style={qts}>{fmtNum(to)}</td>
-                          <td style={{ ...qts, fontSize: 14, color: "#4ade80" }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(ta)}</td>
+                          <td style={{ ...qts, fontSize: 14, color: t.isLight ? "#0a7c3e" : "#4ade80" }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(ta)}</td>
                           <td style={qts}>{sv}</td>
-                          <td style={{ ...qts, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? "#4ade80" : "#fff" }}>{roas}</td>
+                          <td style={{ ...qts, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? (t.isLight ? "#0a7c3e" : "#4ade80") : qtc }}>{roas}</td>
                           <td style={qts}>{cpm}</td><td style={qts}>{npv}</td>
-                          <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? "#4ade80" : "#ef4444" }}>{"$"+Math.round(nr).toLocaleString()}</td>
+                          <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? (t.isLight ? "#0a7c3e" : "#4ade80") : "#ef4444" }}>{"$"+Math.round(nr).toLocaleString()}</td>
                           <td style={{ borderBottom: qtb }}></td><td style={{ borderBottom: qtb }}></td>
                         </tr>;
                       }
@@ -9377,15 +9377,16 @@ function TtsNativeTab({ t, S, teamMembers }) {
                       const qMs = monthly.filter(mm => { const dd = new Date(mm.month_start || mm.month + "-01"); return ("Q" + (Math.floor(dd.getMonth() / 3) + 1) + " " + dd.getFullYear()) === qLabel; });
                       const qG = qMs.reduce((s, mm) => s + Number(mm.tts_gmv || 0), 0); const qA = qMs.reduce((s, mm) => s + Number(mm.ad_spend || 0), 0); const qN = qMs.reduce((s, mm) => s + Number(mm.net_revenue || 0), 0);
                       const qR = qA > 0 ? (qG / qA).toFixed(2) + "x" : "\u2014"; const qW = qMs.reduce((s, mm) => s + Number(mm.weeks_reported || 0), 0);
-                      return <tr key={"qt-" + qLabel} style={{ background: t.isLight ? "#347a56" : "#1a3a2a" }}>
-                        <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: "#fff" }}>{qLabel} total</td><td colSpan={4}></td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#fff" }}>{fmtNum(qMs.reduce((s, mm) => s + Number(mm.impressions || 0), 0))}</td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#fff" }}>{fmtNum(qMs.reduce((s, mm) => s + Number(mm.orders || 0), 0))}</td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 14, fontWeight: 800, color: "#4ade80" }}>{fmtDol(qG)}</td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#fff" }}>{fmtDol(qA)}</td><td></td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#4ade80" }}>{qR}</td><td></td><td></td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 13, fontWeight: 800, color: qN >= 0 ? "#4ade80" : "#f87171" }}>${Math.round(qN).toLocaleString()}</td>
-                        <td style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, color: "#fff" }}>{qW}w</td>
+                      const mqtc = t.isLight ? "#145a30" : "#4ade80"; const mqtg = t.isLight ? "#0a7c3e" : "#4ade80";
+                      return <tr key={"qt-" + qLabel} style={{ background: t.isLight ? "#c2dccb" : "#1a3322" }}>
+                        <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: mqtc }}>{qLabel} total</td><td colSpan={4}></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: mqtc }}>{fmtNum(qMs.reduce((s, mm) => s + Number(mm.impressions || 0), 0))}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: mqtc }}>{fmtNum(qMs.reduce((s, mm) => s + Number(mm.orders || 0), 0))}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 14, fontWeight: 800, color: mqtg }}>{fmtDol(qG)}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: mqtc }}>{fmtDol(qA)}</td><td></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: mqtg }}>{qR}</td><td></td><td></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 13, fontWeight: 800, color: qN >= 0 ? mqtg : "#ef4444" }}>${Math.round(qN).toLocaleString()}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, color: mqtc }}>{qW}w</td>
                       </tr>;
                     };
                     monthly.forEach((m, mi) => {
@@ -9393,7 +9394,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                       if (q !== curQ) {
                         if (curQ) { rows.push(mkQTotal(curQ)); rows.push(<tr key={"qsp-" + curQ} style={{ height: 12 }}><td colSpan={99} style={{ border: "none" }}></td></tr>); }
                         curQ = q;
-                        rows.push(<tr key={"qh-" + q} style={{ background: t.isLight ? "#2d6b4a" : "#1a3a2a" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{q}</td></tr>);
+                        rows.push(<tr key={"qh-" + q} style={{ background: t.isLight ? "#d4e8db" : "#162b1e" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: t.isLight ? "#1a5c35" : "#4ade80", letterSpacing: "-0.01em" }}>{q}</td></tr>);
                       }
                       const gmv = Number(m.tts_gmv) || 0; const adSpend = Number(m.ad_spend) || 0; const netRev = Number(m.net_revenue) || 0;
                       const roas = m.roas ? m.roas + "x" : (adSpend > 0 ? (gmv / adSpend).toFixed(2) + "x" : "\u2014");
