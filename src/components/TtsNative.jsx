@@ -856,3 +856,4 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
 
 
 export default TtsNativeTab;
+export { PIPELINE_TAB_MAP, PIPELINE_SOP_TABS, pipelineColIndexToA1 };

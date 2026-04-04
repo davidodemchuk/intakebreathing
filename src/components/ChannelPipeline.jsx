@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import TtsNativeTab from "./TtsNative.jsx";
+import TtsNativeTab, { PIPELINE_TAB_MAP, PIPELINE_SOP_TABS, pipelineColIndexToA1 } from "./TtsNative.jsx";
 
 function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
   const getTabFromUrl = () => {
