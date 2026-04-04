@@ -359,6 +359,11 @@ app.post("/api/import-tts-from-sheets", async (req, res) => {
       // A=0:Weekly B=1:SF Tr C=2:% D=3:Sample Requests E=4:Samples Shipped F=5:Posted G=6:Sample Cost
       // H=7:S/V Ratio I=8:CPVideo J=9:Impressions K=10:Organic Impressions L=11:Ad Impressions
       // M=12:TTS GMV N=13:Ad Spend O=14:CPV Ad Spend P=15:Net Per Video
+      // Skip any dates before 2024 — likely bad data or test rows
+      if (dates.start < "2024-01-01") {
+        console.log("[import-tts] Skipping pre-2024 row:", dates.start, "from", row[0]);
+        continue;
+      }
       results.push({
         week_start: dates.start,
         week_end: dates.end,
