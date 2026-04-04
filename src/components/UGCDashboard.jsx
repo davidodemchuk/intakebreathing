@@ -59,19 +59,12 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
           <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
         </div>
 
-        <div style={cardStyle(t.orange)} onClick={() => navigate("pipeline")}
-          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={(e) => hoverOut(e, t.orange)}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="pipeline" color={t.orange} /></div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
-          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
-          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
-        </div>
-
-        <div style={{ ...cardStyle(t.textFaint), cursor: "default", opacity: 0.5 }}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.textFaint} /></div>
+        <div style={cardStyle(t.purple || "#8b6cc4")} onClick={() => navigate("campaigns")}
+          onMouseEnter={(e) => hoverIn(e, t.purple || "#8b6cc4")} onMouseLeave={(e) => hoverOut(e, t.purple || "#8b6cc4")}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.purple || "#8b6cc4"} /></div>
           <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
-          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Track active campaigns, assign creators, and monitor performance.</div>
-          <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, invite creators, track results.</div>
+          <div style={{ fontSize: 12, color: t.purple || "#8b6cc4", fontWeight: 600 }}>Live</div>
         </div>
       </div>
 
