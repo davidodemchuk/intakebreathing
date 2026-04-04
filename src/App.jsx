@@ -8834,7 +8834,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
     const vp = Number(d.videos_posted) || 0;
     const sf = Number(d.superfiliate_invites) || 0;
     const sr = Number(d.sample_requests) || 0;
-    const sp = Number(d.samples_shipped) || 0;
+    const sp = Number(d.samples_posted) || 0;
     const va = Number(d.videos_approved) || 0;
     const imp = Number(d.impressions) || 0;
     const orgImp = Number(d.organic_impressions) || 0;
@@ -8884,7 +8884,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
   const newWeekForm = () => {
     const monday = getMonday(new Date());
-    setFormData({ week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_shipped: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, clicks: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
+    setFormData({ week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, clicks: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
     setEditingRow(null);
     setShowForm(true);
   };
@@ -8998,7 +8998,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Outreach & samples</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                {inputField("SF invites", "superfiliate_invites")}{inputField("Sample requests", "sample_requests")}{inputField("Samples shipped", "samples_shipped")}{inputField("Videos posted", "videos_posted")}
+                {inputField("SF invites", "superfiliate_invites")}{inputField("Sample requests", "sample_requests")}{inputField("Samples shipped", "samples_posted")}{inputField("Videos posted", "videos_posted")}
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Video review</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -9061,7 +9061,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                     return (
                       <tr key={w.id} style={{ background: ri % 2 ? t.cardAlt + "40" : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? t.cardAlt + "40" : "transparent"; }}>
                         <td style={{ padding: "8px 10px", borderBottom: bb, whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}/{fmtNum(w.sample_requests)}/{fmtNum(w.samples_shipped)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}/{fmtNum(w.sample_requests)}/{fmtNum(w.samples_posted)}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.impressions)}{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.clicks)}</td>

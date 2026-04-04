@@ -364,7 +364,7 @@ app.post("/api/import-tts-from-sheets", async (req, res) => {
         week_end: dates.end,
         superfiliate_invites: parseNum(row[1]),
         sample_requests: parseNum(row[3]),
-        samples_shipped: parseNum(row[4]),
+        samples_posted: parseNum(row[4]),
         videos_posted: parseNum(row[5]),
         sample_cost: parseNum(row[6]),
         impressions: parseNum(row[9]),
