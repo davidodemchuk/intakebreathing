@@ -45,7 +45,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.17.0";
+const APP_VERSION = "6.18.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -7025,7 +7025,15 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
   const [enrichStepMap, setEnrichStepMap] = useState(null);
   const [expandedBar, setExpandedBar] = useState(null);
   const [expandedRate, setExpandedRate] = useState(null);
+  const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false);
   const [igPullBusy, setIgPullBusy] = useState(false);
+
+  useEffect(() => {
+    if (!ownerDropdownOpen) return;
+    const handler = () => { setOwnerDropdownOpen(false); };
+    setTimeout(() => document.addEventListener("click", handler), 0);
+    return () => document.removeEventListener("click", handler);
+  }, [ownerDropdownOpen]);
 
   useEffect(() => {
     if (!enriching) return;
@@ -7482,29 +7490,40 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: ai.oneSentence || enrichMsg ? 10 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
-            <select
-              value={c.assignedTo || ""}
-              onChange={async (e) => {
-                const val = e.target.value;
-                if (val === "__add_new__") {
-                  const newName = prompt("Enter new team member name:");
-                  if (!newName || !newName.trim()) return;
-                  const { data, error } = await supabase.from("team_members").insert({ name: newName.trim(), role: "manager" }).select().single();
-                  if (error) { alert("Failed to add: " + error.message); return; }
-                  setTeamMembers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-                  updateCreator(c.id, { assignedTo: data.id, assignedAt: new Date().toISOString() });
-                  await dbAssignCreator(c.id, data.id, "manager");
-                  return;
-                }
-                const memberId = val || null;
-                updateCreator(c.id, { assignedTo: memberId, assignedAt: memberId ? new Date().toISOString() : null });
-                await dbAssignCreator(c.id, memberId, "manager");
-              }}
-              style={{ padding: "5px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "1px solid " + (c.assignedTo ? t.green + "50" : t.border), background: c.assignedTo ? t.green + "08" : t.inputBg, color: c.assignedTo ? t.text : t.textFaint, cursor: "pointer", outline: "none" }}>
-              <option value="">Unassigned</option>
-              {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              <option value="__add_new__">+ Add team member...</option>
-            </select>
+            <div style={{ position: "relative", display: "inline-block" }} onClick={(e) => e.stopPropagation()}>
+              <div onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", borderRadius: 8, border: "1px solid " + (c.assignedTo ? t.green + "50" : t.border), background: c.assignedTo ? t.green + "08" : t.inputBg, cursor: "pointer", minWidth: 140 }}>
+                {(() => {
+                  const member = teamMembers.find(m => m.id === c.assignedTo);
+                  if (!member) return <span style={{ fontSize: 12, color: t.textFaint }}>Unassigned</span>;
+                  return (
+                    <>
+                      {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: 10, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
+                      <span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{member.name}</span>
+                    </>
+                  );
+                })()}
+                <span style={{ fontSize: 10, color: t.textFaint, marginLeft: "auto" }}>▼</span>
+              </div>
+              {ownerDropdownOpen ? (
+                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden" }}>
+                  <div onClick={async () => { updateCreator(c.id, { assignedTo: null, assignedAt: null }); await dbAssignCreator(c.id, null, "manager"); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, color: t.textFaint, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                    Unassigned
+                  </div>
+                  {teamMembers.map(m => (
+                    <div key={m.id} onClick={async () => { updateCreator(c.id, { assignedTo: m.id, assignedAt: new Date().toISOString() }); await dbAssignCreator(c.id, m.id, "manager"); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: c.assignedTo === m.id ? t.green + "10" : "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.assignedTo === m.id ? t.green + "15" : t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.assignedTo === m.id ? t.green + "10" : "transparent"; }}>
+                      {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{m.name?.[0] || "?"}</div>}
+                      <div>
+                        <div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>
+                        {m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}
+                      </div>
+                    </div>
+                  ))}
+                  <div onClick={async () => { const newName = prompt("Enter new team member name:"); if (!newName || !newName.trim()) return; const { data, error } = await supabase.from("team_members").insert({ name: newName.trim(), role: "manager" }).select().single(); if (error) { alert("Failed to add: " + error.message); return; } setTeamMembers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name))); updateCreator(c.id, { assignedTo: data.id, assignedAt: new Date().toISOString() }); await dbAssignCreator(c.id, data.id, "manager"); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, color: t.green, cursor: "pointer", borderTop: "1px solid " + t.border, fontWeight: 600 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                    + Add team member
+                  </div>
+                </div>
+              ) : null}
+            </div>
             {c.assignedAt ? <div style={{ fontSize: 10, color: t.textFaint }}>since {new Date(c.assignedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div> : null}
           </div>
         </div>
@@ -12072,14 +12091,16 @@ export default function App() {
             }
             if (col.key === "owner") {
               const member = teamMembers.find(m => m.id === c.assignedTo);
-              const ownerName = member?.name || "";
-              const initials = ownerName ? ownerName.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "";
               return (
                 <div key={col.key} style={{ ...base, display: "flex", alignItems: "center", gap: 6 }}>
-                  {ownerName ? (
+                  {member ? (
                     <>
-                      <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green, flexShrink: 0 }}>{initials}</div>
-                      <span style={{ fontSize: 11, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ownerName.split(" ")[0]}</span>
+                      {member.avatar_url ? (
+                        <img src={member.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: 11, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />
+                      ) : (
+                        <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green }}>{member.name?.[0]}</div>
+                      )}
+                      <span style={{ fontSize: 11, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.name.split(" ")[0]}</span>
                     </>
                   ) : (
                     <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
