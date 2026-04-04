@@ -358,6 +358,7 @@ export async function dbSaveTtsWeek(row) {
     sample_cost: row.sample_cost || 0, creator_payments: row.creator_payments || 0,
     new_creators_added: row.new_creators_added || 0, active_creators: row.active_creators || 0, total_creators: row.total_creators || 0,
     superfiliate_invites: row.superfiliate_invites || 0, notes: row.notes || "",
+    organic_gmv: row.organic_gmv || 0, paid_gmv: row.paid_gmv || 0,
     entered_by: row.entered_by || null, gmv_source: row.gmv_source || "manual",
     impressions_source: row.impressions_source || "manual", ad_spend_source: row.ad_spend_source || "manual",
   };

@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.43.0";
+const APP_VERSION = "6.44.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8877,6 +8877,9 @@ function TtsNativeTab({ t, S, teamMembers }) {
       net_revenue: "$" + Math.round(gmv - totalCost - commission).toLocaleString(),
       net_per_video: vp > 0 ? "$" + Math.round((gmv - totalCost - commission) / vp).toLocaleString() : "\u2014",
       avg_order_value: orders > 0 ? "$" + (gmv / orders).toFixed(2) : "\u2014",
+      organic_gmv_pct: gmv > 0 && Number(d.organic_gmv) > 0 ? Math.round((Number(d.organic_gmv) / gmv) * 100) + "%" : "\u2014",
+      paid_gmv_pct: gmv > 0 && Number(d.paid_gmv) > 0 ? Math.round((Number(d.paid_gmv) / gmv) * 100) + "%" : "\u2014",
+      cost_per_order: orders > 0 ? "$" + Math.round((adSpend + sampleCost + creatorPay) / orders).toLocaleString() : "\u2014",
     };
   };
 
@@ -8905,7 +8908,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
     const monday = getMonday(new Date());
     const existing = weeks.find(w => w.week_start === monday);
     if (existing) { alert("A row for this week already exists. Click any cell to edit it."); return; }
-    const row = { week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "", entered_by: currentEnterer || null };
+    const row = { week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, orders: 0, tts_gmv: 0, organic_gmv: 0, paid_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "", entered_by: currentEnterer || null };
     const result = await dbSaveTtsWeek(row);
     if (!result.error) { const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]); setWeeks(refreshed); setMonthly(refreshedMonthly); }
     else { alert("Failed to create week: " + (result.error?.message || "Unknown")); }
@@ -9178,32 +9181,44 @@ function TtsNativeTab({ t, S, teamMembers }) {
           </div>
           <div style={{ display: "flex", gap: 24 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-                {inputField("Week start (Monday)", "week_start", "date")}
-                {inputField("Week end (Sunday)", "week_end", "date")}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>Required weekly data</div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 10 }}>Fill these every week — missing data skews all calculations</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                  {inputField("Week start (Monday)", "week_start", "date")}{inputField("Week end (Sunday)", "week_end", "date")}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 8 }}>
+                  {inputField("SF invites sent", "superfiliate_invites")}{inputField("Sample requests", "sample_requests")}{inputField("Samples shipped", "samples_posted")}{inputField("Videos posted", "videos_posted")}{inputField("Orders", "orders")}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginTop: 8 }}>
+                  {inputField("Total impressions", "impressions")}{inputField("Organic impressions", "organic_impressions")}{inputField("Total GMV ($)", "tts_gmv")}{inputField("Ad spend ($)", "ad_spend")}
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Outreach & samples</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                {inputField("SF invites", "superfiliate_invites")}{inputField("Sample requests", "sample_requests")}{inputField("Samples shipped", "samples_posted")}{inputField("Videos posted", "videos_posted")}
+              <div style={{ marginBottom: 16, padding: 12, background: t.cardAlt, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>GMV breakdown</div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 8 }}>How much GMV came from organic vs paid? Should add up to Total GMV.</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {inputField("Organic GMV ($)", "organic_gmv")}{inputField("Paid GMV ($)", "paid_gmv")}
+                  <div style={{ padding: "20px 10px 0", fontSize: 12, color: Number(formData.organic_gmv || 0) + Number(formData.paid_gmv || 0) !== Number(formData.tts_gmv || 0) && Number(formData.tts_gmv || 0) > 0 ? (t.orange || "#d4890a") : t.green }}>{Number(formData.tts_gmv || 0) > 0 ? (Number(formData.organic_gmv || 0) + Number(formData.paid_gmv || 0) === Number(formData.tts_gmv || 0) ? "Matches total GMV" : "Gap: $" + (Number(formData.tts_gmv || 0) - Number(formData.organic_gmv || 0) - Number(formData.paid_gmv || 0)).toLocaleString()) : ""}</div>
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Video review</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {inputField("Approved", "videos_approved")}{inputField("Rejected", "videos_rejected")}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.orange || "#d4890a", marginBottom: 6 }}>Costs (affects ROAS + net revenue)</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {inputField("Sample cost ($)", "sample_cost")}{inputField("Creator payments ($)", "creator_payments")}{inputField("Commission ($)", "tts_commission")}
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Performance</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                {inputField("Impressions", "impressions")}{inputField("Organic imp.", "organic_impressions")}{inputField("Orders", "orders")}
+              <div style={{ marginBottom: 16, padding: 12, background: t.cardAlt, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Weekly content notes</div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 8 }}>What stood out this week? This context explains spikes and drops.</div>
+                <textarea value={formData.notes || ""} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} placeholder={"Top performing video this week:\nContent types posted (unboxing / tutorial / review):\nNew creators who stood out:\nAnything unusual (viral video, algorithm change, etc.):"} style={{ width: "100%", minHeight: 80, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", outline: "none", fontFamily: "inherit", lineHeight: 1.6 }} />
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Revenue & spend</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {inputField("TTS GMV ($)", "tts_gmv")}{inputField("Ad spend ($)", "ad_spend")}{inputField("Commission ($)", "tts_commission")}
-                {inputField("Sample cost ($)", "sample_cost")}{inputField("Creator payments ($)", "creator_payments")}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6 }}>Creators (optional)</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {inputField("New added", "new_creators_added")}{inputField("Active this week", "active_creators")}{inputField("Total in program", "total_creators")}
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Creators</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {inputField("New added", "new_creators_added")}{inputField("Active", "active_creators")}{inputField("Total", "total_creators")}
-              </div>
-              {inputField("Notes", "notes", "text")}
             </div>
             <div style={{ width: 220, flexShrink: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 10 }}>Live calculations</div>
@@ -9245,10 +9260,10 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data yet. Click "+ New week" to start entering TTS data.</div>
           ) : (
             <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1600 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
-                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => {
+                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Org GMV", "Paid GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => {
                       const hasOrders = weeks.some(w => Number(w.orders) > 0);
                       const isOrders = h === "Orders";
                       return <th key={i} style={{ padding: "10px 12px", textAlign: i < 2 ? "left" : "right", fontWeight: 700, color: isOrders && !hasOrders ? (t.orange || "#d4890a") : t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>{h}{isOrders && !hasOrders ? " (!)" : ""}</th>;
@@ -9296,7 +9311,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                           <td style={{ ...mts, textAlign: "left" }}>{row.label} total</td>
                           <td style={mts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={mts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={mts}>{fmtNum(sumW(ws,"samples_posted"))}</td><td style={mts}>{fmtNum(tv)}</td>
                           <td style={mts}>{fmtNum(ti)}</td><td style={mts}>{fmtNum(to)}</td>
-                          <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: t.green }}>{fmtDol(tg)}</td><td style={mts}>{fmtDol(ta)}</td><td style={mts}>{"\u2014"}</td>
+                          <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: t.green }}>{fmtDol(tg)}</td><td style={mts}>{fmtDol(sumW(ws,"organic_gmv"))}</td><td style={mts}>{fmtDol(sumW(ws,"paid_gmv"))}</td><td style={mts}>{fmtDol(ta)}</td><td style={mts}>{"\u2014"}</td>
                           <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? t.green : t.text }}>{roas}</td>
                           <td style={mts}>{ti > 0 ? "$"+(ta/(ti/1000)).toFixed(2) : "\u2014"}</td><td style={mts}>{tv > 0 ? "$"+Math.round(nr/tv).toLocaleString() : "\u2014"}</td>
                           <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: nr >= 0 ? t.green : (t.red||"#ef4444") }}>{"$"+Math.round(nr).toLocaleString()}</td><td style={{ borderBottom: mtb }}></td><td style={{ borderBottom: mtb }}></td>
@@ -9314,7 +9329,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                           <td style={{ ...qts, textAlign: "left", padding: "10px 14px" }}>{row.label} total</td>
                           <td style={qts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={qts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={qts}>{fmtNum(tsp)}</td><td style={qts}>{fmtNum(tv)}</td>
                           <td style={qts}>{fmtNum(ti)}</td><td style={qts}>{fmtNum(to)}</td>
-                          <td style={{ ...qts, fontSize: 14, color: t.isLight ? "#0a7c3e" : "#4ade80" }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(ta)}</td>
+                          <td style={{ ...qts, fontSize: 14, color: t.isLight ? "#0a7c3e" : "#4ade80" }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(sumW(ws,"organic_gmv"))}</td><td style={qts}>{fmtDol(sumW(ws,"paid_gmv"))}</td><td style={qts}>{fmtDol(ta)}</td>
                           <td style={qts}>{sv}</td>
                           <td style={{ ...qts, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? (t.isLight ? "#0a7c3e" : "#4ade80") : qtc }}>{roas}</td>
                           <td style={qts}>{cpm}</td><td style={qts}>{npv}</td>
@@ -9336,6 +9351,8 @@ function TtsNativeTab({ t, S, teamMembers }) {
                             <EditableCell rowId={w.id} column="impressions" value={w.impressions} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</EditableCell>
                             <EditableCell rowId={w.id} column="orders" value={w.orders} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</EditableCell>
                             <EditableCell rowId={w.id} column="tts_gmv" value={w.tts_gmv} format={fmtDol} step="0.01" style={{ ...cs, fontWeight: 700, fontSize: 13, color: t.green }}>{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</EditableCell>
+                            <EditableCell rowId={w.id} column="organic_gmv" value={w.organic_gmv} format={fmtDol} step="0.01" style={{ ...cs, fontSize: 11, color: t.textMuted }} />
+                            <EditableCell rowId={w.id} column="paid_gmv" value={w.paid_gmv} format={fmtDol} step="0.01" style={{ ...cs, fontSize: 11, color: t.textMuted }} />
                             <EditableCell rowId={w.id} column="ad_spend" value={w.ad_spend} format={fmtDol} step="0.01" style={{ ...cs, color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</EditableCell>
                             <td style={{ ...cs, color: t.textMuted }}>{c.sv_ratio}</td>
                             <td style={{ ...cs, fontWeight: 700, fontSize: 13, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}{pw ? <WowArrow current={Number(w.ad_spend) > 0 ? Number(w.tts_gmv) / Number(w.ad_spend) : 0} previous={Number(pw.ad_spend) > 0 ? Number(pw.tts_gmv) / Number(pw.ad_spend) : 0} /> : null}</td>
@@ -9371,7 +9388,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No monthly data yet. Add weekly data first.</div>
           ) : (
             <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1600 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
                     {["Month", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad Spend", "S/V", "ROAS", "CPM", "Net/video", "Net Revenue", "Weeks"].map((h, i) => (
