@@ -6884,7 +6884,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     } catch (e) { alert("AI draft failed: " + e.message); }
     setMsgDrafting(false);
   };
-  useEffect(() => { if (showMessages) msgEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgList, showMessages]);
+  useEffect(() => { if (showMessages && msgEndRef.current) { const container = msgEndRef.current.closest("[data-msg-scroll]"); if (container) container.scrollTop = container.scrollHeight; } }, [msgList]);
 
   const bestHighlight = useMemo(() => pickBestContentHighlight(c), [c]);
 
@@ -7030,12 +7030,12 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </button>
 
       {showMessages ? (
-        <div style={{ background: t.card, border: "1px solid " + t.blue + "40", borderTop: "none", borderRadius: "0 0 12px 12px", marginBottom: 16, boxShadow: t.shadow, overflow: "hidden" }}>
+        <div style={{ background: t.card, border: "1px solid " + t.blue + "40", borderTop: "none", borderRadius: "0 0 12px 12px", marginBottom: 16, boxShadow: t.shadow, overflow: "hidden", maxHeight: 500 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid " + t.border, background: t.blue + "05" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>Conversation with @{c.tiktokHandle || c.instagramHandle || c.handle}</div>
             <button onClick={() => setShowMessages(false)} style={{ background: "none", border: "none", fontSize: 16, color: t.textFaint, cursor: "pointer" }}>x</button>
           </div>
-          <div style={{ maxHeight: 300, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div data-msg-scroll="true" style={{ maxHeight: 300, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             {msgList.length === 0 ? <div style={{ textAlign: "center", color: t.textFaint, padding: 20, fontSize: 12 }}>No messages yet. Start a conversation below.</div> : msgList.map(msg => {
               const isOut = msg.direction === "outbound"; const isNote = msg.direction === "internal_note";
               return (
