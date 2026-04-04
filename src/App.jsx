@@ -60,7 +60,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.45.0";
+const APP_VERSION = "6.46.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8838,6 +8838,15 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
   const [weekCreators, setWeekCreators] = useState({});
   const [addingCreator, setAddingCreator] = useState(null);
   const [analyzingWeek, setAnalyzingWeek] = useState(null);
+  const defaultColWidths = { week: 140, sf_invites: 90, requests: 85, shipped: 80, videos: 75, impressions: 110, orders: 75, gmv: 120, org_gmv: 100, paid_gmv: 100, ad_spend: 100, sv: 60, roas: 75, cpm: 70, net_video: 90, net_rev: 110, entered_by: 80, actions: 100 };
+  const [colWidths, setColWidths] = useState(() => { try { const saved = localStorage.getItem("tts_col_widths"); return saved ? { ...defaultColWidths, ...JSON.parse(saved) } : { ...defaultColWidths }; } catch { return { ...defaultColWidths }; } });
+  const onResizeStart = (e, colKey) => {
+    e.preventDefault(); const startX = e.clientX; const startWidth = colWidths[colKey] || 100;
+    const onMove = (me) => { setColWidths(prev => ({ ...prev, [colKey]: Math.max(40, startWidth + me.clientX - startX) })); };
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.cursor = ""; document.body.style.userSelect = ""; setColWidths(prev => { try { localStorage.setItem("tts_col_widths", JSON.stringify(prev)); } catch {} return prev; }); };
+    document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; document.addEventListener("mousemove", onMove); document.addEventListener("mouseup", onUp);
+  };
+  const ResizableTh = ({ colKey, children, style: thStyle }) => <th style={{ ...thStyle, width: colWidths[colKey] || 100, minWidth: 40, position: "relative", overflow: "hidden" }}>{children}<div onMouseDown={(e) => onResizeStart(e, colKey)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", background: "transparent", zIndex: 5 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.green + "40"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }} /></th>;
 
   useEffect(() => {
     (async () => {
@@ -9147,6 +9156,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
         <div style={{ display: "flex", gap: 8 }}>
           {weeks.length > 0 ? <button onClick={() => { copyLastWeek(); setShowForm(true); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Copy last week</button> : null}
           {weeks.length > 0 ? <button onClick={() => { const hdrs = ["Week start","Week end","SF Invites","Sample requests","Samples shipped","Videos posted","Impressions","Organic impressions","Orders","GMV","Ad spend","Sample cost","Commission","Creator payments","S/V Ratio","ROAS","CPM","Net revenue","Net/video","Notes"]; const csvRows = [hdrs.join(",")]; [...weeks].sort((a,b) => a.week_start.localeCompare(b.week_start)).forEach(w => { const c = calc(w); csvRows.push([w.week_start,w.week_end,w.superfiliate_invites||0,w.sample_requests||0,w.samples_posted||0,w.videos_posted||0,w.impressions||0,w.organic_impressions||0,w.orders||0,w.tts_gmv||0,w.ad_spend||0,w.sample_cost||0,w.tts_commission||0,w.creator_payments||0,c.sv_ratio,c.roas,c.cpm,c.net_revenue.replace(/[$,]/g,""),c.net_per_video.replace(/[$,]/g,""),'"'+(w.notes||"").replace(/"/g,'""')+'"'].join(",")); }); const blob = new Blob([csvRows.join("\n")],{type:"text/csv"}); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "tts_weekly_"+new Date().toISOString().split("T")[0]+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Download CSV</button> : null}
+          <button onClick={() => { setColWidths({ ...defaultColWidths }); try { localStorage.setItem("tts_col_widths", JSON.stringify(defaultColWidths)); } catch {} }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textFaint, cursor: "pointer" }}>Reset columns</button>
           <button onClick={newWeekQuick} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New week</button>
         </div>
       </div>
@@ -9299,14 +9309,29 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
             <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data yet. Click "+ New week" to start entering TTS data.</div>
           ) : (
             <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1600 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed", minWidth: Object.values(colWidths).reduce((s, w) => s + w, 0) }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
-                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Org GMV", "Paid GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => {
-                      const hasOrders = weeks.some(w => Number(w.orders) > 0);
-                      const isOrders = h === "Orders";
-                      return <th key={i} style={{ padding: "10px 12px", textAlign: i < 2 ? "left" : "right", fontWeight: 700, color: isOrders && !hasOrders ? (t.orange || "#d4890a") : t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>{h}{isOrders && !hasOrders ? " (!)" : ""}</th>;
-                    })}
+                    {(() => { const hs = { padding: "10px 12px", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }; const ho = weeks.some(w => Number(w.orders) > 0); const api = <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.blue + "15", color: t.blue, fontWeight: 600, verticalAlign: "middle", textTransform: "none", marginLeft: 3 }}>API</span>; return <>
+                      <ResizableTh colKey="week" style={{ ...hs, textAlign: "left" }}>Week</ResizableTh>
+                      <ResizableTh colKey="sf_invites" style={{ ...hs, textAlign: "right" }}>SF Invites</ResizableTh>
+                      <ResizableTh colKey="requests" style={{ ...hs, textAlign: "right" }}>Requests</ResizableTh>
+                      <ResizableTh colKey="shipped" style={{ ...hs, textAlign: "right" }}>Shipped</ResizableTh>
+                      <ResizableTh colKey="videos" style={{ ...hs, textAlign: "right" }}>Videos</ResizableTh>
+                      <ResizableTh colKey="impressions" style={{ ...hs, textAlign: "right" }}>Impressions{api}</ResizableTh>
+                      <ResizableTh colKey="orders" style={{ ...hs, textAlign: "right", color: ho ? t.text : (t.orange || "#d4890a") }}>Orders{!ho ? " (!)" : ""}{api}</ResizableTh>
+                      <ResizableTh colKey="gmv" style={{ ...hs, textAlign: "right" }}>GMV</ResizableTh>
+                      <ResizableTh colKey="org_gmv" style={{ ...hs, textAlign: "right" }}>Org GMV{api}</ResizableTh>
+                      <ResizableTh colKey="paid_gmv" style={{ ...hs, textAlign: "right" }}>Paid GMV{api}</ResizableTh>
+                      <ResizableTh colKey="ad_spend" style={{ ...hs, textAlign: "right" }}>Ad Spend{api}</ResizableTh>
+                      <ResizableTh colKey="sv" style={{ ...hs, textAlign: "right" }}>S/V</ResizableTh>
+                      <ResizableTh colKey="roas" style={{ ...hs, textAlign: "right" }}>ROAS</ResizableTh>
+                      <ResizableTh colKey="cpm" style={{ ...hs, textAlign: "right" }}>CPM</ResizableTh>
+                      <ResizableTh colKey="net_video" style={{ ...hs, textAlign: "right" }}>Net/video</ResizableTh>
+                      <ResizableTh colKey="net_rev" style={{ ...hs, textAlign: "right" }}>Net Rev</ResizableTh>
+                      <ResizableTh colKey="entered_by" style={{ ...hs, textAlign: "left" }}>By</ResizableTh>
+                      <th style={{ ...hs, width: colWidths.actions || 100 }}></th>
+                    </>; })()}
                   </tr>
                 </thead>
                 <tbody>
