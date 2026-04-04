@@ -221,6 +221,41 @@ app.get("/api/cache-thumbnail/:cacheId", async (req, res) => {
   }
 });
 
+// ── Helpers for thumbnail pipeline ──
+async function downloadImage(url, referer) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith("https") ? https : http;
+    const imgReq = client.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Referer": referer || "", "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8", "sec-fetch-dest": "image", "sec-fetch-mode": "no-cors" },
+      timeout: 10000,
+    }, (resp) => {
+      if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) { downloadImage(resp.headers.location, referer).then(resolve).catch(reject); return; }
+      if (resp.statusCode !== 200) return reject(new Error("HTTP " + resp.statusCode));
+      const chunks = []; resp.on("data", c => chunks.push(c)); resp.on("end", () => resolve(Buffer.concat(chunks))); resp.on("error", reject);
+    });
+    imgReq.on("error", reject);
+    imgReq.on("timeout", () => { imgReq.destroy(); reject(new Error("timeout")); });
+  });
+}
+
+async function extractVideoFrame(videoUrl) {
+  return new Promise((resolve, reject) => {
+    const tmpOut = path.join(os.tmpdir(), "thumb_" + Date.now() + ".jpg");
+    execFile(FFMPEG, ["-ss", "1", "-i", videoUrl, "-vframes", "1", "-vf", "scale=360:-1", "-q:v", "5", "-y", tmpOut],
+      { timeout: 15000, maxBuffer: 10485760 }, (err) => {
+        if (err) { try { fs.unlinkSync(tmpOut); } catch {} return reject(new Error("FFmpeg: " + (err.message || "").substring(0, 100))); }
+        try { const buf = fs.readFileSync(tmpOut); fs.unlinkSync(tmpOut); resolve(buf); } catch (e) { reject(e); }
+      });
+  });
+}
+
+async function uploadToSupabase(filePath, buffer, contentType) {
+  const { error } = await supabaseServer.storage.from("thumbnails").upload(filePath, buffer, { contentType, upsert: true });
+  if (error) { console.error("[thumbs] Upload failed:", filePath, error.message); return null; }
+  const { data } = supabaseServer.storage.from("thumbnails").getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
 // ── Store thumbnails permanently in Supabase Storage ──
 app.post("/api/store-thumbnails", async (req, res) => {
   const { creatorHandle, videos } = req.body;
@@ -236,67 +271,37 @@ app.post("/api/store-thumbnails", async (req, res) => {
   for (let i = 0; i < videos.length; i++) {
     const v = videos[i];
     const coverUrl = v.cover || v.coverUrl || "";
-    if (!coverUrl || coverUrl.startsWith(SUPABASE_URL)) {
-      results.push({ index: i, url: coverUrl || null });
-      continue;
+    const videoUrl = v.playUrl || v.videoUrl || "";
+
+    if (coverUrl.includes("supabase.co")) { results.push({ index: i, url: coverUrl }); continue; }
+
+    const filePath = handle + "/" + (v.id || "v" + i) + ".jpg";
+
+    // Strategy 1: Direct cover download (works for Instagram, non-TikTok)
+    if (coverUrl && !coverUrl.includes("tiktokcdn.com") && !coverUrl.includes("tiktok")) {
+      try {
+        const imgBuf = await downloadImage(coverUrl, coverUrl.includes("instagram") ? "https://www.instagram.com/" : "");
+        if (imgBuf && imgBuf.length > 500) { const url = await uploadToSupabase(filePath, imgBuf, "image/jpeg"); if (url) { results.push({ index: i, url }); stored++; continue; } }
+      } catch (e) { console.log("[thumbs] Cover download failed for " + v.id + ":", e.message); }
     }
 
-    try {
-      const imgRes = await new Promise((resolve, reject) => {
-        const client = coverUrl.startsWith("https") ? https : http;
-        const imgReq = client.get(coverUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": coverUrl.includes("tiktok") ? "https://www.tiktok.com/" : "https://www.instagram.com/",
-            "Accept": "image/*",
-          },
-          timeout: 8000,
-        }, (resp) => {
-          if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-            client.get(resp.headers.location, { headers: { "User-Agent": "Mozilla/5.0", Accept: "image/*" }, timeout: 8000 }, (r2) => {
-              const chunks = [];
-              r2.on("data", c => chunks.push(c));
-              r2.on("end", () => resolve(Buffer.concat(chunks)));
-              r2.on("error", reject);
-            }).on("error", reject);
-            return;
-          }
-          if (resp.statusCode !== 200) return reject(new Error("HTTP " + resp.statusCode));
-          const chunks = [];
-          resp.on("data", c => chunks.push(c));
-          resp.on("end", () => resolve(Buffer.concat(chunks)));
-          resp.on("error", reject);
-        });
-        imgReq.on("error", reject);
-        imgReq.on("timeout", () => { imgReq.destroy(); reject(new Error("timeout")); });
-      });
-
-      if (imgRes.length < 500) {
-        results.push({ index: i, url: null });
-        continue;
-      }
-
-      const ext = coverUrl.includes(".webp") ? "webp" : coverUrl.includes(".png") ? "png" : "jpg";
-      const filePath = handle + "/" + (v.id || "v" + i) + "." + ext;
-      const contentType = ext === "webp" ? "image/webp" : ext === "png" ? "image/png" : "image/jpeg";
-
-      const { error: upErr } = await supabaseServer.storage
-        .from("thumbnails")
-        .upload(filePath, imgRes, { contentType, upsert: true });
-
-      if (upErr) {
-        console.error("[thumbs] Upload failed:", filePath, upErr.message);
-        results.push({ index: i, url: null });
-        continue;
-      }
-
-      const { data: pubUrl } = supabaseServer.storage.from("thumbnails").getPublicUrl(filePath);
-      results.push({ index: i, url: pubUrl.publicUrl });
-      stored++;
-    } catch (e) {
-      console.error("[thumbs] Download/upload error for video " + i + ":", e.message);
-      results.push({ index: i, url: null, error: e.message });
+    // Strategy 2: Extract frame from video via FFmpeg (works for TikTok)
+    if (videoUrl) {
+      try {
+        const thumbBuf = await extractVideoFrame(videoUrl);
+        if (thumbBuf && thumbBuf.length > 500) { const url = await uploadToSupabase(filePath, thumbBuf, "image/jpeg"); if (url) { results.push({ index: i, url }); stored++; continue; } }
+      } catch (e) { console.log("[thumbs] Video frame extraction failed for " + v.id + ":", e.message); }
     }
+
+    // Strategy 3: Try cover with TikTok referer (last resort)
+    if (coverUrl) {
+      try {
+        const imgBuf = await downloadImage(coverUrl, "https://www.tiktok.com/");
+        if (imgBuf && imgBuf.length > 500) { const url = await uploadToSupabase(filePath, imgBuf, "image/jpeg"); if (url) { results.push({ index: i, url }); stored++; continue; } }
+      } catch (e) { console.log("[thumbs] Fallback cover failed for " + v.id + ":", e.message); }
+    }
+
+    results.push({ index: i, url: null });
   }
 
   console.log("[thumbs] Stored " + stored + "/" + videos.length + " thumbnails for @" + handle);
@@ -305,37 +310,23 @@ app.post("/api/store-thumbnails", async (req, res) => {
 
 // ── Thumbnail pipeline diagnostic ──
 app.get("/api/test-thumbnail-pipeline", async (req, res) => {
-  const results = { steps: [], error: null };
-  const testUrl = "https://p16-sign-va.tiktokcdn.com/obj/tos-maliva-p-0068/oMBAEB5AQknIAGefbRfBLBMwI7AgB1xEbh0gNi";
-  results.steps.push({ step: "start", testUrl });
+  const testVideoUrl = req.query.url || "";
+  const results = { steps: [] };
   try {
-    const imgBuffer = await new Promise((resolve, reject) => {
-      const req = https.get(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://www.tiktok.com/", "Accept": "image/*" }, timeout: 10000 }, (resp) => {
-        results.steps.push({ step: "http_response", status: resp.statusCode, contentType: resp.headers["content-type"], contentLength: resp.headers["content-length"] });
-        if (resp.statusCode !== 200) return reject(new Error("HTTP " + resp.statusCode));
-        const chunks = []; resp.on("data", c => chunks.push(c)); resp.on("end", () => resolve(Buffer.concat(chunks))); resp.on("error", reject);
-      }); req.on("error", reject); req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
-    });
-    results.steps.push({ step: "download", size: imgBuffer.length, ok: imgBuffer.length > 500 });
-    if (imgBuffer.length < 500) { results.steps.push({ step: "download_too_small" }); return res.json(results); }
-
-    const filePath = "_test/test_" + Date.now() + ".jpg";
-    const { error: upErr } = await supabaseServer.storage.from("thumbnails").upload(filePath, imgBuffer, { contentType: "image/jpeg", upsert: true });
-    if (upErr) { results.steps.push({ step: "upload_FAILED", error: upErr.message, details: JSON.stringify(upErr) }); results.error = "Upload failed: " + upErr.message; return res.json(results); }
-    results.steps.push({ step: "upload_ok", filePath });
-
-    const { data: pubUrl } = supabaseServer.storage.from("thumbnails").getPublicUrl(filePath);
-    results.steps.push({ step: "public_url", url: pubUrl.publicUrl });
-
+    const { data, error } = await supabaseServer.storage.from("thumbnails").list("_test", { limit: 1 });
+    results.steps.push({ step: "supabase_storage", ok: !error, error: error?.message || null });
+  } catch (e) { results.steps.push({ step: "supabase_storage", ok: false, error: e.message }); }
+  if (testVideoUrl) {
     try {
-      const verifyRes = await new Promise((resolve, reject) => { https.get(pubUrl.publicUrl, { timeout: 5000 }, (resp) => { resolve({ status: resp.statusCode, contentType: resp.headers["content-type"] }); }).on("error", reject); });
-      results.steps.push({ step: "verify_url", ...verifyRes, accessible: verifyRes.status === 200 });
-    } catch (ve) { results.steps.push({ step: "verify_url_FAILED", error: ve.message }); }
-
-    await supabaseServer.storage.from("thumbnails").remove([filePath]);
-    results.steps.push({ step: "cleanup_ok" });
-    results.success = true;
-  } catch (e) { results.steps.push({ step: "FAILED", error: e.message }); results.error = e.message; }
+      const buf = await extractVideoFrame(testVideoUrl);
+      results.steps.push({ step: "ffmpeg_extract", ok: buf.length > 500, size: buf.length });
+      const filePath = "_test/test_" + Date.now() + ".jpg";
+      const url = await uploadToSupabase(filePath, buf, "image/jpeg");
+      results.steps.push({ step: "upload", ok: !!url, url });
+      if (url) await supabaseServer.storage.from("thumbnails").remove([filePath]);
+    } catch (e) { results.steps.push({ step: "ffmpeg_extract", ok: false, error: e.message }); }
+  } else { results.steps.push({ step: "info", message: "Pass ?url=VIDEO_URL to test frame extraction" }); }
+  results.success = results.steps.every(s => s.ok !== false);
   res.json(results);
 });
 
