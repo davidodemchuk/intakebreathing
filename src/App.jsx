@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.38.0";
+const APP_VERSION = "6.39.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8985,52 +8985,49 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
   return (
     <div>
-      {/* Dashboard stats with targets */}
+      {/* Dashboard stats — rolling 30 days */}
       {(() => {
-        const thisMonthKey = new Date().toISOString().substring(0, 7);
-        const thisMonth = monthly.find(m => m.month === thisMonthKey);
-        const lastMonthDate = new Date(); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-        const lastMonth = monthly.find(m => m.month === lastMonthDate.toISOString().substring(0, 7));
-        const target = targets.find(tg => tg.month === thisMonthKey);
+        const today = new Date(); const thirtyAgo = new Date(today); thirtyAgo.setDate(thirtyAgo.getDate() - 30); const sixtyAgo = new Date(today); sixtyAgo.setDate(sixtyAgo.getDate() - 60);
+        const todayStr = today.toISOString().split("T")[0]; const thirtyStr = thirtyAgo.toISOString().split("T")[0]; const sixtyStr = sixtyAgo.toISOString().split("T")[0];
+        const last30 = weeks.filter(w => w.week_start >= thirtyStr && w.week_start <= todayStr);
+        const prev30 = weeks.filter(w => w.week_start >= sixtyStr && w.week_start < thirtyStr);
+        const s30 = (k) => last30.reduce((s, w) => s + (Number(w[k]) || 0), 0);
+        const sP = (k) => prev30.reduce((s, w) => s + (Number(w[k]) || 0), 0);
+        const gmv30 = s30("tts_gmv"); const adSpend30 = s30("ad_spend"); const videos30 = s30("videos_posted"); const orders30 = s30("orders");
+        const netRev30 = gmv30 - adSpend30 - s30("sample_cost") - s30("creator_payments") - s30("tts_commission");
+        const roas30 = adSpend30 > 0 ? (gmv30 / adSpend30).toFixed(2) : null;
+        const gmvPrev = sP("tts_gmv"); const videosPrev = sP("videos_posted"); const adSpendPrev = sP("ad_spend");
+        const netRevPrev = gmvPrev - adSpendPrev - sP("sample_cost") - sP("creator_payments") - sP("tts_commission");
+        const roasPrev = adSpendPrev > 0 ? gmvPrev / adSpendPrev : null;
+        const target = targets.find(tg => tg.month === today.toISOString().substring(0, 7));
 
-        const PBar = ({ actual, goal, color }) => {
-          if (!goal || goal <= 0) return null;
-          const pct = Math.min(100, Math.round((actual / goal) * 100));
-          return <div style={{ marginTop: 6 }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: t.textFaint, marginBottom: 2 }}><span>{pct}% of target</span><span>{typeof goal === "number" && goal > 100 ? goal.toLocaleString() : goal}</span></div><div style={{ height: 4, borderRadius: 2, background: t.border, overflow: "hidden" }}><div style={{ height: "100%", width: pct + "%", borderRadius: 2, background: pct >= 100 ? t.green : color, transition: "width 0.5s" }} /></div></div>;
-        };
-        const Mom = ({ current, previous }) => {
-          const c = Number(current) || 0; const p = Number(previous) || 0;
-          if (p === 0) return null;
-          const pct = Math.round(((c - p) / Math.abs(p)) * 100);
-          if (pct === 0) return null;
-          return <div style={{ fontSize: 10, marginTop: 2, color: pct > 0 ? t.green : (t.red || "#ef4444") }}>{pct > 0 ? "\u25B2" : "\u25BC"} {Math.abs(pct)}% vs last month</div>;
-        };
+        const Pct = ({ current, previous }) => { if (!previous || previous === 0) return null; const pct = Math.round(((current - previous) / Math.abs(previous)) * 100); if (pct === 0) return null; return <div style={{ fontSize: 10, marginTop: 2, color: pct > 0 ? t.green : (t.red || "#ef4444") }}>{pct > 0 ? "\u25B2" : "\u25BC"} {Math.abs(pct)}% vs prior 30d</div>; };
+        const PBar = ({ actual, goal, color }) => { if (!goal || goal <= 0) return null; const pct = Math.min(100, Math.round((actual / goal) * 100)); return <div style={{ marginTop: 6 }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: t.textFaint, marginBottom: 2 }}><span>{pct}% of target</span><span>{"$" + Number(goal).toLocaleString()}</span></div><div style={{ height: 4, borderRadius: 2, background: t.border, overflow: "hidden" }}><div style={{ height: "100%", width: pct + "%", borderRadius: 2, background: pct >= 100 ? t.green : color, transition: "width 0.5s" }} /></div></div>; };
 
         return (
           <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
             <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
-              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>This month GMV</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.green, marginTop: 2 }}>{thisMonth ? "$" + Number(thisMonth.tts_gmv).toLocaleString() : "$0"}</div>
-              <Mom current={thisMonth?.tts_gmv} previous={lastMonth?.tts_gmv} />
-              <PBar actual={Number(thisMonth?.tts_gmv) || 0} goal={target?.target_gmv} color={t.green} />
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Last 30 days GMV</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.green, marginTop: 2 }}>{"$" + Math.round(gmv30).toLocaleString()}</div>
+              <Pct current={gmv30} previous={gmvPrev} />
+              <PBar actual={gmv30} goal={target?.target_gmv} color={t.green} />
             </div>
             <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
-              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>This month ROAS</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.blue, marginTop: 2 }}>{thisMonth?.roas ? thisMonth.roas + "x" : "\u2014"}</div>
-              <Mom current={thisMonth?.roas} previous={lastMonth?.roas} />
-              <PBar actual={Number(thisMonth?.roas) || 0} goal={target?.target_roas} color={t.blue} />
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Last 30 days ROAS</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.blue, marginTop: 2 }}>{roas30 ? roas30 + "x" : "\u2014"}</div>
+              <Pct current={Number(roas30) || 0} previous={roasPrev} />
+              <PBar actual={Number(roas30) || 0} goal={target?.target_roas} color={t.blue} />
             </div>
             <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
-              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Videos this month</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginTop: 2 }}>{thisMonth ? Number(thisMonth.videos_posted).toLocaleString() : "0"}</div>
-              <Mom current={thisMonth?.videos_posted} previous={lastMonth?.videos_posted} />
-              <PBar actual={Number(thisMonth?.videos_posted) || 0} goal={target?.target_videos} color={t.orange} />
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Last 30 days videos</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginTop: 2 }}>{videos30.toLocaleString()}</div>
+              <Pct current={videos30} previous={videosPrev} />
+              <PBar actual={videos30} goal={target?.target_videos} color={t.orange || "#d4890a"} />
             </div>
             <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
-              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Orders this month</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginTop: 2 }}>{thisMonth ? Number(thisMonth.orders).toLocaleString() : "0"}</div>
-              <Mom current={thisMonth?.orders} previous={lastMonth?.orders} />
-              <PBar actual={Number(thisMonth?.orders) || 0} goal={target?.target_orders} color={t.purple || "#8b6cc4"} />
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Last 30 days net revenue</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: netRev30 >= 0 ? t.green : (t.red || "#ef4444"), marginTop: 2 }}>{"$" + Math.round(netRev30).toLocaleString()}</div>
+              <Pct current={netRev30} previous={netRevPrev} />
             </div>
           </div>
         );
