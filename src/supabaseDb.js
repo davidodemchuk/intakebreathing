@@ -371,6 +371,18 @@ export async function dbLoadTtsMonthly() {
   return data || [];
 }
 
+export async function dbLoadTtsTargets() {
+  const { data, error } = await supabase.from("tts_monthly_targets").select("*").order("month", { ascending: false });
+  if (error) { console.error("[db] Load TTS targets error:", error); return []; }
+  return data || [];
+}
+
+export async function dbSaveTtsTarget(row) {
+  const { data, error } = await supabase.from("tts_monthly_targets").upsert(row, { onConflict: "month" }).select().single();
+  if (error) { console.error("[db] Save TTS target error:", error); return { error }; }
+  return { data, error: null };
+}
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")

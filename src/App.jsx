@@ -22,6 +22,8 @@ import {
   dbSaveTtsWeek,
   dbDeleteTtsWeek,
   dbLoadTtsMonthly,
+  dbLoadTtsTargets,
+  dbSaveTtsTarget,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -52,7 +54,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.29.0";
+const APP_VERSION = "6.30.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8820,13 +8822,17 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [currentEnterer, setCurrentEnterer] = useState(() => { try { return localStorage.getItem("tts_enterer") || ""; } catch { return ""; } });
+  const [targets, setTargets] = useState([]);
+  const [showTargetForm, setShowTargetForm] = useState(false);
+  const [targetFormData, setTargetFormData] = useState({});
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [w, m] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]);
+      const [w, m, tgts] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly(), dbLoadTtsTargets()]);
       setWeeks(w);
       setMonthly(m);
+      setTargets(tgts);
       setLoading(false);
     })();
   }, []);
@@ -8930,27 +8936,56 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
   return (
     <div>
-      {/* Dashboard stats */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        {(() => {
-          const thisMonth = monthly.find(m => m.month === new Date().toISOString().substring(0, 7));
-          const lastMonthDate = new Date(); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-          const lastMonth = monthly.find(m => m.month === lastMonthDate.toISOString().substring(0, 7));
-          const momPct = (cur, prev) => { const c = Number(cur) || 0; const p = Number(prev) || 0; if (p === 0) return null; return Math.round(((c - p) / Math.abs(p)) * 100); };
-          return [
-            { label: "This month GMV", value: thisMonth ? fmtDol(thisMonth.tts_gmv) : "$0.00", color: t.green, mom: momPct(thisMonth?.tts_gmv, lastMonth?.tts_gmv) },
-            { label: "This month ROAS", value: thisMonth?.roas ? thisMonth.roas + "x" : "\u2014", color: t.blue, mom: momPct(thisMonth?.roas, lastMonth?.roas) },
-            { label: "Videos this month", value: thisMonth ? fmtNum(thisMonth.videos_posted) : "0", color: t.text, mom: momPct(thisMonth?.videos_posted, lastMonth?.videos_posted) },
-            { label: "Net revenue", value: thisMonth ? fmtDol(thisMonth.net_revenue) : "$0.00", color: thisMonth && thisMonth.net_revenue > 0 ? t.green : (t.red || "#ef4444"), mom: momPct(thisMonth?.net_revenue, lastMonth?.net_revenue) },
-          ].map((stat, i) => (
-            <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
-              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{stat.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, marginTop: 2 }}>{stat.value}</div>
-              {stat.mom != null ? <div style={{ fontSize: 10, marginTop: 2, color: stat.mom >= 0 ? t.green : (t.red || "#ef4444") }}>{stat.mom >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(stat.mom)}% vs last month</div> : null}
+      {/* Dashboard stats with targets */}
+      {(() => {
+        const thisMonthKey = new Date().toISOString().substring(0, 7);
+        const thisMonth = monthly.find(m => m.month === thisMonthKey);
+        const lastMonthDate = new Date(); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonth = monthly.find(m => m.month === lastMonthDate.toISOString().substring(0, 7));
+        const target = targets.find(tg => tg.month === thisMonthKey);
+
+        const PBar = ({ actual, goal, color }) => {
+          if (!goal || goal <= 0) return null;
+          const pct = Math.min(100, Math.round((actual / goal) * 100));
+          return <div style={{ marginTop: 6 }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: t.textFaint, marginBottom: 2 }}><span>{pct}% of target</span><span>{typeof goal === "number" && goal > 100 ? goal.toLocaleString() : goal}</span></div><div style={{ height: 4, borderRadius: 2, background: t.border, overflow: "hidden" }}><div style={{ height: "100%", width: pct + "%", borderRadius: 2, background: pct >= 100 ? t.green : color, transition: "width 0.5s" }} /></div></div>;
+        };
+        const Mom = ({ current, previous }) => {
+          const c = Number(current) || 0; const p = Number(previous) || 0;
+          if (p === 0) return null;
+          const pct = Math.round(((c - p) / Math.abs(p)) * 100);
+          if (pct === 0) return null;
+          return <div style={{ fontSize: 10, marginTop: 2, color: pct > 0 ? t.green : (t.red || "#ef4444") }}>{pct > 0 ? "\u25B2" : "\u25BC"} {Math.abs(pct)}% vs last month</div>;
+        };
+
+        return (
+          <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+            <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>This month GMV</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.green, marginTop: 2 }}>{thisMonth ? "$" + Number(thisMonth.tts_gmv).toLocaleString() : "$0"}</div>
+              <Mom current={thisMonth?.tts_gmv} previous={lastMonth?.tts_gmv} />
+              <PBar actual={Number(thisMonth?.tts_gmv) || 0} goal={target?.target_gmv} color={t.green} />
             </div>
-          ));
-        })()}
-      </div>
+            <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>This month ROAS</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.blue, marginTop: 2 }}>{thisMonth?.roas ? thisMonth.roas + "x" : "\u2014"}</div>
+              <Mom current={thisMonth?.roas} previous={lastMonth?.roas} />
+              <PBar actual={Number(thisMonth?.roas) || 0} goal={target?.target_roas} color={t.blue} />
+            </div>
+            <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Videos this month</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginTop: 2 }}>{thisMonth ? Number(thisMonth.videos_posted).toLocaleString() : "0"}</div>
+              <Mom current={thisMonth?.videos_posted} previous={lastMonth?.videos_posted} />
+              <PBar actual={Number(thisMonth?.videos_posted) || 0} goal={target?.target_videos} color={t.orange} />
+            </div>
+            <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Orders this month</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginTop: 2 }}>{thisMonth ? Number(thisMonth.orders).toLocaleString() : "0"}</div>
+              <Mom current={thisMonth?.orders} previous={lastMonth?.orders} />
+              <PBar actual={Number(thisMonth?.orders) || 0} goal={target?.target_orders} color={t.purple || "#8b6cc4"} />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Actions bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -8958,6 +8993,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
           {["table", "monthly"].map(m => (
             <button key={m} onClick={() => setViewMode(m)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: viewMode === m ? "2px solid " + t.green + "60" : "1px solid " + t.border, background: viewMode === m ? t.green + "10" : t.card, color: viewMode === m ? t.green : t.textMuted, textTransform: "capitalize" }}>{m === "monthly" ? "Monthly rollups" : "Weekly data"}</button>
           ))}
+          <button onClick={() => { const thisMonth = new Date().toISOString().substring(0, 7); const existing = targets.find(tg => tg.month === thisMonth); setTargetFormData(existing || { month: thisMonth, target_gmv: 0, target_videos: 0, target_creators: 0, target_roas: 0, target_orders: 0, notes: "" }); setShowTargetForm(true); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + (t.purple || "#8b6cc4") + "40", background: (t.purple || "#8b6cc4") + "08", color: t.purple || "#8b6cc4", cursor: "pointer" }}>Set monthly target</button>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={async () => {
@@ -8982,6 +9018,27 @@ function TtsNativeTab({ t, S, teamMembers }) {
         <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12, background: importResult.error ? (t.red || "#ef4444") + "10" : t.green + "10", color: importResult.error ? (t.red || "#ef4444") : t.green, border: "1px solid " + (importResult.error ? (t.red || "#ef4444") + "30" : t.green + "30") }}>
           {importResult.error ? "Import failed: " + importResult.error : "Imported " + importResult.imported + " weeks, skipped " + importResult.skipped + " (already exist). Parsed " + importResult.total + " rows from sheet."}
           <button onClick={() => setImportResult(null)} style={{ marginLeft: 12, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "inherit", textDecoration: "underline" }}>Dismiss</button>
+        </div>
+      ) : null}
+
+      {showTargetForm ? (
+        <div style={{ background: t.card, border: "2px solid " + (t.purple || "#8b6cc4") + "40", borderRadius: 14, padding: 20, marginBottom: 20, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Monthly target</div>
+            <button onClick={() => setShowTargetForm(false)} style={{ background: "none", border: "none", fontSize: 18, color: t.textFaint, cursor: "pointer" }}>x</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 10 }}>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Month</div><input type="month" value={targetFormData.month || ""} onChange={(e) => setTargetFormData(prev => ({ ...prev, month: e.target.value }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target GMV ($)</div><input type="number" value={targetFormData.target_gmv || ""} onChange={(e) => setTargetFormData(prev => ({ ...prev, target_gmv: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target videos</div><input type="number" value={targetFormData.target_videos || ""} onChange={(e) => setTargetFormData(prev => ({ ...prev, target_videos: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target orders</div><input type="number" value={targetFormData.target_orders || ""} onChange={(e) => setTargetFormData(prev => ({ ...prev, target_orders: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target ROAS</div><input type="number" step="0.1" value={targetFormData.target_roas || ""} onChange={(e) => setTargetFormData(prev => ({ ...prev, target_roas: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target creators</div><input type="number" value={targetFormData.target_creators || ""} onChange={(e) => setTargetFormData(prev => ({ ...prev, target_creators: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <button onClick={() => setShowTargetForm(false)} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Cancel</button>
+            <button onClick={async () => { const result = await dbSaveTtsTarget(targetFormData); if (!result.error) { const refreshed = await dbLoadTtsTargets(); setTargets(refreshed); setShowTargetForm(false); } else { alert("Save failed: " + (result.error?.message || "Unknown")); } }} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.purple || "#8b6cc4", color: "#fff", cursor: "pointer" }}>Save target</button>
+          </div>
         </div>
       ) : null}
 
@@ -9112,7 +9169,10 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <div key={m.month} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{m.month}</div>
-                <div style={{ fontSize: 11, color: t.textFaint }}>{m.weeks_reported} weeks reported</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: t.textFaint }}>{m.weeks_reported} weeks reported</span>
+                  {(() => { const tgt = targets.find(tg => tg.month === m.month); if (!tgt || !tgt.target_gmv) return null; const gmvPct = Math.round((Number(m.tts_gmv) / tgt.target_gmv) * 100); return <span style={{ fontSize: 11, fontWeight: 700, color: gmvPct >= 100 ? t.green : gmvPct >= 75 ? t.orange : (t.red || "#ef4444") }}>{gmvPct}% to GMV target</span>; })()}
+                </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
                 {[
