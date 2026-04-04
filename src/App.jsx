@@ -54,7 +54,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.33.0";
+const APP_VERSION = "6.34.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8828,6 +8828,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [editingCell, setEditingCell] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [entererDropdownOpen, setEntererDropdownOpen] = useState(false);
+  const [expandedNotes, setExpandedNotes] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -9025,6 +9026,43 @@ function TtsNativeTab({ t, S, teamMembers }) {
         );
       })()}
 
+      {/* Trend charts */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+        {[
+          { label: "GMV trend", key: "tts_gmv", color: t.green, format: (v) => "$" + Math.round(v).toLocaleString() },
+          { label: "Impressions trend", key: "impressions", color: t.blue, format: (v) => v >= 1000000 ? (v / 1000000).toFixed(1) + "M" : v >= 1000 ? Math.round(v / 1000) + "K" : String(v) },
+          { label: "Videos trend", key: "videos_posted", color: t.orange || "#d4890a", format: (v) => String(Math.round(v)) },
+        ].map(chart => {
+          const sorted = [...weeks].sort((a, b) => a.week_start.localeCompare(b.week_start)).slice(-12);
+          if (sorted.length < 2) return <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", boxShadow: t.shadow }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 8 }}>{chart.label}</div><div style={{ fontSize: 12, color: t.textFaint, textAlign: "center", padding: 20 }}>Need more data</div></div>;
+          const values = sorted.map(w => Number(w[chart.key]) || 0);
+          const max = Math.max(...values, 1); const min = Math.min(...values, 0); const range = max - min || 1;
+          const cw = 280; const ch = 60;
+          const points = values.map((v, i) => ({ x: (i / (values.length - 1)) * cw, y: ch - ((v - min) / range) * ch, val: v }));
+          const pathD = points.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+          const lastVal = values[values.length - 1]; const prevVal = values[values.length - 2];
+          const change = prevVal > 0 ? Math.round(((lastVal - prevVal) / prevVal) * 100) : 0;
+          return (
+            <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", boxShadow: t.shadow }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: t.textFaint }}>{chart.label}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: chart.color }}>{chart.format(lastVal)}</div>
+              </div>
+              <svg width="100%" viewBox={"0 -4 " + cw + " " + (ch + 8)} preserveAspectRatio="none" style={{ display: "block" }}>
+                <path d={pathD} fill="none" stroke={chart.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={pathD + " L" + cw + " " + ch + " L0 " + ch + " Z"} fill={chart.color} opacity="0.08" />
+                {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 3.5 : 2} fill={i === points.length - 1 ? chart.color : chart.color + "60"} />)}
+              </svg>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                <span style={{ fontSize: 9, color: t.textFaint }}>{sorted[0].week_start.substring(5)}</span>
+                {change !== 0 ? <span style={{ fontSize: 9, fontWeight: 700, color: change > 0 ? t.green : (t.red || "#ef4444") }}>{change > 0 ? "+" : ""}{change}% WoW</span> : null}
+                <span style={{ fontSize: 9, color: t.textFaint }}>{sorted[sorted.length - 1].week_start.substring(5)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Actions bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 6 }}>
@@ -9048,6 +9086,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
             {importing ? "Importing..." : "Sync from Google Sheets"}
           </button>
           {weeks.length > 0 ? <button onClick={copyLastWeek} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Copy last week</button> : null}
+          {weeks.length > 0 ? <button onClick={() => { const hdrs = ["Week start","Week end","SF Invites","Sample requests","Samples shipped","Videos posted","Impressions","Organic impressions","Orders","GMV","Ad spend","Sample cost","Commission","Creator payments","S/V Ratio","ROAS","CPM","Net revenue","Net/video","Notes"]; const csvRows = [hdrs.join(",")]; [...weeks].sort((a,b) => a.week_start.localeCompare(b.week_start)).forEach(w => { const c = calc(w); csvRows.push([w.week_start,w.week_end,w.superfiliate_invites||0,w.sample_requests||0,w.samples_posted||0,w.videos_posted||0,w.impressions||0,w.organic_impressions||0,w.orders||0,w.tts_gmv||0,w.ad_spend||0,w.sample_cost||0,w.tts_commission||0,w.creator_payments||0,c.sv_ratio,c.roas,c.cpm,c.net_revenue.replace(/[$,]/g,""),c.net_per_video.replace(/[$,]/g,""),'"'+(w.notes||"").replace(/"/g,'""')+'"'].join(",")); }); const blob = new Blob([csvRows.join("\n")],{type:"text/csv"}); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "tts_weekly_"+new Date().toISOString().split("T")[0]+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Download CSV</button> : null}
           <button onClick={newWeekForm} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New week</button>
         </div>
       </div>
@@ -9224,7 +9263,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         const w = row.data; const pw = row.pw; const c = calc(w);
                         const bb = "1px solid " + t.border + "40";
                         const cs = { padding: "10px 12px", borderBottom: bb, textAlign: "right", fontSize: 12 };
-                        return (
+                        return [
                           <tr key={"w-"+w.id} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                             <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
                             <EditableCell rowId={w.id} column="superfiliate_invites" value={w.superfiliate_invites} format={fmtNum} style={cs} />
@@ -9244,11 +9283,13 @@ function TtsNativeTab({ t, S, teamMembers }) {
                               {(() => { const member = teamMembers.find(m => m.id === w.entered_by); if (!member) return <span style={{ fontSize: 10, color: t.textFaint }}>{"\u2014"}</span>; return <div style={{ display: "flex", alignItems: "center", gap: 4 }}>{member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: 9, objectFit: "cover" }} /> : null}<span style={{ fontSize: 10, color: t.textMuted }}>{member.name.split(" ")[0]}</span></div>; })()}
                             </td>
                             <td style={{ ...cs, textAlign: "center", whiteSpace: "nowrap" }}>
+                              <button onClick={(e) => { e.stopPropagation(); setExpandedNotes(prev => prev === w.id ? null : w.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: w.notes ? t.blue : t.textFaint, marginRight: 6 }} title={w.notes || "Add note"}>{w.notes ? "Note" : "+Note"}</button>
                               <button onClick={(e) => { e.stopPropagation(); editWeek(w); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11, marginRight: 6 }} title="Edit full row">Edit</button>
                               <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">Del</button>
                             </td>
-                          </tr>
-                        );
+                          </tr>,
+                          expandedNotes === w.id ? <tr key={"note-" + w.id}><td colSpan={99} style={{ padding: "8px 14px 12px", background: t.cardAlt, borderBottom: "1px solid " + t.border }}><textarea defaultValue={w.notes || ""} placeholder="Add notes for this week..." onBlur={async (e) => { const val = e.target.value.trim(); if (val !== (w.notes || "")) { const updated = { ...w, notes: val }; delete updated.created_at; delete updated.updated_at; await dbSaveTtsWeek(updated); setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, notes: val } : wk)); } }} style={{ width: "100%", minHeight: 60, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", outline: "none", fontFamily: "inherit" }} /><div style={{ fontSize: 10, color: t.textFaint, marginTop: 4 }}>Auto-saves when you click away</div></td></tr> : null,
+                        ];
                       }
                       return null;
                     });
