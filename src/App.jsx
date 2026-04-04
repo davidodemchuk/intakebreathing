@@ -60,7 +60,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.50.0";
+const APP_VERSION = "6.51.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -8936,8 +8936,10 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
   };
   useEffect(() => { if (expandedNotes) loadWeekCreators(expandedNotes); }, [expandedNotes]);
 
+  const [aiError, setAiError] = useState(null);
   const analyzeWeek = async (w) => {
-    setAnalyzingWeek(w.id);
+    setAnalyzingWeek(w.id); setAiError(null);
+    console.log("[IB-Ai] Starting analysis for week", w.week_start);
     try {
       const prevWeek = weeks.find(pw => pw.week_start < w.week_start);
       const monthWeeks = weeks.filter(mw => mw.week_start.substring(0, 7) === w.week_start.substring(0, 7));
@@ -8945,20 +8947,23 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
       const prompt = "You are IB-Ai, the analytics engine for Intake Breathing's TikTok Shop (TTS) program. Analyze this week's performance data and write a concise 3-paragraph executive summary.\n\nWEEK: " + w.week_start + " to " + w.week_end + "\n\nTHIS WEEK:\n- SF invites: " + w.superfiliate_invites + "\n- Sample requests: " + w.sample_requests + "\n- Samples shipped: " + w.samples_posted + "\n- Videos posted: " + w.videos_posted + "\n- Impressions: " + Number(w.impressions).toLocaleString() + "\n- Organic impressions: " + Number(w.organic_impressions).toLocaleString() + "\n- Orders: " + w.orders + "\n- GMV: $" + Number(w.tts_gmv).toLocaleString() + "\n- Ad spend: $" + Number(w.ad_spend).toLocaleString() + "\n- ROAS: " + (Number(w.ad_spend) > 0 ? (Number(w.tts_gmv) / Number(w.ad_spend)).toFixed(2) : "N/A") + "\n\n" + (prevWeek ? "PREVIOUS WEEK (" + prevWeek.week_start + "):\n- Videos: " + prevWeek.videos_posted + "\n- Impressions: " + Number(prevWeek.impressions).toLocaleString() + "\n- GMV: $" + Number(prevWeek.tts_gmv).toLocaleString() + "\n- Ad spend: $" + Number(prevWeek.ad_spend).toLocaleString() : "No previous week data.") + "\n\nMONTH-TO-DATE (" + monthWeeks.length + " weeks):\n- Total GMV: $" + monthWeeks.reduce((s, mw) => s + Number(mw.tts_gmv || 0), 0).toLocaleString() + "\n- Total videos: " + monthWeeks.reduce((s, mw) => s + Number(mw.videos_posted || 0), 0) + "\n\n" + (creatorData.length > 0 ? "TOP CREATORS:\n" + creatorData.map(c => "- @" + c.creator_handle + ": " + c.videos_posted + " videos, $" + Number(c.gmv).toLocaleString() + " GMV, " + c.orders + " orders").join("\n") : "No creator attribution data.") + "\n\nWrite 3 paragraphs: 1) Performance summary vs last week 2) What's working or not 3) One actionable recommendation. Be specific with numbers. Be direct.";
 
       const apiKey = await dbGetSetting("anthropic-api-key");
+      console.log("[IB-Ai] API key:", apiKey ? "found (" + apiKey.substring(0, 8) + "...)" : "NOT FOUND");
       if (!apiKey) { alert("No Anthropic API key. Go to Settings."); setAnalyzingWeek(null); return; }
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
       });
-      if (!res.ok) throw new Error("API error: " + (await res.text()).substring(0, 200));
+      console.log("[IB-Ai] API response status:", res.status);
+      if (!res.ok) throw new Error("API error " + res.status + ": " + (await res.text()).substring(0, 200));
       const data = await res.json();
       const summary = data.content?.[0]?.text || "Analysis failed.";
+      console.log("[IB-Ai] Summary length:", summary.length);
       const updated = { ...w, ai_summary: summary, ai_analyzed_at: new Date().toISOString() };
       delete updated.created_at; delete updated.updated_at;
       await dbSaveTtsWeek(updated);
       setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, ai_summary: summary, ai_analyzed_at: new Date().toISOString() } : wk));
-    } catch (e) { alert("Analysis failed: " + e.message); }
+    } catch (e) { console.error("[IB-Ai] FULL ERROR:", e); setAiError({ weekId: w.id, message: e.message }); }
     setAnalyzingWeek(null);
   };
 
@@ -9073,6 +9078,8 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
     }, 100);
   };
 
+  const editableColumns = ["superfiliate_invites", "sample_requests", "samples_posted", "videos_posted", "impressions", "orders", "tts_gmv", "organic_gmv", "paid_gmv", "ad_spend"];
+
   const EditableCell = ({ rowId, column, value, format, align, style: cellStyle, step, children }) => {
     const isEditing = editingCell?.rowId === rowId && editingCell?.column === column;
     const row = weeks.find(w => w.id === rowId);
@@ -9098,7 +9105,23 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
       return (
         <td style={{ ...cellStyle, padding: 0 }}>
           <input autoFocus type="number" step={step || "1"} value={editingValue} onChange={(e) => setEditingValue(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") saveCell(Number(editingValue) || 0); else if (e.key === "Escape") setEditingCell(null); }}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter") { await saveCell(Number(editingValue) || 0); }
+              else if (e.key === "Escape") { setEditingCell(null); }
+              else if (e.key === "Tab") {
+                e.preventDefault(); await saveCell(Number(editingValue) || 0);
+                const ci = editableColumns.indexOf(column); if (ci === -1) return;
+                const sw = [...weeks].sort((a, b) => b.week_start.localeCompare(a.week_start));
+                const wi = sw.findIndex(w => w.id === rowId);
+                if (e.shiftKey) {
+                  if (ci > 0) { setEditingCell({ rowId, column: editableColumns[ci - 1] }); setEditingValue(row?.[editableColumns[ci - 1]] ?? 0); }
+                  else if (wi > 0) { const pr = sw[wi - 1]; const lc = editableColumns[editableColumns.length - 1]; setEditingCell({ rowId: pr.id, column: lc }); setEditingValue(pr?.[lc] ?? 0); }
+                } else {
+                  if (ci < editableColumns.length - 1) { setEditingCell({ rowId, column: editableColumns[ci + 1] }); setEditingValue(row?.[editableColumns[ci + 1]] ?? 0); }
+                  else if (wi < sw.length - 1) { const nr = sw[wi + 1]; const fc = editableColumns[0]; setEditingCell({ rowId: nr.id, column: fc }); setEditingValue(nr?.[fc] ?? 0); }
+                }
+              }
+            }}
             onBlur={() => saveCell(Number(editingValue) || 0)}
             style={{ width: "100%", padding: "8px 10px", fontSize: 12, fontWeight: 700, border: "2px solid " + t.green, borderRadius: 4, background: t.inputBg, color: t.text, textAlign: align || "right", boxSizing: "border-box", outline: "none" }} />
         </td>
@@ -9526,6 +9549,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                                 <textarea defaultValue={w.notes || ""} placeholder={"Top performing video:\nContent types:\nAnything unusual:"} onBlur={async (e) => { const val = e.target.value.trim(); if (val !== (w.notes || "")) { const upd = { ...w, notes: val }; delete upd.created_at; delete upd.updated_at; await dbSaveTtsWeek(upd); setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, notes: val } : wk)); } }} style={{ width: "100%", minHeight: 80, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", outline: "none", fontFamily: "inherit", lineHeight: 1.6 }} />
                                 {w.ai_summary ? <div style={{ marginTop: 10, padding: 12, background: t.isLight ? "#f0fdf4" : "#0a1f0f", borderRadius: 8, border: "1px solid " + (t.isLight ? "#bbf7d0" : "#14532d") }}><div style={{ fontSize: 10, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>IB-Ai analysis</div><div style={{ fontSize: 12, color: t.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{w.ai_summary}</div><div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>Generated {w.ai_analyzed_at ? new Date(w.ai_analyzed_at).toLocaleDateString() : ""}</div></div> : null}
                                 <button onClick={() => analyzeWeek(w)} disabled={analyzingWeek === w.id} style={{ marginTop: 8, padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer" }}>{analyzingWeek === w.id ? "Analyzing..." : w.ai_summary ? "Re-analyze with IB-Ai" : "Analyze with IB-Ai"}</button>
+                                {aiError && aiError.weekId === w.id ? <div style={{ marginTop: 6, padding: "6px 10px", borderRadius: 6, background: (t.red || "#ef4444") + "10", border: "1px solid " + (t.red || "#ef4444") + "30", fontSize: 11, color: t.red || "#ef4444" }}>Error: {aiError.message}</div> : null}
                               </div>
                               <div>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
