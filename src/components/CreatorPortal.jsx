@@ -59,78 +59,108 @@ function ManagerCreatorChat({ creatorId, t }) {
 }
 
 function CreatorLogin({ navigate, t }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState("email");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
         const { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", session.user.email.toLowerCase()).maybeSingle();
-        if (creator) navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
+        if (creator) { navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard"); return; }
       }
+      setCheckingSession(false);
     })();
   }, []);
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user?.email) {
-        const userEmail = session.user.email.toLowerCase();
-        let { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", userEmail).maybeSingle();
-        if (!creator) {
-          const handle = userEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
-          const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: "", status: "Active", onboarded: false }).select().single();
-          if (ie) { setError("Account creation failed. Contact your Intake manager."); return; }
-          creator = nc;
-        }
-        navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
-      }
-    });
-    return () => subscription?.unsubscribe();
-  }, []);
-
-  const sendMagicLink = async () => {
-    const clean = email.trim().toLowerCase();
-    if (!clean || !clean.includes("@")) { setError("Enter a valid email."); return; }
-    setStep("sending"); setError(null);
+  const handleSignUp = async () => {
+    setError(null);
+    if (!name.trim()) { setError("Enter your name."); return; }
+    if (!email.trim() || !email.includes("@")) { setError("Enter a valid email."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
+    setLoading(true);
     try {
-      const { error: e } = await supabase.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true, emailRedirectTo: window.location.origin + "/creator/dashboard" } });
-      if (e) throw e;
-      setStep("sent");
-    } catch (e) { setError(e.message || "Failed to send link."); setStep("email"); }
+      const { error: authErr } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: name.trim() } } });
+      if (authErr) throw authErr;
+      const userEmail = email.trim().toLowerCase();
+      let { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", userEmail).maybeSingle();
+      if (creator) { if (!creator.name) await supabase.from("creators").update({ name: name.trim() }).eq("id", creator.id); }
+      else {
+        const handle = userEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
+        const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: name.trim(), status: "Active", onboarded: false }).select().single();
+        if (ie) { setError("Account created but profile setup failed. Try logging in."); setLoading(false); return; }
+        creator = nc;
+      }
+      navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
+    } catch (e) { setError(e.message?.includes("already registered") ? "This email is already registered. Try logging in." : (e.message || "Sign up failed.")); }
+    setLoading(false);
   };
+
+  const handleLogin = async () => {
+    setError(null);
+    if (!email.trim() || !email.includes("@")) { setError("Enter a valid email."); return; }
+    if (!password) { setError("Enter your password."); return; }
+    setLoading(true);
+    try {
+      const { error: authErr } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (authErr) throw authErr;
+      const { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", email.trim().toLowerCase()).maybeSingle();
+      if (!creator) { setError("No creator profile found. Sign up first."); await supabase.auth.signOut(); setLoading(false); return; }
+      navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
+    } catch (e) { setError(e.message?.includes("Invalid login") ? "Wrong email or password." : (e.message || "Login failed.")); }
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim() || !email.includes("@")) { setError("Enter your email first."); return; }
+    setLoading(true); setError(null);
+    try { const { error: re } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: window.location.origin + "/creator" }); if (re) throw re; alert("Password reset link sent to " + email.trim()); } catch (e) { setError(e.message || "Failed to send reset link."); }
+    setLoading(false);
+  };
+
+  if (checkingSession) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading...</div>;
+
+  const inp = { width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 15, outline: "none", boxSizing: "border-box" };
+  const btn = { width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 700, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1 };
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>Creator Portal</div>
           <div style={{ fontSize: 14, color: t.textMuted, marginTop: 6 }}>Intake Breathing Technology</div>
         </div>
         <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 16, padding: 32, boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
-          {step === "email" || step === "sending" ? (
+          <div style={{ display: "flex", marginBottom: 24, borderRadius: 10, overflow: "hidden", border: "1px solid " + t.border }}>
+            <button onClick={() => { setMode("login"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "login" ? t.green : "transparent", color: mode === "login" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Log in</button>
+            <button onClick={() => { setMode("signup"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "signup" ? t.green : "transparent", color: mode === "signup" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Sign up</button>
+          </div>
+          {mode === "signup" ? (
             <>
-              <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Welcome</div>
-              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 24, lineHeight: 1.6 }}>Enter your email to sign in or create your account. We'll send you a magic link.</div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email address</div>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMagicLink()} placeholder="you@email.com" autoFocus style={{ width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 15, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <button onClick={sendMagicLink} disabled={step === "sending"} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 700, cursor: step === "sending" ? "wait" : "pointer", opacity: step === "sending" ? 0.6 : 1 }}>{step === "sending" ? "Sending..." : "Continue with email"}</button>
-              <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: t.textFaint }}>New here? Entering your email creates your account automatically.</div>
+              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Full name</div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus style={inp} /></div>
+              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" style={inp} /></div>
+              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" style={inp} /></div>
+              <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Confirm password</div><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" onKeyDown={(e) => e.key === "Enter" && handleSignUp()} style={inp} /></div>
+              <button onClick={handleSignUp} disabled={loading} style={btn}>{loading ? "Creating account..." : "Create account"}</button>
             </>
-          ) : step === "sent" ? (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 8 }}>Check your email</div>
-              <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 20 }}>We sent a sign-in link to<br /><strong style={{ color: t.text }}>{email}</strong></div>
-              <div style={{ fontSize: 13, color: t.textFaint, lineHeight: 1.6, marginBottom: 24 }}>Click the link to sign in. Check spam if you don't see it.</div>
-              <button onClick={() => { setStep("email"); setError(null); }} style={{ padding: "10px 24px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Use a different email</button>
-            </div>
-          ) : null}
+          ) : (
+            <>
+              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoFocus style={inp} /></div>
+              <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" onKeyDown={(e) => e.key === "Enter" && handleLogin()} style={inp} /></div>
+              <button onClick={handleLogin} disabled={loading} style={btn}>{loading ? "Signing in..." : "Sign in"}</button>
+              <button onClick={handleForgotPassword} style={{ width: "100%", marginTop: 10, padding: 10, border: "none", background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>Forgot password?</button>
+            </>
+          )}
           {error ? <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: (t.red || "#ef4444") + "10", border: "1px solid " + (t.red || "#ef4444") + "25", fontSize: 13, color: t.red || "#ef4444" }}>{error}</div> : null}
         </div>
-        <div style={{ textAlign: "center", marginTop: 24, fontSize: 12, color: t.textFaint }}><a href="/" style={{ color: t.textFaint, textDecoration: "none" }}>Back to Intake Creators</a></div>
+        <div style={{ textAlign: "center", marginTop: 24 }}><a href="/" style={{ fontSize: 12, color: t.textFaint, textDecoration: "none" }}>Back to Intake Creators</a></div>
       </div>
     </div>
   );
