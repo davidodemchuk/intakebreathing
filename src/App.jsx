@@ -7638,8 +7638,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: t.shadow }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: getCreatorOwners(c.id).length > 0 ? 10 : 0 }}>
           <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
-          <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={openMessages} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.blue + "40", background: showMessages ? t.blue + "15" : t.blue + "08", color: t.blue, cursor: "pointer" }}>Messages{msgList.length > 0 ? " (" + msgList.length + ")" : ""}</button>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.cardAlt, color: t.textMuted, cursor: "pointer" }}>+ Add</button>
             {ownerDropdownOpen ? (
               <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
@@ -7673,10 +7672,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
       </div>
 
+      {/* Messages toggle */}
+      <button onClick={openMessages} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 16px", borderRadius: 12, marginBottom: showMessages ? 0 : 16, border: "1px solid " + (showMessages ? t.blue + "40" : t.border), background: showMessages ? t.blue + "08" : t.card, color: showMessages ? t.blue : t.textMuted, cursor: "pointer", fontSize: 13, fontWeight: 700, boxShadow: t.shadow, textAlign: "left", borderBottomLeftRadius: showMessages ? 0 : 12, borderBottomRightRadius: showMessages ? 0 : 12 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Messages{msgList.length > 0 ? " (" + msgList.length + ")" : ""}
+        <span style={{ marginLeft: "auto", fontSize: 10, color: t.textFaint }}>{showMessages ? "Hide" : "Show"}</span>
+      </button>
+
       {showMessages ? (
-        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, marginBottom: 16, boxShadow: t.shadow, overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid " + t.border }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Messages with @{c.tiktokHandle || c.instagramHandle || c.handle}</div>
+        <div style={{ background: t.card, border: "1px solid " + t.blue + "40", borderTop: "none", borderRadius: "0 0 12px 12px", marginBottom: 16, boxShadow: t.shadow, overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid " + t.border, background: t.blue + "05" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>Conversation with @{c.tiktokHandle || c.instagramHandle || c.handle}</div>
             <button onClick={() => setShowMessages(false)} style={{ background: "none", border: "none", fontSize: 16, color: t.textFaint, cursor: "pointer" }}>x</button>
           </div>
           <div style={{ maxHeight: 300, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
