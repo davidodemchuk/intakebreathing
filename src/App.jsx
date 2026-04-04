@@ -13,6 +13,8 @@ import {
   creatorToRow,
   dbGetSetting,
   dbSetSetting,
+  dbLoadTeamMembers,
+  dbAssignCreator,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -20,6 +22,7 @@ import { supabase } from "./supabase.js";
 
 const CREATOR_COLUMNS = [
   { key: "status", label: "Status", width: 100, filterable: true, sortable: true },
+  { key: "owner", label: "Owner", width: 100, sortable: true, filterable: true },
   { key: "avatar", label: "", width: 36, sortable: false },
   { key: "handle", label: "Handle", width: 160, sortable: true },
   { key: "niche", label: "Niche", width: 170, filterable: true, sortable: true, editable: true },
@@ -42,7 +45,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.14.0";
+const APP_VERSION = "6.15.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -6993,7 +6996,7 @@ class CreatorDetailErrorBoundary extends React.Component {
   }
 }
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge, teamMembers = [] }) {
   const ak = mergeAiKnowledge(aiKnowledge);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
@@ -7463,16 +7466,27 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
       </div>
 
-      {(ai.oneSentence || enrichMsg) ? (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          {ai.oneSentence ? (
-            <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", lineHeight: 1.6 }}>{ai.oneSentence}</div>
-          ) : null}
-          {enrichMsg ? (
-            <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginTop: ai.oneSentence ? 8 : 0 }}>{enrichMsg}</div>
-          ) : null}
+      <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: t.shadow }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: ai.oneSentence || enrichMsg ? 10 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
+            <select
+              value={c.assignedTo || ""}
+              onChange={async (e) => {
+                const memberId = e.target.value || null;
+                updateCreator(c.id, { assignedTo: memberId, assignedAt: memberId ? new Date().toISOString() : null });
+                await dbAssignCreator(c.id, memberId, "manager");
+              }}
+              style={{ padding: "5px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "1px solid " + (c.assignedTo ? t.green + "50" : t.border), background: c.assignedTo ? t.green + "08" : t.inputBg, color: c.assignedTo ? t.text : t.textFaint, cursor: "pointer", outline: "none" }}>
+              <option value="">Unassigned</option>
+              {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            {c.assignedAt ? <div style={{ fontSize: 10, color: t.textFaint }}>since {new Date(c.assignedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div> : null}
+          </div>
         </div>
-      ) : null}
+        {ai.oneSentence ? <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic", lineHeight: 1.6 }}>{ai.oneSentence}</div> : null}
+        {enrichMsg ? <div style={{ fontSize: 12, color: enrichMsg.includes("complete") || enrichMsg.includes("updated") ? t.green : t.orange, marginTop: ai.oneSentence ? 8 : 0 }}>{enrichMsg}</div> : null}
+      </div>
 
       {(() => {
         const igF = Number(c.instagramData?.followers) || 0;
@@ -9889,7 +9903,8 @@ export default function App() {
   const [creatorSearch, setCreatorSearch] = useState("");
   const [sortCol, setSortCol] = useState("ibScore");
   const [sortDir, setSortDir] = useState("desc");
-  const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All" });
+  const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All", owner: "All" });
+  const [teamMembers, setTeamMembers] = useState([]);
   const [colWidths, setColWidths] = useState(() => {
     const w = {};
     CREATOR_COLUMNS.forEach((col) => {
@@ -9984,6 +9999,9 @@ export default function App() {
         const fresh = await dbLoadCreators();
         if (!cancelled && fresh && fresh.length > 0) setCreators(applyPlatformHandleDefaults(fresh.map((c) => hydrateCreator(c))));
       }
+
+      const members = await dbLoadTeamMembers();
+      if (!cancelled) setTeamMembers(members);
 
       const dbBriefs = await dbLoadBriefs();
       if (!cancelled && dbBriefs && dbBriefs.length > 0) {
@@ -11057,6 +11075,12 @@ export default function App() {
           .some((n) => n.trim().toLowerCase() === needle)
       );
     }
+    if (filters.owner !== "All") {
+      list = list.filter(c => {
+        const member = teamMembers.find(m => m.id === c.assignedTo);
+        return member?.name === filters.owner;
+      });
+    }
     if (creatorSearch.trim()) {
       const q = creatorSearch.trim().toLowerCase();
       list = list.filter(
@@ -11938,6 +11962,15 @@ export default function App() {
                     ))}
                   </div>
                 ) : null}
+                {openFilter === fk && fk === "owner" ? (
+                  <div data-creator-sheet-filter style={{ position: "absolute", top: "100%", left: 0, minWidth: 160, maxHeight: 240, overflowY: "auto", background: t.card, border: `1px solid ${t.border}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.25)", zIndex: 20, padding: "4px 0" }}>
+                    {["All", ...teamMembers.map(m => m.name)].map((opt) => (
+                      <div key={opt} role="button" tabIndex={0} onClick={() => { setFilters(f => ({ ...f, owner: opt })); setOpenFilter(null); }} style={{ padding: "6px 12px", fontSize: 12, cursor: "pointer", color: filters.owner === opt ? t.green : t.textSecondary, fontWeight: filters.owner === opt ? 600 : 400 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                        {opt}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {col.width != null ? (
                   <div
                     onMouseDown={(e) => {
@@ -12010,6 +12043,23 @@ export default function App() {
                   >
                     {s}
                   </span>
+                </div>
+              );
+            }
+            if (col.key === "owner") {
+              const member = teamMembers.find(m => m.id === c.assignedTo);
+              const ownerName = member?.name || "";
+              const initials = ownerName ? ownerName.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "";
+              return (
+                <div key={col.key} style={{ ...base, display: "flex", alignItems: "center", gap: 6 }}>
+                  {ownerName ? (
+                    <>
+                      <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green, flexShrink: 0 }}>{initials}</div>
+                      <span style={{ fontSize: 11, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ownerName.split(" ")[0]}</span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 11, color: t.textFaint }}>—</span>
+                  )}
                 </div>
               );
             }
@@ -12702,6 +12752,7 @@ export default function App() {
                 onScrapeCreditUsed={bumpScrapeCredit}
                 setDbError={setDbError}
                 aiKnowledge={aiKnowledge}
+                teamMembers={teamMembers}
               />
             </CreatorDetailErrorBoundary>
           )

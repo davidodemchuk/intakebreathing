@@ -57,6 +57,9 @@ export function creatorToRow(c) {
     invite_token: c.inviteToken || null,
     onboarded: c.onboarded ?? false,
     onboarded_at: c.onboardedAt || null,
+    assigned_to: c.assignedTo || null,
+    assigned_at: c.assignedAt || null,
+    assigned_by: c.assignedBy || null,
   };
 
   const clean = {};
@@ -128,6 +131,9 @@ export function rowToCreator(row) {
     inviteToken: row.invite_token || null,
     onboarded: row.onboarded || false,
     onboardedAt: row.onboarded_at || null,
+    assignedTo: row.assigned_to || null,
+    assignedAt: row.assigned_at || null,
+    assignedBy: row.assigned_by || null,
   };
 }
 
@@ -295,6 +301,22 @@ export async function dbGetSetting(key) {
     return null;
   }
   return data?.value ?? null;
+}
+
+export async function dbLoadTeamMembers() {
+  const { data, error } = await supabase.from("team_members").select("*").order("name");
+  if (error) { console.error("[db] Load team members error:", error); return []; }
+  return data || [];
+}
+
+export async function dbAssignCreator(creatorId, teamMemberId, assignedBy) {
+  const { error } = await supabase.from("creators").update({
+    assigned_to: teamMemberId,
+    assigned_at: new Date().toISOString(),
+    assigned_by: assignedBy || "unknown",
+  }).eq("id", creatorId);
+  if (error) console.error("[db] Assign creator error:", error);
+  return { error };
 }
 
 export async function dbSetSetting(key, value) {
