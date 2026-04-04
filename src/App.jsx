@@ -52,7 +52,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.25.0";
+const APP_VERSION = "6.26.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8861,6 +8861,24 @@ function TtsNativeTab({ t, S, teamMembers }) {
     };
   };
 
+  const wowChange = (current, previous) => {
+    const c = Number(current) || 0;
+    const p = Number(previous) || 0;
+    if (p === 0 && c === 0) return null;
+    if (p === 0) return { dir: "up", pct: 100 };
+    const pct = Math.round(((c - p) / Math.abs(p)) * 100);
+    if (pct === 0) return null;
+    return { dir: pct > 0 ? "up" : "down", pct: Math.abs(pct) };
+  };
+
+  const WowArrow = ({ current, previous, invert }) => {
+    const change = wowChange(current, previous);
+    if (!change) return null;
+    const isGood = invert ? change.dir === "down" : change.dir === "up";
+    const color = isGood ? t.green : (t.red || "#ef4444");
+    return <span style={{ fontSize: 9, fontWeight: 700, color, marginLeft: 4 }}>{change.dir === "up" ? "\u25B2" : "\u25BC"} {change.pct}%</span>;
+  };
+
   const getMonday = (d) => { const date = new Date(d); const day = date.getDay(); const diff = date.getDate() - day + (day === 0 ? -6 : 1); return new Date(date.setDate(diff)).toISOString().split("T")[0]; };
   const getSunday = (monday) => { const d = new Date(monday); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; };
 
@@ -8914,15 +8932,19 @@ function TtsNativeTab({ t, S, teamMembers }) {
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         {(() => {
           const thisMonth = monthly.find(m => m.month === new Date().toISOString().substring(0, 7));
+          const lastMonthDate = new Date(); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+          const lastMonth = monthly.find(m => m.month === lastMonthDate.toISOString().substring(0, 7));
+          const momPct = (cur, prev) => { const c = Number(cur) || 0; const p = Number(prev) || 0; if (p === 0) return null; return Math.round(((c - p) / Math.abs(p)) * 100); };
           return [
-            { label: "This month GMV", value: thisMonth ? fmtDol(thisMonth.tts_gmv) : "$0.00", color: t.green },
-            { label: "This month ROAS", value: thisMonth?.roas ? thisMonth.roas + "x" : "\u2014", color: t.blue },
-            { label: "Videos this month", value: thisMonth ? fmtNum(thisMonth.videos_posted) : "0", color: t.text },
-            { label: "Net revenue", value: thisMonth ? fmtDol(thisMonth.net_revenue) : "$0.00", color: thisMonth && thisMonth.net_revenue > 0 ? t.green : (t.red || "#ef4444") },
+            { label: "This month GMV", value: thisMonth ? fmtDol(thisMonth.tts_gmv) : "$0.00", color: t.green, mom: momPct(thisMonth?.tts_gmv, lastMonth?.tts_gmv) },
+            { label: "This month ROAS", value: thisMonth?.roas ? thisMonth.roas + "x" : "\u2014", color: t.blue, mom: momPct(thisMonth?.roas, lastMonth?.roas) },
+            { label: "Videos this month", value: thisMonth ? fmtNum(thisMonth.videos_posted) : "0", color: t.text, mom: momPct(thisMonth?.videos_posted, lastMonth?.videos_posted) },
+            { label: "Net revenue", value: thisMonth ? fmtDol(thisMonth.net_revenue) : "$0.00", color: thisMonth && thisMonth.net_revenue > 0 ? t.green : (t.red || "#ef4444"), mom: momPct(thisMonth?.net_revenue, lastMonth?.net_revenue) },
           ].map((stat, i) => (
             <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
               <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{stat.label}</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, marginTop: 2 }}>{stat.value}</div>
+              {stat.mom != null ? <div style={{ fontSize: 10, marginTop: 2, color: stat.mom >= 0 ? t.green : (t.red || "#ef4444") }}>{stat.mom >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(stat.mom)}% vs last month</div> : null}
             </div>
           ));
         })()}
@@ -9034,22 +9056,24 @@ function TtsNativeTab({ t, S, teamMembers }) {
                 <tbody>
                   {weeks.map((w, ri) => {
                     const c = calc(w);
+                    const pw = weeks[ri + 1] || null;
+                    const bb = "1px solid " + t.border + "40";
                     return (
                       <tr key={w.id} style={{ background: ri % 2 ? t.cardAlt + "40" : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? t.cardAlt + "40" : "transparent"; }}>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{w.samples_sent}/{w.samples_received}/{w.samples_posted}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.impressions)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.clicks)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.orders)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", fontWeight: 700, color: t.green }}>{fmtDol(w.tts_gmv)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{fmtDol(w.ad_spend)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", color: t.textMuted }}>{c.sv_ratio}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", fontWeight: 700, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", color: t.textMuted }}>{c.cpm}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{c.net_per_video}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", fontWeight: 700, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "center" }}>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{w.samples_sent}/{w.samples_received}/{w.samples_posted}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.impressions)}{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.clicks)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.orders)}{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: t.green }}>{fmtDol(w.tts_gmv)}{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{fmtDol(w.ad_spend)}{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.sv_ratio}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}{pw ? <WowArrow current={Number(w.ad_spend) > 0 ? Number(w.tts_gmv) / Number(w.ad_spend) : 0} previous={Number(pw.ad_spend) > 0 ? Number(pw.tts_gmv) / Number(pw.ad_spend) : 0} /> : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.cpm}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{c.net_per_video}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}{pw ? (() => { const p = calc(pw); const cVal = Number(String(c.net_revenue).replace(/[$,]/g, "")) || 0; const pVal = Number(String(p.net_revenue).replace(/[$,]/g, "")) || 0; return <WowArrow current={cVal} previous={pVal} />; })() : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "center" }}>
                           <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">x</button>
                         </td>
                       </tr>
