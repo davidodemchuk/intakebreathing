@@ -27,6 +27,9 @@ import {
   dbLoadTtsMilestones,
   dbSaveTtsMilestone,
   dbDeleteTtsMilestone,
+  dbLoadTtsCreatorWeekly,
+  dbSaveTtsCreatorWeekly,
+  dbDeleteTtsCreatorWeekly,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -57,7 +60,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.44.0";
+const APP_VERSION = "6.45.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8812,7 +8815,7 @@ function pipelineColIndexToA1(colIndex) {
   return s;
 }
 
-function TtsNativeTab({ t, S, teamMembers }) {
+function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
   const [weeks, setWeeks] = useState([]);
   const [monthly, setMonthly] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -8832,6 +8835,9 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [milestones, setMilestones] = useState([]);
   const [showMilestoneForm, setShowMilestoneForm] = useState(false);
   const [milestoneFormData, setMilestoneFormData] = useState({});
+  const [weekCreators, setWeekCreators] = useState({});
+  const [addingCreator, setAddingCreator] = useState(null);
+  const [analyzingWeek, setAnalyzingWeek] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -8851,6 +8857,39 @@ function TtsNativeTab({ t, S, teamMembers }) {
     setTimeout(() => document.addEventListener("click", handler), 0);
     return () => document.removeEventListener("click", handler);
   }, [entererDropdownOpen]);
+
+  const loadWeekCreators = async (weekId) => {
+    if (weekCreators[weekId]) return;
+    const data = await dbLoadTtsCreatorWeekly(weekId);
+    setWeekCreators(prev => ({ ...prev, [weekId]: data }));
+  };
+  useEffect(() => { if (expandedNotes) loadWeekCreators(expandedNotes); }, [expandedNotes]);
+
+  const analyzeWeek = async (w) => {
+    setAnalyzingWeek(w.id);
+    try {
+      const prevWeek = weeks.find(pw => pw.week_start < w.week_start);
+      const monthWeeks = weeks.filter(mw => mw.week_start.substring(0, 7) === w.week_start.substring(0, 7));
+      const creatorData = weekCreators[w.id] || [];
+      const prompt = "You are IB-Ai, the analytics engine for Intake Breathing's TikTok Shop (TTS) program. Analyze this week's performance data and write a concise 3-paragraph executive summary.\n\nWEEK: " + w.week_start + " to " + w.week_end + "\n\nTHIS WEEK:\n- SF invites: " + w.superfiliate_invites + "\n- Sample requests: " + w.sample_requests + "\n- Samples shipped: " + w.samples_posted + "\n- Videos posted: " + w.videos_posted + "\n- Impressions: " + Number(w.impressions).toLocaleString() + "\n- Organic impressions: " + Number(w.organic_impressions).toLocaleString() + "\n- Orders: " + w.orders + "\n- GMV: $" + Number(w.tts_gmv).toLocaleString() + "\n- Ad spend: $" + Number(w.ad_spend).toLocaleString() + "\n- ROAS: " + (Number(w.ad_spend) > 0 ? (Number(w.tts_gmv) / Number(w.ad_spend)).toFixed(2) : "N/A") + "\n\n" + (prevWeek ? "PREVIOUS WEEK (" + prevWeek.week_start + "):\n- Videos: " + prevWeek.videos_posted + "\n- Impressions: " + Number(prevWeek.impressions).toLocaleString() + "\n- GMV: $" + Number(prevWeek.tts_gmv).toLocaleString() + "\n- Ad spend: $" + Number(prevWeek.ad_spend).toLocaleString() : "No previous week data.") + "\n\nMONTH-TO-DATE (" + monthWeeks.length + " weeks):\n- Total GMV: $" + monthWeeks.reduce((s, mw) => s + Number(mw.tts_gmv || 0), 0).toLocaleString() + "\n- Total videos: " + monthWeeks.reduce((s, mw) => s + Number(mw.videos_posted || 0), 0) + "\n\n" + (creatorData.length > 0 ? "TOP CREATORS:\n" + creatorData.map(c => "- @" + c.creator_handle + ": " + c.videos_posted + " videos, $" + Number(c.gmv).toLocaleString() + " GMV, " + c.orders + " orders").join("\n") : "No creator attribution data.") + "\n\nWrite 3 paragraphs: 1) Performance summary vs last week 2) What's working or not 3) One actionable recommendation. Be specific with numbers. Be direct.";
+
+      const apiKey = await dbGetSetting("anthropic-api-key");
+      if (!apiKey) { alert("No Anthropic API key. Go to Settings."); setAnalyzingWeek(null); return; }
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!res.ok) throw new Error("API error: " + (await res.text()).substring(0, 200));
+      const data = await res.json();
+      const summary = data.content?.[0]?.text || "Analysis failed.";
+      const updated = { ...w, ai_summary: summary, ai_analyzed_at: new Date().toISOString() };
+      delete updated.created_at; delete updated.updated_at;
+      await dbSaveTtsWeek(updated);
+      setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, ai_summary: summary, ai_analyzed_at: new Date().toISOString() } : wk));
+    } catch (e) { alert("Analysis failed: " + e.message); }
+    setAnalyzingWeek(null);
+  };
 
   const calc = (d) => {
     const vp = Number(d.videos_posted) || 0;
@@ -9368,7 +9407,43 @@ function TtsNativeTab({ t, S, teamMembers }) {
                               <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">Del</button>
                             </td>
                           </tr>,
-                          expandedNotes === w.id ? <tr key={"note-" + w.id}><td colSpan={99} style={{ padding: "8px 14px 12px", background: t.cardAlt, borderBottom: "1px solid " + t.border }}><textarea defaultValue={w.notes || ""} placeholder="Add notes for this week..." onBlur={async (e) => { const val = e.target.value.trim(); if (val !== (w.notes || "")) { const updated = { ...w, notes: val }; delete updated.created_at; delete updated.updated_at; await dbSaveTtsWeek(updated); setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, notes: val } : wk)); } }} style={{ width: "100%", minHeight: 60, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", outline: "none", fontFamily: "inherit" }} /><div style={{ fontSize: 10, color: t.textFaint, marginTop: 4 }}>Auto-saves when you click away</div></td></tr> : null,
+                          expandedNotes === w.id ? <tr key={"detail-" + w.id}><td colSpan={99} style={{ padding: "12px 16px", background: t.cardAlt, borderBottom: "2px solid " + t.border }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Week notes</div>
+                                <textarea defaultValue={w.notes || ""} placeholder={"Top performing video:\nContent types:\nAnything unusual:"} onBlur={async (e) => { const val = e.target.value.trim(); if (val !== (w.notes || "")) { const upd = { ...w, notes: val }; delete upd.created_at; delete upd.updated_at; await dbSaveTtsWeek(upd); setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, notes: val } : wk)); } }} style={{ width: "100%", minHeight: 80, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", outline: "none", fontFamily: "inherit", lineHeight: 1.6 }} />
+                                {w.ai_summary ? <div style={{ marginTop: 10, padding: 12, background: t.isLight ? "#f0fdf4" : "#0a1f0f", borderRadius: 8, border: "1px solid " + (t.isLight ? "#bbf7d0" : "#14532d") }}><div style={{ fontSize: 10, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>IB-Ai analysis</div><div style={{ fontSize: 12, color: t.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{w.ai_summary}</div><div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>Generated {w.ai_analyzed_at ? new Date(w.ai_analyzed_at).toLocaleDateString() : ""}</div></div> : null}
+                                <button onClick={() => analyzeWeek(w)} disabled={analyzingWeek === w.id} style={{ marginTop: 8, padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer" }}>{analyzingWeek === w.id ? "Analyzing..." : w.ai_summary ? "Re-analyze with IB-Ai" : "Analyze with IB-Ai"}</button>
+                              </div>
+                              <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>Creator attribution</div>
+                                  <button onClick={() => setAddingCreator(w.id)} style={{ padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>+ Add creator</button>
+                                </div>
+                                {(weekCreators[w.id] || []).length === 0 ? <div style={{ padding: 16, textAlign: "center", color: t.textFaint, fontSize: 11, background: t.card, borderRadius: 8, border: "1px solid " + t.border }}>No creators attributed. Add creators to track who drove GMV.</div> : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    {(weekCreators[w.id] || []).map(cw => (<div key={cw.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: t.card, borderRadius: 8, border: "1px solid " + t.border, fontSize: 11 }}><div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{(cw.creator_handle || "?")[0]}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, color: t.text }}>@{cw.creator_handle}</div><div style={{ color: t.textFaint, fontSize: 10 }}>{cw.videos_posted} videos · {fmtNum(cw.impressions)} impr · {cw.orders} orders</div></div><div style={{ fontWeight: 800, color: t.green, fontSize: 13 }}>{fmtDol(cw.gmv)}</div><button onClick={async () => { await dbDeleteTtsCreatorWeekly(cw.id); setWeekCreators(prev => ({ ...prev, [w.id]: (prev[w.id] || []).filter(x => x.id !== cw.id) })); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 10 }}>x</button></div>))}
+                                    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 10px", fontSize: 10, color: t.textFaint }}><span>{(weekCreators[w.id] || []).length} creators</span><span>Attributed: {fmtDol((weekCreators[w.id] || []).reduce((s, c) => s + Number(c.gmv || 0), 0))} of {fmtDol(w.tts_gmv)} ({Number(w.tts_gmv) > 0 ? Math.round(((weekCreators[w.id] || []).reduce((s, c) => s + Number(c.gmv || 0), 0) / Number(w.tts_gmv)) * 100) : 0}%)</span></div>
+                                  </div>
+                                )}
+                                {addingCreator === w.id ? (
+                                  <div style={{ marginTop: 8, padding: 10, background: t.card, borderRadius: 8, border: "1px solid " + t.green + "30" }}>
+                                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 6, fontSize: 11 }}>
+                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Creator</div><select id={"cw-h-" + w.id} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11 }}><option value="">Select</option>{(typeof creators !== "undefined" ? creators : []).filter(cr => cr.tiktokHandle || cr.handle).map(cr => <option key={cr.id} value={cr.id + "|" + (cr.tiktokHandle || cr.handle || "")}>{cr.tiktokHandle || cr.handle || cr.instagramHandle}</option>)}</select></div>
+                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Videos</div><input id={"cw-v-" + w.id} type="number" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
+                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Impressions</div><input id={"cw-i-" + w.id} type="number" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
+                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>GMV ($)</div><input id={"cw-g-" + w.id} type="number" step="0.01" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
+                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Orders</div><input id={"cw-o-" + w.id} type="number" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                                      <button onClick={() => setAddingCreator(null)} style={{ padding: "4px 12px", borderRadius: 4, fontSize: 10, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Cancel</button>
+                                      <button onClick={async () => { const sel = document.getElementById("cw-h-" + w.id)?.value || ""; const [cId, handle] = sel.includes("|") ? sel.split("|") : ["", sel]; if (!handle) { alert("Select a creator"); return; } const result = await dbSaveTtsCreatorWeekly({ week_id: w.id, creator_id: cId || null, creator_handle: handle, videos_posted: Number(document.getElementById("cw-v-" + w.id)?.value) || 0, impressions: Number(document.getElementById("cw-i-" + w.id)?.value) || 0, gmv: Number(document.getElementById("cw-g-" + w.id)?.value) || 0, orders: Number(document.getElementById("cw-o-" + w.id)?.value) || 0 }); if (!result.error && result.data) { setWeekCreators(prev => ({ ...prev, [w.id]: [...(prev[w.id] || []), result.data] })); setAddingCreator(null); } }} style={{ padding: "4px 12px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "none", background: t.green, color: "#fff", cursor: "pointer" }}>Add</button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td></tr> : null,
                         ];
                       }
                       return null;
@@ -9888,7 +9963,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
         </div>
       ) : null}
 
-      {tab === "tts_native" ? <TtsNativeTab t={t} S={_S} teamMembers={[]} /> : null}
+      {tab === "tts_native" ? <TtsNativeTab t={t} S={_S} teamMembers={[]} creators={_creators} /> : null}
 
       {!loading && tab === "sops" ? (
         <div>

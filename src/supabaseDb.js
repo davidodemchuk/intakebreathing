@@ -361,6 +361,7 @@ export async function dbSaveTtsWeek(row) {
     organic_gmv: row.organic_gmv || 0, paid_gmv: row.paid_gmv || 0,
     entered_by: row.entered_by || null, gmv_source: row.gmv_source || "manual",
     impressions_source: row.impressions_source || "manual", ad_spend_source: row.ad_spend_source || "manual",
+    ai_summary: row.ai_summary || null, ai_analyzed_at: row.ai_analyzed_at || null,
   };
   if (row.id) {
     const { error } = await supabase.from("tts_weekly").update(clean).eq("id", row.id);
@@ -394,6 +395,28 @@ export async function dbSaveTtsTarget(row) {
   const { data, error } = await supabase.from("tts_monthly_targets").upsert(row, { onConflict: "month" }).select().single();
   if (error) { console.error("[db] Save TTS target error:", error); return { error }; }
   return { data, error: null };
+}
+
+export async function dbLoadTtsCreatorWeekly(weekId) {
+  const { data, error } = await supabase.from("tts_creator_weekly").select("*").eq("week_id", weekId).order("gmv", { ascending: false });
+  if (error) { console.error("[db] Load TTS creator weekly error:", error); return []; }
+  return data || [];
+}
+
+export async function dbSaveTtsCreatorWeekly(row) {
+  const clean = { week_id: row.week_id, creator_id: row.creator_id || null, creator_handle: row.creator_handle || "", videos_posted: row.videos_posted || 0, impressions: row.impressions || 0, gmv: row.gmv || 0, orders: row.orders || 0, commission: row.commission || 0, top_video_url: row.top_video_url || "", notes: row.notes || "" };
+  if (row.id) {
+    const { error } = await supabase.from("tts_creator_weekly").update(clean).eq("id", row.id);
+    return { error };
+  } else {
+    const { data, error } = await supabase.from("tts_creator_weekly").insert(clean).select().single();
+    return { data, error };
+  }
+}
+
+export async function dbDeleteTtsCreatorWeekly(id) {
+  const { error } = await supabase.from("tts_creator_weekly").delete().eq("id", id);
+  return { error };
 }
 
 export async function dbLoadTtsMilestones() {
