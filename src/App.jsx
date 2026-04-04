@@ -54,7 +54,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.32.0";
+const APP_VERSION = "6.33.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9170,39 +9170,89 @@ function TtsNativeTab({ t, S, teamMembers }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {weeks.map((w, ri) => {
-                    const c = calc(w);
-                    const pw = weeks[ri + 1] || null;
-                    const bb = "1px solid " + t.border + "40";
-                    const altBg = t.isLight ? "#f2f0ea" : "#1a1a1a";
-                    const hoverBg = t.isLight ? "#ece9e0" : "#1e1e1e";
-                    const cs = { padding: "10px 12px", borderBottom: bb, textAlign: "right", fontSize: 12 };
-                    return (
-                      <tr key={w.id} style={{ background: ri % 2 ? altBg : "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = hoverBg; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? altBg : "transparent"; }}>
-                        <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
-                        <EditableCell rowId={w.id} column="superfiliate_invites" value={w.superfiliate_invites} format={fmtNum} style={cs} />
-                        <EditableCell rowId={w.id} column="sample_requests" value={w.sample_requests} format={fmtNum} style={cs} />
-                        <EditableCell rowId={w.id} column="samples_posted" value={w.samples_posted} format={fmtNum} style={cs} />
-                        <EditableCell rowId={w.id} column="videos_posted" value={w.videos_posted} format={fmtNum} style={cs} />
-                        <EditableCell rowId={w.id} column="impressions" value={w.impressions} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</EditableCell>
-                        <EditableCell rowId={w.id} column="orders" value={w.orders} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</EditableCell>
-                        <EditableCell rowId={w.id} column="tts_gmv" value={w.tts_gmv} format={fmtDol} step="0.01" style={{ ...cs, fontWeight: 700, fontSize: 13, color: t.green }}>{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</EditableCell>
-                        <EditableCell rowId={w.id} column="ad_spend" value={w.ad_spend} format={fmtDol} step="0.01" style={{ ...cs, color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</EditableCell>
-                        <td style={{ ...cs, color: t.textMuted }}>{c.sv_ratio}</td>
-                        <td style={{ ...cs, fontWeight: 700, fontSize: 13, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}{pw ? <WowArrow current={Number(w.ad_spend) > 0 ? Number(w.tts_gmv) / Number(w.ad_spend) : 0} previous={Number(pw.ad_spend) > 0 ? Number(pw.tts_gmv) / Number(pw.ad_spend) : 0} /> : null}</td>
-                        <td style={{ ...cs, color: t.textMuted }}>{c.cpm}</td>
-                        <td style={cs}>{c.net_per_video}</td>
-                        <td style={{ ...cs, fontWeight: 700, fontSize: 13, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}{pw ? (() => { const p = calc(pw); const cVal = Number(String(c.net_revenue).replace(/[$,]/g, "")) || 0; const pVal = Number(String(p.net_revenue).replace(/[$,]/g, "")) || 0; return <WowArrow current={cVal} previous={pVal} />; })() : null}</td>
-                        <td style={{ ...cs, textAlign: "left" }}>
-                          {(() => { const member = teamMembers.find(m => m.id === w.entered_by); if (!member) return <span style={{ fontSize: 10, color: t.textFaint }}>{"\u2014"}</span>; return <div style={{ display: "flex", alignItems: "center", gap: 4 }}>{member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: 9, objectFit: "cover" }} /> : null}<span style={{ fontSize: 10, color: t.textMuted }}>{member.name.split(" ")[0]}</span></div>; })()}
-                        </td>
-                        <td style={{ ...cs, textAlign: "center", whiteSpace: "nowrap" }}>
-                          <button onClick={(e) => { e.stopPropagation(); editWeek(w); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11, marginRight: 6 }} title="Edit full row">Edit</button>
-                          <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">Del</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {(() => {
+                    const sumW = (ws, k) => ws.reduce((s, w) => s + (Number(w[k]) || 0), 0);
+                    const grouped = [];
+                    let curMonth = "", curQ = "", mWeeks = [], qWeeks = [];
+                    weeks.forEach((w, i) => {
+                      const d = new Date(w.week_start);
+                      const month = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " " + d.getFullYear();
+                      if (q !== curQ) { if (curQ && qWeeks.length) grouped.push({ type: "qt", label: curQ, ws: [...qWeeks] }); curQ = q; qWeeks = []; grouped.push({ type: "qh", label: q }); }
+                      if (month !== curMonth) { if (curMonth && mWeeks.length) grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); curMonth = month; mWeeks = []; grouped.push({ type: "mh", label: month }); }
+                      mWeeks.push(w); qWeeks.push(w);
+                      grouped.push({ type: "w", data: w, pw: weeks[i + 1] || null });
+                    });
+                    if (mWeeks.length) grouped.push({ type: "mt", label: curMonth, ws: mWeeks });
+                    if (qWeeks.length) grouped.push({ type: "qt", label: curQ, ws: qWeeks });
+
+                    return grouped.map((row, ri) => {
+                      if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: t.isLight ? "#d4d0c5" : "#2a2a2a" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", borderBottom: "2px solid " + t.border }}>{row.label}</td></tr>;
+                      if (row.type === "mh") return <tr key={"mh" + ri} style={{ background: t.isLight ? "#e2ded4" : "#222222" }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, color: t.textSecondary || t.text, borderBottom: "1px solid " + t.border }}>{row.label}</td></tr>;
+                      if (row.type === "mt") {
+                        const ws = row.ws; const tg = sumW(ws,"tts_gmv"); const ta = sumW(ws,"ad_spend"); const tv = sumW(ws,"videos_posted"); const ti = sumW(ws,"impressions"); const to = sumW(ws,"orders");
+                        const nr = tg - ta - sumW(ws,"sample_cost") - sumW(ws,"creator_payments") - sumW(ws,"tts_commission");
+                        const roas = ta > 0 ? (tg/ta).toFixed(2)+"x" : "\u2014";
+                        const mtb = "2px solid " + t.border; const mts = { padding: "8px 12px", fontSize: 11, fontWeight: 700, textAlign: "right", color: t.textMuted, borderBottom: mtb };
+                        return <tr key={"mt"+ri} style={{ background: t.isLight ? "#ece9e0" : "#1c1c1c" }}>
+                          <td style={{ ...mts, textAlign: "left" }}>{row.label} total</td>
+                          <td style={mts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={mts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={mts}>{fmtNum(sumW(ws,"samples_posted"))}</td><td style={mts}>{fmtNum(tv)}</td>
+                          <td style={mts}>{fmtNum(ti)}</td><td style={mts}>{fmtNum(to)}</td>
+                          <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: t.green }}>{fmtDol(tg)}</td><td style={mts}>{fmtDol(ta)}</td><td style={mts}>{"\u2014"}</td>
+                          <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? t.green : t.text }}>{roas}</td>
+                          <td style={mts}>{ti > 0 ? "$"+(ta/(ti/1000)).toFixed(2) : "\u2014"}</td><td style={mts}>{tv > 0 ? "$"+Math.round(nr/tv).toLocaleString() : "\u2014"}</td>
+                          <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: nr >= 0 ? t.green : (t.red||"#ef4444") }}>{"$"+Math.round(nr).toLocaleString()}</td><td style={{ borderBottom: mtb }}></td><td style={{ borderBottom: mtb }}></td>
+                        </tr>;
+                      }
+                      if (row.type === "qt") {
+                        const ws = row.ws; const tg = sumW(ws,"tts_gmv"); const ta = sumW(ws,"ad_spend");
+                        const nr = tg - ta - sumW(ws,"sample_cost") - sumW(ws,"creator_payments") - sumW(ws,"tts_commission");
+                        const roas = ta > 0 ? (tg/ta).toFixed(2)+"x" : "\u2014";
+                        const qtb = "3px solid " + t.border; const qts = { padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "right", color: t.text, borderBottom: qtb };
+                        return <tr key={"qt"+ri} style={{ background: t.isLight ? "#d4d0c5" : "#2a2a2a" }}>
+                          <td style={{ ...qts, textAlign: "left", padding: "10px 14px" }}>{row.label} total</td>
+                          <td colSpan={4} style={{ borderBottom: qtb }}></td>
+                          <td style={qts}>{fmtNum(sumW(ws,"impressions"))}</td><td style={qts}>{fmtNum(sumW(ws,"orders"))}</td>
+                          <td style={{ ...qts, color: t.green }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(ta)}</td><td style={{ borderBottom: qtb }}></td>
+                          <td style={{ ...qts, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? t.green : t.text }}>{roas}</td>
+                          <td colSpan={2} style={{ borderBottom: qtb }}></td>
+                          <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? t.green : (t.red||"#ef4444") }}>{"$"+Math.round(nr).toLocaleString()}</td>
+                          <td colSpan={2} style={{ borderBottom: qtb }}></td>
+                        </tr>;
+                      }
+                      if (row.type === "w") {
+                        const w = row.data; const pw = row.pw; const c = calc(w);
+                        const bb = "1px solid " + t.border + "40";
+                        const cs = { padding: "10px 12px", borderBottom: bb, textAlign: "right", fontSize: 12 };
+                        return (
+                          <tr key={"w-"+w.id} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                            <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
+                            <EditableCell rowId={w.id} column="superfiliate_invites" value={w.superfiliate_invites} format={fmtNum} style={cs} />
+                            <EditableCell rowId={w.id} column="sample_requests" value={w.sample_requests} format={fmtNum} style={cs} />
+                            <EditableCell rowId={w.id} column="samples_posted" value={w.samples_posted} format={fmtNum} style={cs} />
+                            <EditableCell rowId={w.id} column="videos_posted" value={w.videos_posted} format={fmtNum} style={cs} />
+                            <EditableCell rowId={w.id} column="impressions" value={w.impressions} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</EditableCell>
+                            <EditableCell rowId={w.id} column="orders" value={w.orders} format={fmtNum} style={cs}>{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</EditableCell>
+                            <EditableCell rowId={w.id} column="tts_gmv" value={w.tts_gmv} format={fmtDol} step="0.01" style={{ ...cs, fontWeight: 700, fontSize: 13, color: t.green }}>{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</EditableCell>
+                            <EditableCell rowId={w.id} column="ad_spend" value={w.ad_spend} format={fmtDol} step="0.01" style={{ ...cs, color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</EditableCell>
+                            <td style={{ ...cs, color: t.textMuted }}>{c.sv_ratio}</td>
+                            <td style={{ ...cs, fontWeight: 700, fontSize: 13, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}{pw ? <WowArrow current={Number(w.ad_spend) > 0 ? Number(w.tts_gmv) / Number(w.ad_spend) : 0} previous={Number(pw.ad_spend) > 0 ? Number(pw.tts_gmv) / Number(pw.ad_spend) : 0} /> : null}</td>
+                            <td style={{ ...cs, color: t.textMuted }}>{c.cpm}</td>
+                            <td style={cs}>{c.net_per_video}</td>
+                            <td style={{ ...cs, fontWeight: 700, fontSize: 13, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}{pw ? (() => { const p = calc(pw); const cVal = Number(String(c.net_revenue).replace(/[$,]/g, "")) || 0; const pVal = Number(String(p.net_revenue).replace(/[$,]/g, "")) || 0; return <WowArrow current={cVal} previous={pVal} />; })() : null}</td>
+                            <td style={{ ...cs, textAlign: "left" }}>
+                              {(() => { const member = teamMembers.find(m => m.id === w.entered_by); if (!member) return <span style={{ fontSize: 10, color: t.textFaint }}>{"\u2014"}</span>; return <div style={{ display: "flex", alignItems: "center", gap: 4 }}>{member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: 9, objectFit: "cover" }} /> : null}<span style={{ fontSize: 10, color: t.textMuted }}>{member.name.split(" ")[0]}</span></div>; })()}
+                            </td>
+                            <td style={{ ...cs, textAlign: "center", whiteSpace: "nowrap" }}>
+                              <button onClick={(e) => { e.stopPropagation(); editWeek(w); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11, marginRight: 6 }} title="Edit full row">Edit</button>
+                              <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">Del</button>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return null;
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
