@@ -52,7 +52,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.27.0";
+const APP_VERSION = "6.28.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8819,6 +8819,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const [viewMode, setViewMode] = useState("table");
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [currentEnterer, setCurrentEnterer] = useState(() => { try { return localStorage.getItem("tts_enterer") || ""; } catch { return ""; } });
 
   useEffect(() => {
     (async () => {
@@ -8889,7 +8890,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
     setShowForm(true);
   };
 
-  const editWeek = (row) => { setFormData({ ...row }); setEditingRow(row.id); setShowForm(true); };
+  const editWeek = (row) => { setFormData({ ...row }); setEditingRow(row.id); setShowForm(true); if (row.entered_by) setCurrentEnterer(row.entered_by); };
 
   const copyLastWeek = () => {
     if (weeks.length > 0) {
@@ -8904,6 +8905,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
     const payload = { ...formData };
     delete payload.created_at; delete payload.updated_at;
     if (!editingRow) delete payload.id;
+    if (currentEnterer) payload.entered_by = currentEnterer;
     const result = editingRow ? await dbSaveTtsWeek({ ...payload, id: editingRow }) : await dbSaveTtsWeek(payload);
     if (!result.error) {
       const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]);
@@ -8990,6 +8992,14 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{editingRow ? "Edit week" : "New week entry"}</div>
             <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 18, color: t.textFaint, cursor: "pointer" }}>x</button>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textFaint }}>Entering as</span>
+            <select value={currentEnterer} onChange={(e) => { setCurrentEnterer(e.target.value); try { localStorage.setItem("tts_enterer", e.target.value); } catch {} }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 12, border: "1px solid " + t.border, background: t.inputBg, color: t.text, cursor: "pointer" }}>
+              <option value="">Select your name</option>
+              {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            {(() => { const member = teamMembers.find(m => m.id === currentEnterer); if (!member?.avatar_url) return null; return <img src={member.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} />; })()}
+          </div>
           <div style={{ display: "flex", gap: 24 }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
@@ -9048,7 +9058,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1200 }}>
                 <thead>
                   <tr style={{ background: t.cardAlt }}>
-                    {["Week", "SF/Req/Ship", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", ""].map((h, i) => (
+                    {["Week", "SF/Req/Ship", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
                       <th key={i} style={{ padding: "8px 10px", textAlign: i < 2 ? "left" : "right", fontWeight: 600, color: t.textMuted, borderBottom: "1px solid " + t.border, whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -9073,6 +9083,9 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.cpm}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{c.net_per_video}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}{pw ? (() => { const p = calc(pw); const cVal = Number(String(c.net_revenue).replace(/[$,]/g, "")) || 0; const pVal = Number(String(p.net_revenue).replace(/[$,]/g, "")) || 0; return <WowArrow current={cVal} previous={pVal} />; })() : null}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb }}>
+                          {(() => { const member = teamMembers.find(m => m.id === w.entered_by); if (!member) return <span style={{ fontSize: 10, color: t.textFaint }}>{"\u2014"}</span>; return <div style={{ display: "flex", alignItems: "center", gap: 4 }}>{member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: 9, objectFit: "cover" }} /> : null}<span style={{ fontSize: 10, color: t.textMuted }}>{member.name.split(" ")[0]}</span></div>; })()}
+                        </td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "center" }}>
                           <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">x</button>
                         </td>
