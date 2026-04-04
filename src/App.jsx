@@ -2267,7 +2267,7 @@ function ibScoreTierColor(score) {
 }
 
 /** Build all enrichment structs from 11 parallel API raw responses. */
-function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingInstagramData = {}) {
+async function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingInstagramData = {}) {
   const ttProfile = raw.ttProfileRaw;
   const ttVideos = raw.ttVideosRaw;
   const ttShop = raw.ttShopRaw;
@@ -3020,7 +3020,7 @@ async function runElevenPlatformEnrichmentPipeline(cleanHandle, scrapeKey, aiKey
     throw e;
   }
 
-  const processed = processElevenPlatformApiResults(cleanHandle, igHandle, {
+  const processed = await processElevenPlatformApiResults(cleanHandle, igHandle, {
     ttProfileRaw,
     ttVideosRaw,
     ttShopRaw,
