@@ -55,7 +55,7 @@ import { ChangeRequestsPage, ChangeRequestWidget } from "./components/ChangeRequ
 import { notifySlack, notifyOwners } from "./utils/notifications.js";
 import VideoReformatter from "./components/VideoReformatter.jsx";
 import { Icon, CardIcon } from "./components/Icons.jsx";
-import { buildBriefExtractionPrompt, splitSentences, pick, getDefaultAiKnowledge, mergeAiKnowledge, normalizePlatforms, formatPlatformsDisplay, managerDisplayName, formatToneDisplay, generateBrief, mergeExtractedBriefToPrefill, getBriefFormBaseDefaults, UploadOldBrief, IBAiSourceOfTruth, EditableField, EditableRejectionLine, RejectionAddRow, RejectionSection, BriefDisplay, buildBriefPrintHtml } from "./components/BriefGenerator.jsx";
+import { PRODUCTS, productOptionName, VIBES, APPROVED_CLAIMS, BANNED_CLAIMS, buildRejectionsArray, PLATFORMS, MANAGERS, buildBriefExtractionPrompt, splitSentences, pick, getDefaultAiKnowledge, mergeAiKnowledge, normalizePlatforms, formatPlatformsDisplay, managerDisplayName, formatToneDisplay, generateBrief, mergeExtractedBriefToPrefill, getBriefFormBaseDefaults, UploadOldBrief, IBAiSourceOfTruth, EditableField, EditableRejectionLine, RejectionAddRow, RejectionSection, BriefDisplay, buildBriefPrintHtml } from "./components/BriefGenerator.jsx";
 import { supabase } from "./supabase.js";
 
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
@@ -865,70 +865,7 @@ function getS(t) {
 // INTAKE KNOWLEDGE BASE
 // ═══════════════════════════════════════════════════════════
 
-const PRODUCTS = [
-  "Starter Kit Black — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band.",
-  "Starter Kit Clear — Includes 4 sizes (S, M, L, XL) + 15 tab sets. Magnetic nasal dilator with reusable band.",
-  "Mouth Tape Sleep Strips — Mouth breathing prevention strips for better sleep.",
-  "Sports Tabs — High-adhesion replacement tabs for intense activity.",
-  "Refills — Standard replacement adhesive tab sets.",
-  "Case — Protective carrying case for the Intake band.",
-  "All Products",
-  "Other",
-];
-
-/** Brief form / stored briefs use the short name (before " — "). */
-function productOptionName(p) {
-  const s = String(p ?? "").trim();
-  const i = s.indexOf(" — ");
-  return i === -1 ? s : s.slice(0, i).trim();
-}
-
-const VIBES = ["Fun & Entertaining", "Educational / How-To", "Trend / Challenge", "Unboxing / First Impressions", "Lifestyle / Routine", "Before & After", "Storytelling / Testimonial", "ASMR / Satisfying", "Other"];
-
-const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"];
-const GENDERS = ["Men & Women", "Men", "Women"];
-
-const APPROVED_CLAIMS = [
-  "Opens wider, holds stronger, and never collapses",
-  "Drug-free — nothing to ingest, nothing wears off",
-  "Magnetic lift expands from the sides",
-  "Sweat-proof — designed for motocross and high-intensity training",
-  "Reusable band — only replace the tabs",
-  "Skin safe — hypoallergenic, latex-free, medical grade",
-  "FDA registered, made in USA",
-  "Starter Kit includes 4 sizes (S, M, L, XL) + 15 tab sets",
-  "90-day risk-free trial",
-  "Originally engineered for athletes, loved by everyone",
-  "Nothing goes inside your nose — fully external",
-];
-const BANNED_CLAIMS = [
-  '"Cures" or "treats" any medical condition',
-  '"Clears congestion" or "decongestant"',
-  '"Replaces medication" or "alternative to medication"',
-  '"Clinically proven" without substantiation or proper citation',
-  '"FDA approved" or "FDA cleared" — it is FDA registered, not approved',
-  '"Guarantees" fit or results',
-  '"Medical device" — it is an external nasal dilator',
-  'Any diagnosis language like "you have sleep apnea"',
-  '"Permanently" changes anything — effects are while wearing only',
-];
-
-const DEFAULT_REJECTIONS = [
-  "Band is worn upside down — revisions will be required",
-  "Adhesive tabs are not fully adhered to the nose — both sides must be flat and sealed before filming",
-  "Applicator tool visible in the video — the applicator is for personal use only, not on camera",
-];
-
-function parseCustomRejections(text) {
-  if (!text || typeof text !== "string") return [];
-  return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-}
-
-function buildRejectionsArray(d, defaultRejectionsOverride) {
-  const custom = parseCustomRejections(d?.customRejections);
-  const base = Array.isArray(defaultRejectionsOverride) && defaultRejectionsOverride.length ? defaultRejectionsOverride : DEFAULT_REJECTIONS;
-  return [...base, ...custom];
-}
+// ═══ Brief constants (PRODUCTS, VIBES, etc.) moved to ./components/BriefGenerator.jsx ═══
 
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
 const CREATOR_ALLOWED_VIEWS = ["library", "display"];
@@ -3033,66 +2970,7 @@ function sortCreatorsList(arr, sortKey) {
 
 // genShareId moved to utils/helpers.js
 
-const PLATFORMS = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook", "Other"];
-
-const MANAGERS = ["Summer", "Mike Max", "David", "Chris", "Alex", "Other"];
-
-const AI_STEPS = [
-  { id: "analyze", label: "Analyzing campaign inputs", duration: 2000 },
-  { id: "audience", label: "Profiling target audience", duration: 3000 },
-  { id: "hooks", label: "Writing scroll-stopping hooks", duration: 4000 },
-  { id: "story", label: "Building Problem → Agitate → Solution arc", duration: 6000 },
-  { id: "compliance", label: "Checking compliance guardrails", duration: 3000 },
-  { id: "overlays", label: "Generating overlay & visual ideas", duration: 3000 },
-  { id: "polish", label: "Polishing final brief", duration: 3000 },
-];
-
-const VIDEO_REFORMAT_GROUPS = [
-  {
-    title: "META ADS",
-    items: [
-      { id: "meta-feed-sq", name: "Feed Square", ratio: "1:1", dimensions: "1080×1080", placement: "Facebook & Instagram Feed", recommended: true },
-      { id: "meta-feed-v", name: "Feed Vertical", ratio: "4:5", dimensions: "1080×1350", placement: "FB & IG Feed (mobile optimized)", recommended: true },
-      { id: "meta-stories", name: "Stories & Reels", ratio: "9:16", dimensions: "1080×1920", placement: "FB/IG Stories, Reels", recommended: true },
-      { id: "meta-instream", name: "In-Stream", ratio: "16:9", dimensions: "1920×1080", placement: "Facebook In-Stream, Video Feed" },
-      { id: "meta-carousel", name: "Carousel", ratio: "1:1", dimensions: "1080×1080", placement: "FB & IG Carousel" },
-    ],
-  },
-  {
-    title: "YOUTUBE ADS",
-    items: [
-      { id: "yt-instream", name: "In-Stream / Pre-Roll", ratio: "16:9", dimensions: "1920×1080", placement: "Skippable & Non-Skippable", recommended: true },
-      { id: "yt-shorts", name: "Shorts", ratio: "9:16", dimensions: "1080×1920", placement: "YouTube Shorts", recommended: true },
-      { id: "yt-discovery", name: "Discovery", ratio: "1:1", dimensions: "1080×1080", placement: "YouTube Home & Search" },
-      { id: "yt-bumper", name: "Bumper", ratio: "16:9", dimensions: "1920×1080", placement: "6-second Bumper Ads" },
-    ],
-  },
-  {
-    title: "TIKTOK",
-    items: [
-      { id: "tt-native", name: "TikTok Native", ratio: "9:16", dimensions: "1080×1920", placement: "TikTok Feed", recommended: true },
-    ],
-  },
-];
-
-// formatCount moved to utils/helpers.js
-
-// durationToSeconds, gcd, aspectRatioLabel moved to utils/helpers.js
-
-const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
-const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
-
-const SUPERVISION_LEVELS = [
-  { value: "full", label: "Full Review", desc: "Manager will request edits before approval" },
-  { value: "light", label: "Light Touch", desc: "Minor feedback may be given, but mostly trust the creator" },
-  { value: "handsoff", label: "Hands Off", desc: "Submit and done — no revision rounds expected" },
-];
-
-const SUPERVISION_FORM_HINTS = {
-  full: "You'll request edits before approving",
-  light: "Minor feedback possible, mostly trust the creator",
-  handsoff: "Submit and done — no back and forth",
-};
+// ═══ Brief form constants (PLATFORMS, MANAGERS, etc.) moved to ./components/BriefGenerator.jsx ═══
 
 // ═══ BriefGenerator functions moved to ./components/BriefGenerator.jsx ═══
 // ═══ Creator Portal components moved to ./components/CreatorPortal.jsx ═══
