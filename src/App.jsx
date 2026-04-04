@@ -9792,23 +9792,6 @@ export default function App() {
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Intake Breathing</div>
               <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Partnerships</div>
 
-              {/* Stats row */}
-              <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
-                <div style={{ flex: 1, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow }}>
-                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Active creators</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginTop: 2 }}>{activeCreatorCount}</div>
-                </div>
-                <div style={{ flex: 1, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow }}>
-                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Briefs</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: t.text, marginTop: 2 }}>{library.length}</div>
-                </div>
-                <div style={{ flex: 1, background: t.card, border: openChangeRequests > 0 ? "1px solid " + t.orange + "60" : "1px solid " + t.border, borderRadius: 10, padding: "14px 18px", boxShadow: t.shadow, cursor: "pointer" }} onClick={() => navigate("changeRequests")}>
-                  <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Open requests</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: openChangeRequests > 0 ? t.orange : t.textFaint, marginTop: 2 }}>{openChangeRequests}</div>
-                  {openChangeRequests > 0 ? <div style={{ fontSize: 10, color: t.orange }}>needs attention</div> : <div style={{ fontSize: 10, color: t.textFaint }}>all clear</div>}
-                </div>
-              </div>
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
                 <div style={homeCard(t.green)} onClick={() => navigate("ugcDashboard")}
                   onMouseEnter={(e) => homeHoverIn(e, t.green)} onMouseLeave={(e) => homeHoverOut(e, t.green)}>
