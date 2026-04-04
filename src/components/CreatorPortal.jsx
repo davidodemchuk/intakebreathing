@@ -3,61 +3,6 @@ import { supabase } from "../supabase.js";
 
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
 
-function ManagerCreatorChat({ creatorId, t }) {
-  const [msgs, setMsgs] = useState([]);
-  const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!creatorId) return;
-    (async () => {
-      const { data } = await supabase.from("messages").select("*").eq("creator_id", creatorId).order("created_at", { ascending: true });
-      setMsgs(data || []);
-      await supabase.from("messages").update({ read: true }).eq("creator_id", creatorId).eq("sender", "creator").eq("read", false);
-      setLoading(false);
-    })();
-
-    const ch = supabase
-      .channel(`mgr-msg-${creatorId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `creator_id=eq.${creatorId}` }, (p) => {
-        setMsgs((prev) => [...prev, p.new]);
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [creatorId]);
-
-  const send = async () => {
-    if (!draft.trim()) return;
-    const m = draft.trim();
-    setDraft("");
-    await supabase.from("messages").insert({ creator_id: creatorId, sender: "manager", message: m });
-  };
-
-  return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ fontSize: 14, fontWeight: 800, color: t.text, marginBottom: 12 }}>Messages</div>
-      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, maxHeight: 300, overflowY: "auto" }}>
-        {loading ? <div style={{ color: t.textFaint, fontSize: 12 }}>Loading...</div> : null}
-        {!loading && msgs.length === 0 ? <div style={{ color: t.textFaint, fontSize: 12 }}>No messages yet.</div> : null}
-        {msgs.map((m) => (
-          <div key={m.id} style={{ display: "flex", justifyContent: m.sender === "manager" ? "flex-end" : "flex-start", marginBottom: 6 }}>
-            <div style={{ maxWidth: "75%", padding: "8px 12px", borderRadius: 10, background: m.sender === "manager" ? t.blue + "15" : t.cardAlt, border: `1px solid ${m.sender === "manager" ? t.blue + "25" : t.border}` }}>
-              <div style={{ fontSize: 12, color: t.text, lineHeight: 1.5 }}>{m.message}</div>
-              <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>{new Date(m.created_at).toLocaleString()}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Message creator..." style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 12, outline: "none" }} />
-        <button type="button" onClick={send} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: t.blue, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Send</button>
-      </div>
-    </div>
-  );
-}
-
 function ProfilePreview({ profile, platform, t }) {
   if (!profile) return null;
   const fmtNum = (n) => { if (n == null) return "—"; if (n >= 1e6) return (n / 1e6).toFixed(1) + "M"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "K"; return String(n); };
@@ -804,4 +749,4 @@ Return ONLY this JSON (no other text):
 }
 
 
-export { ManagerCreatorChat, CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView };
+export { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView };

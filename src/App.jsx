@@ -44,7 +44,7 @@ import {
   dbDeleteCampaignCreator,
 } from "./supabaseDb.js";
 import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
-import { ManagerCreatorChat, CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView } from "./components/CreatorPortal.jsx";
+import { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView } from "./components/CreatorPortal.jsx";
 import SettingsPanel, { HomepageSettingsBlock } from "./components/Settings.jsx";
 import { UGCDashboard, ManagerLogin, CreatorHubLanding } from "./components/UGCDashboard.jsx";
 import TtsNativeTab from "./components/TtsNative.jsx";
@@ -8159,8 +8159,6 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         />
       </div>
 
-      <ManagerCreatorChat creatorId={c.id} t={t} />
-
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Video Log</div>
@@ -9696,9 +9694,6 @@ export default function App() {
                 {section === "creatorHub" && (
                   <>
                     <button type="button" style={S.navBtn(view === "creatorHub" || view === "ugcDashboard")} onClick={() => navigate("creatorHub")}>Creator Hub</button>
-                    <button type="button" style={S.navBtn(view === "creators" || view === "creatorDetail")} onClick={() => navigate("creators")}>Creators</button>
-                    <button type="button" style={S.navBtn(view === "create")} onClick={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
-                    <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
                     <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
                   </>
                 )}
@@ -9888,13 +9883,6 @@ export default function App() {
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
                   <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
-                </div>
-
-                <div style={{ ...homeCard(t.textFaint), cursor: "default", opacity: 0.5 }}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.textFaint} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Influencer Buys</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Manage campaigns, rates, and spend</div>
-                  <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 600 }}>Coming soon</div>
                 </div>
 
                 <div style={homeCard(t.blue)} onClick={() => navigate("tools")}

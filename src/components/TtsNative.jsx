@@ -56,8 +56,8 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
   const [milestones, setMilestones] = useState([]);
   const [showMilestoneForm, setShowMilestoneForm] = useState(false);
   const [milestoneFormData, setMilestoneFormData] = useState({});
-  const [weekCreators, setWeekCreators] = useState({});
-  const [addingCreator, setAddingCreator] = useState(null);
+
+
   const [analyzingWeek, setAnalyzingWeek] = useState(null);
   const defaultColWidths = { week: 140, sf_invites: 90, requests: 85, shipped: 80, videos: 75, impressions: 110, orders: 75, gmv: 120, org_gmv: 100, paid_gmv: 100, ad_spend: 100, sv: 60, roas: 75, cpm: 70, net_video: 90, net_rev: 110, entered_by: 80, actions: 100 };
   const [colWidths, setColWidths] = useState(() => { try { const saved = localStorage.getItem("tts_col_widths"); return saved ? { ...defaultColWidths, ...JSON.parse(saved) } : { ...defaultColWidths }; } catch { return { ...defaultColWidths }; } });
@@ -88,12 +88,8 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
     return () => document.removeEventListener("click", handler);
   }, [entererDropdownOpen]);
 
-  const loadWeekCreators = async (weekId) => {
-    if (weekCreators[weekId]) return;
-    const data = await dbLoadTtsCreatorWeekly(weekId);
-    setWeekCreators(prev => ({ ...prev, [weekId]: data }));
-  };
-  useEffect(() => { if (expandedNotes) loadWeekCreators(expandedNotes); }, [expandedNotes]);
+
+
 
   const [aiError, setAiError] = useState(null);
   const analyzeWeek = async (w) => {
@@ -571,18 +567,18 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0", fontSize: 12, tableLayout: "fixed", minWidth: Object.values(colWidths).reduce((s, w) => s + w, 0) }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border, height: 44 }}>
-                    {(() => { const hs = { padding: "10px 12px", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }; const ho = weeks.some(w => Number(w.orders) > 0); const api = <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.blue + "15", color: t.blue, fontWeight: 600, verticalAlign: "middle", textTransform: "none", marginLeft: 3 }}>API</span>; return <>
+                    {(() => { const hs = { padding: "10px 12px", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }; const ho = weeks.some(w => Number(w.orders) > 0); return <>
                       <ResizableTh colKey="week" style={{ ...hs, textAlign: "left" }}>Week</ResizableTh>
                       <ResizableTh colKey="sf_invites" style={{ ...hs, textAlign: "right" }}>SF Invites</ResizableTh>
                       <ResizableTh colKey="requests" style={{ ...hs, textAlign: "right" }}>Requests</ResizableTh>
                       <ResizableTh colKey="shipped" style={{ ...hs, textAlign: "right" }}>Shipped</ResizableTh>
                       <ResizableTh colKey="videos" style={{ ...hs, textAlign: "right" }}>Videos</ResizableTh>
-                      <ResizableTh colKey="impressions" style={{ ...hs, textAlign: "right" }}>Impressions{api}</ResizableTh>
-                      <ResizableTh colKey="orders" style={{ ...hs, textAlign: "right", color: ho ? t.text : (t.orange || "#d4890a") }}>Orders{!ho ? " (!)" : ""}{api}</ResizableTh>
+                      <ResizableTh colKey="impressions" style={{ ...hs, textAlign: "right" }}>Impressions</ResizableTh>
+                      <ResizableTh colKey="orders" style={{ ...hs, textAlign: "right", color: ho ? t.text : (t.orange || "#d4890a") }}>Orders{!ho ? " (!)" : ""}</ResizableTh>
                       <ResizableTh colKey="gmv" style={{ ...hs, textAlign: "right" }}>GMV</ResizableTh>
-                      <ResizableTh colKey="org_gmv" style={{ ...hs, textAlign: "right" }}>Org GMV{api}</ResizableTh>
-                      <ResizableTh colKey="paid_gmv" style={{ ...hs, textAlign: "right" }}>Paid GMV{api}</ResizableTh>
-                      <ResizableTh colKey="ad_spend" style={{ ...hs, textAlign: "right" }}>Ad Spend{api}</ResizableTh>
+                      <ResizableTh colKey="org_gmv" style={{ ...hs, textAlign: "right" }}>Org GMV</ResizableTh>
+                      <ResizableTh colKey="paid_gmv" style={{ ...hs, textAlign: "right" }}>Paid GMV</ResizableTh>
+                      <ResizableTh colKey="ad_spend" style={{ ...hs, textAlign: "right" }}>Ad Spend</ResizableTh>
                       <ResizableTh colKey="sv" style={{ ...hs, textAlign: "right" }}>S/V</ResizableTh>
                       <ResizableTh colKey="roas" style={{ ...hs, textAlign: "right" }}>ROAS</ResizableTh>
                       <ResizableTh colKey="cpm" style={{ ...hs, textAlign: "right" }}>CPM</ResizableTh>
@@ -702,40 +698,15 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                             </td>
                           </tr>,
                           expandedNotes === w.id ? <tr key={"detail-" + w.id}><td colSpan={99} style={{ padding: "12px 16px", background: t.cardAlt, borderBottom: "2px solid " + t.border }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                               <div>
                                 <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Week notes</div>
                                 <textarea defaultValue={w.notes || ""} placeholder={"Top performing video:\nContent types:\nAnything unusual:"} onBlur={async (e) => { const val = e.target.value.trim(); if (val !== (w.notes || "")) { const upd = { ...w, notes: val }; delete upd.created_at; delete upd.updated_at; await dbSaveTtsWeek(upd); setWeeks(prev => prev.map(wk => wk.id === w.id ? { ...wk, notes: val } : wk)); } }} style={{ width: "100%", minHeight: 80, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", outline: "none", fontFamily: "inherit", lineHeight: 1.6 }} />
-                                {w.ai_summary ? <div style={{ marginTop: 10, padding: 12, background: t.isLight ? "#f0fdf4" : "#0a1f0f", borderRadius: 8, border: "1px solid " + (t.isLight ? "#bbf7d0" : "#14532d") }}><div style={{ fontSize: 10, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>IB-Ai analysis</div><div style={{ fontSize: 12, color: t.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{w.ai_summary}</div><div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>Generated {w.ai_analyzed_at ? new Date(w.ai_analyzed_at).toLocaleDateString() : ""}</div></div> : null}
-                                <button onClick={() => analyzeWeek(w)} disabled={analyzingWeek === w.id} style={{ marginTop: 8, padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer" }}>{analyzingWeek === w.id ? "Analyzing..." : w.ai_summary ? "Re-analyze with IB-Ai" : "Analyze with IB-Ai"}</button>
-                                {aiError && aiError.weekId === w.id ? <div style={{ marginTop: 6, padding: "6px 10px", borderRadius: 6, background: (t.red || "#ef4444") + "10", border: "1px solid " + (t.red || "#ef4444") + "30", fontSize: 11, color: t.red || "#ef4444" }}>Error: {aiError.message}</div> : null}
                               </div>
+                              {w.ai_summary ? <div style={{ padding: 12, background: t.isLight ? "#f0fdf4" : "#0a1f0f", borderRadius: 8, border: "1px solid " + (t.isLight ? "#bbf7d0" : "#14532d") }}><div style={{ fontSize: 10, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>IB-Ai analysis</div><div style={{ fontSize: 12, color: t.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{w.ai_summary}</div><div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>Generated {w.ai_analyzed_at ? new Date(w.ai_analyzed_at).toLocaleDateString() : ""}</div></div> : null}
                               <div>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>Creator attribution</div>
-                                  <button onClick={() => setAddingCreator(w.id)} style={{ padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>+ Add creator</button>
-                                </div>
-                                {(weekCreators[w.id] || []).length === 0 ? <div style={{ padding: 16, textAlign: "center", color: t.textFaint, fontSize: 11, background: t.card, borderRadius: 8, border: "1px solid " + t.border }}>No creators attributed. Add creators to track who drove GMV.</div> : (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                    {(weekCreators[w.id] || []).map(cw => (<div key={cw.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: t.card, borderRadius: 8, border: "1px solid " + t.border, fontSize: 11 }}><div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{(cw.creator_handle || "?")[0]}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, color: t.text }}>@{cw.creator_handle}</div><div style={{ color: t.textFaint, fontSize: 10 }}>{cw.videos_posted} videos · {fmtNum(cw.impressions)} impr · {cw.orders} orders</div></div><div style={{ fontWeight: 800, color: t.green, fontSize: 13 }}>{fmtDol(cw.gmv)}</div><button onClick={async () => { await dbDeleteTtsCreatorWeekly(cw.id); setWeekCreators(prev => ({ ...prev, [w.id]: (prev[w.id] || []).filter(x => x.id !== cw.id) })); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 10 }}>x</button></div>))}
-                                    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 10px", fontSize: 10, color: t.textFaint }}><span>{(weekCreators[w.id] || []).length} creators</span><span>Attributed: {fmtDol((weekCreators[w.id] || []).reduce((s, c) => s + Number(c.gmv || 0), 0))} of {fmtDol(w.tts_gmv)} ({Number(w.tts_gmv) > 0 ? Math.round(((weekCreators[w.id] || []).reduce((s, c) => s + Number(c.gmv || 0), 0) / Number(w.tts_gmv)) * 100) : 0}%)</span></div>
-                                  </div>
-                                )}
-                                {addingCreator === w.id ? (
-                                  <div style={{ marginTop: 8, padding: 10, background: t.card, borderRadius: 8, border: "1px solid " + t.green + "30" }}>
-                                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 6, fontSize: 11 }}>
-                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Creator</div><select id={"cw-h-" + w.id} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11 }}><option value="">Select</option>{(typeof creators !== "undefined" ? creators : []).filter(cr => cr.tiktokHandle || cr.handle).map(cr => <option key={cr.id} value={cr.id + "|" + (cr.tiktokHandle || cr.handle || "")}>{cr.tiktokHandle || cr.handle || cr.instagramHandle}</option>)}</select></div>
-                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Videos</div><input id={"cw-v-" + w.id} type="number" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
-                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Impressions</div><input id={"cw-i-" + w.id} type="number" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
-                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>GMV ($)</div><input id={"cw-g-" + w.id} type="number" step="0.01" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
-                                      <div><div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>Orders</div><input id={"cw-o-" + w.id} type="number" defaultValue={0} style={{ width: "100%", padding: "5px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, boxSizing: "border-box" }} /></div>
-                                    </div>
-                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
-                                      <button onClick={() => setAddingCreator(null)} style={{ padding: "4px 12px", borderRadius: 4, fontSize: 10, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Cancel</button>
-                                      <button onClick={async () => { const sel = document.getElementById("cw-h-" + w.id)?.value || ""; const [cId, handle] = sel.includes("|") ? sel.split("|") : ["", sel]; if (!handle) { alert("Select a creator"); return; } const result = await dbSaveTtsCreatorWeekly({ week_id: w.id, creator_id: cId || null, creator_handle: handle, videos_posted: Number(document.getElementById("cw-v-" + w.id)?.value) || 0, impressions: Number(document.getElementById("cw-i-" + w.id)?.value) || 0, gmv: Number(document.getElementById("cw-g-" + w.id)?.value) || 0, orders: Number(document.getElementById("cw-o-" + w.id)?.value) || 0 }); if (!result.error && result.data) { setWeekCreators(prev => ({ ...prev, [w.id]: [...(prev[w.id] || []), result.data] })); setAddingCreator(null); } }} style={{ padding: "4px 12px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "none", background: t.green, color: "#fff", cursor: "pointer" }}>Add</button>
-                                    </div>
-                                  </div>
-                                ) : null}
+                                <button onClick={() => analyzeWeek(w)} disabled={analyzingWeek === w.id} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer" }}>{analyzingWeek === w.id ? "Analyzing..." : w.ai_summary ? "Re-analyze with IB-Ai" : "Analyze with IB-Ai"}</button>
+                                {aiError && aiError.weekId === w.id ? <div style={{ marginTop: 6, padding: "6px 10px", borderRadius: 6, background: (t.red || "#ef4444") + "10", border: "1px solid " + (t.red || "#ef4444") + "30", fontSize: 11, color: t.red || "#ef4444" }}>Error: {aiError.message}</div> : null}
                               </div>
                             </div>
                           </td></tr> : null);
@@ -759,14 +730,6 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
               </table>
             </div>
           )}
-        </div>
-      ) : null}
-
-      {viewMode === "table" ? (
-        <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 10, color: t.textFaint, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.blue + "15", color: t.blue, fontWeight: 600 }}>API</span> Will be automated via TikTok API</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: 3, background: t.blue, display: "inline-block" }}></span> Auto-filled by API</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><svg width="10" height="10" viewBox="0 0 16 16" fill={t.orange}><rect x="3" y="7" width="10" height="8" rx="1.5" /><path d="M5 7V5a3 3 0 016 0v2" fill="none" stroke={t.orange} strokeWidth="1.5" strokeLinecap="round" /></svg> Manually overridden (API won't update)</div>
         </div>
       ) : null}
 
