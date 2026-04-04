@@ -9472,14 +9472,13 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                           <td style={qts}>{cpm}</td><td style={qts}>{npv}</td>
                           <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? (t.isLight ? "#0a7c3e" : "#4ade80") : "#ef4444" }}>{"$"+Math.round(nr).toLocaleString()}</td>
                           <td style={{ borderBottom: qtb }}></td><td style={{ borderBottom: qtb }}></td>
-                        </tr>, (() => { const nw = grouped.slice(ri + 1).find(r => r.type === "w"); if (!nw) return null; const dd = new Date(nw.data.week_start); return <tr key={"qbreak-" + ri}><td colSpan={99} style={{ padding: "10px 14px 2px", border: "none", background: "transparent" }}><span style={{ fontSize: 13, fontWeight: 800, color: t.isLight ? "#1a5c35" : "#4ade80", letterSpacing: "-0.01em" }}>{"Q" + (Math.floor(dd.getMonth() / 3) + 1) + " '" + String(dd.getFullYear()).slice(-2)}</span></td></tr>; })()];
+                        </tr>, grouped[ri + 1] ? <tr key={"qdiv-" + ri}><td colSpan={99} style={{ padding: "10px 0", border: "none", background: "transparent" }}><div style={{ display: "flex", alignItems: "center" }}><div style={{ width: 80, height: 3, background: t.isLight ? "#8bc4a0" : "#2d6b4a", borderRadius: "2px 0 0 2px" }} /><div style={{ flex: 1, height: 1, background: t.isLight ? "#d4e0d8" : "#1a2e22" }} /></div></td></tr> : null];
                       }
                       if (row.type === "w") {
                         const w = row.data; const pw = row.pw; const c = calc(w);
                         const bb = "1px solid " + t.border + "40";
                         const cs = { padding: "10px 12px", borderBottom: bb, textAlign: "right", fontSize: 12 };
                         const result = [];
-                        if (ri === 0) { const dd = new Date(w.week_start); result.push(<tr key="qlabel-top"><td colSpan={99} style={{ padding: "4px 14px", border: "none", background: "transparent" }}><span style={{ fontSize: 13, fontWeight: 800, color: t.isLight ? "#1a5c35" : "#4ade80", letterSpacing: "-0.01em" }}>{"Q" + (Math.floor(dd.getMonth() / 3) + 1) + " '" + String(dd.getFullYear()).slice(-2)}</span></td></tr>); }
                         result.push(
                           <tr key={"w-"+w.id} data-week={w.week_start} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                             <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap", borderLeft: "4px solid " + (t.isLight ? "#c2dccb" : "#1a3322") }}>{w.week_start.substring(5)} — {w.week_end?.substring(5)}</td>
