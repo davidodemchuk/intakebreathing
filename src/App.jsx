@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.35.0";
+const APP_VERSION = "6.36.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9039,34 +9039,46 @@ function TtsNativeTab({ t, S, teamMembers }) {
       {/* Trend charts */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "GMV trend", key: "tts_gmv", color: t.green, format: (v) => "$" + Math.round(v).toLocaleString() },
-          { label: "Impressions trend", key: "impressions", color: t.blue, format: (v) => v >= 1000000 ? (v / 1000000).toFixed(1) + "M" : v >= 1000 ? Math.round(v / 1000) + "K" : String(v) },
-          { label: "Videos trend", key: "videos_posted", color: t.orange || "#d4890a", format: (v) => String(Math.round(v)) },
+          { label: "GMV", key: "tts_gmv", color: t.green, format: (v) => "$" + Math.round(v).toLocaleString() },
+          { label: "Impressions", key: "impressions", color: t.blue, format: (v) => v >= 1000000 ? (v / 1000000).toFixed(1) + "M" : v >= 1000 ? Math.round(v / 1000).toLocaleString() + "K" : String(v) },
+          { label: "Videos posted", key: "videos_posted", color: t.orange || "#d4890a", format: (v) => String(Math.round(v)) },
         ].map(chart => {
-          const sorted = [...weeks].sort((a, b) => a.week_start.localeCompare(b.week_start)).slice(-12);
-          if (sorted.length < 2) return <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", boxShadow: t.shadow }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 8 }}>{chart.label}</div><div style={{ fontSize: 12, color: t.textFaint, textAlign: "center", padding: 20 }}>Need more data</div></div>;
+          const sorted = [...weeks].filter(w => Number(w[chart.key]) > 0).sort((a, b) => a.week_start.localeCompare(b.week_start)).slice(-20);
+          if (sorted.length < 2) return <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "16px 18px", boxShadow: t.shadow }}><div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 4 }}>{chart.label}</div><div style={{ fontSize: 12, color: t.textFaint, textAlign: "center", padding: 30 }}>Not enough data</div></div>;
           const values = sorted.map(w => Number(w[chart.key]) || 0);
           const max = Math.max(...values, 1); const min = Math.min(...values, 0); const range = max - min || 1;
-          const cw = 280; const ch = 60;
-          const points = values.map((v, i) => ({ x: (i / (values.length - 1)) * cw, y: ch - ((v - min) / range) * ch, val: v }));
+          const cW = 300; const cH = 80; const pL = 10; const pR = 10; const uW = cW - pL - pR;
+          const points = values.map((v, i) => ({ x: pL + (i / (values.length - 1)) * uW, y: cH - 8 - ((v - min) / range) * (cH - 16), val: v, date: sorted[i].week_start, month: new Date(sorted[i].week_start).toLocaleDateString("en-US", { month: "short" }), fullDate: new Date(sorted[i].week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) }));
           const pathD = points.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
-          const lastVal = values[values.length - 1]; const prevVal = values[values.length - 2];
-          const change = prevVal > 0 ? Math.round(((lastVal - prevVal) / prevVal) * 100) : 0;
+          const areaD = pathD + " L" + points[points.length - 1].x.toFixed(1) + " " + (cH - 4) + " L" + points[0].x.toFixed(1) + " " + (cH - 4) + " Z";
+          const lastVal = values[values.length - 1]; const firstVal = values[0];
+          const totalChange = firstVal > 0 ? Math.round(((lastVal - firstVal) / firstVal) * 100) : 0;
+          const xLabels = []; let lastMo = ""; points.forEach(p => { if (p.month !== lastMo) { xLabels.push({ x: p.x, label: p.month }); lastMo = p.month; } });
           return (
-            <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", boxShadow: t.shadow }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: t.textFaint }}>{chart.label}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: chart.color }}>{chart.format(lastVal)}</div>
+            <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "16px 18px", boxShadow: t.shadow }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{chart.label}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: chart.color }}>{chart.format(lastVal)}</div>
               </div>
-              <svg width="100%" viewBox={"0 -4 " + cw + " " + (ch + 8)} preserveAspectRatio="none" style={{ display: "block" }}>
-                <path d={pathD} fill="none" stroke={chart.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d={pathD + " L" + cw + " " + ch + " L0 " + ch + " Z"} fill={chart.color} opacity="0.08" />
-                {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 3.5 : 2} fill={i === points.length - 1 ? chart.color : chart.color + "60"} />)}
-              </svg>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                <span style={{ fontSize: 9, color: t.textFaint }}>{sorted[0].week_start.substring(5)}</span>
-                {change !== 0 ? <span style={{ fontSize: 9, fontWeight: 700, color: change > 0 ? t.green : (t.red || "#ef4444") }}>{change > 0 ? "+" : ""}{change}% WoW</span> : null}
-                <span style={{ fontSize: 9, color: t.textFaint }}>{sorted[sorted.length - 1].week_start.substring(5)}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: t.textFaint }}>{sorted.length} weeks with data</div>
+                {totalChange !== 0 ? <div style={{ fontSize: 11, fontWeight: 700, color: totalChange > 0 ? t.green : (t.red || "#ef4444") }}>{totalChange > 0 ? "+" : ""}{totalChange}% overall</div> : null}
+              </div>
+              <div style={{ position: "relative" }}
+                onMouseMove={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const mx = (e.clientX - rect.left) / (rect.width / cW); let cl = points[0]; let cd = Infinity; points.forEach(p => { const d = Math.abs(p.x - mx); if (d < cd) { cd = d; cl = p; } }); const tt = e.currentTarget.querySelector("[data-tooltip]"); const dot = e.currentTarget.querySelector("[data-hover-dot]"); const ln = e.currentTarget.querySelector("[data-hover-line]"); if (tt) { tt.style.display = "block"; tt.style.left = (cl.x / cW * 100) + "%"; tt.innerHTML = '<div style="font-weight:700;font-size:12px;color:' + chart.color + '">' + chart.format(cl.val) + '</div><div style="font-size:10px;color:' + t.textFaint + '">' + cl.fullDate + '</div>'; } if (dot) { dot.setAttribute("cx", cl.x); dot.setAttribute("cy", cl.y); dot.style.display = "block"; } if (ln) { ln.setAttribute("x1", cl.x); ln.setAttribute("x2", cl.x); ln.style.display = "block"; } }}
+                onMouseLeave={(e) => { const tt = e.currentTarget.querySelector("[data-tooltip]"); const dot = e.currentTarget.querySelector("[data-hover-dot]"); const ln = e.currentTarget.querySelector("[data-hover-line]"); if (tt) tt.style.display = "none"; if (dot) dot.style.display = "none"; if (ln) ln.style.display = "none"; }}>
+                <div data-tooltip style={{ display: "none", position: "absolute", top: -8, transform: "translateX(-50%)", background: t.card, border: "1px solid " + t.border, borderRadius: 8, padding: "6px 10px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", pointerEvents: "none", zIndex: 10, textAlign: "center", whiteSpace: "nowrap" }}></div>
+                <svg width="100%" viewBox={"0 0 " + cW + " " + (cH + 18)} preserveAspectRatio="none" style={{ display: "block", cursor: "crosshair" }}>
+                  <line x1={pL} y1={8} x2={cW - pR} y2={8} stroke={t.border} strokeWidth="0.5" />
+                  <line x1={pL} y1={cH / 2} x2={cW - pR} y2={cH / 2} stroke={t.border} strokeWidth="0.5" strokeDasharray="4 4" />
+                  <line x1={pL} y1={cH - 8} x2={cW - pR} y2={cH - 8} stroke={t.border} strokeWidth="0.5" />
+                  <path d={areaD} fill={chart.color} opacity="0.06" />
+                  <path d={pathD} fill="none" stroke={chart.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 4 : 2} fill={chart.color} opacity={i === points.length - 1 ? 1 : 0.4} />)}
+                  <circle data-hover-dot cx="0" cy="0" r="5" fill={chart.color} stroke={t.card} strokeWidth="2" style={{ display: "none" }} />
+                  <line data-hover-line x1="0" y1="4" x2="0" y2={cH - 4} stroke={chart.color} strokeWidth="0.5" strokeDasharray="3 3" style={{ display: "none" }} />
+                  {xLabels.map((lbl, i) => <text key={i} x={lbl.x} y={cH + 12} fill={t.textFaint} fontSize="9" textAnchor="middle" fontWeight="500">{lbl.label}</text>)}
+                </svg>
               </div>
             </div>
           );
