@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.41.0";
+const APP_VERSION = "6.42.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8788,7 +8788,6 @@ const PIPELINE_TAB_MAP = {
   ugc: "UGC Weekly",
   youtube: "YT Weekly",
   sops: null,
-  kpis: "Ashleighs KPIs",
 };
 
 const PIPELINE_SOP_TABS = [
@@ -9247,8 +9246,8 @@ function TtsNativeTab({ t, S, teamMembers }) {
                     let curMonth = "", curQ = "", mWeeks = [], qWeeks = [];
                     weeks.forEach((w) => {
                       const d = new Date(w.week_start);
-                      const month = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                      const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " " + d.getFullYear();
+                      const month = d.toLocaleDateString("en-US", { month: "long" }) + " '" + String(d.getFullYear()).slice(-2);
+                      const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " '" + String(d.getFullYear()).slice(-2);
                       if (q !== curQ) {
                         if (curMonth && mWeeks.length) { grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); mWeeks = []; }
                         if (curQ && qWeeks.length) { grouped.push({ type: "qt", label: curQ, ws: [...qWeeks] }); grouped.push({ type: "sp" }); qWeeks = []; }
@@ -9313,7 +9312,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                         const cs = { padding: "10px 12px", borderBottom: bb, textAlign: "right", fontSize: 12 };
                         return [
                           <tr key={"w-"+w.id} data-week={w.week_start} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                            <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
+                            <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start.substring(5)} — {w.week_end?.substring(5)}</td>
                             <EditableCell rowId={w.id} column="superfiliate_invites" value={w.superfiliate_invites} format={fmtNum} style={cs} />
                             <EditableCell rowId={w.id} column="sample_requests" value={w.sample_requests} format={fmtNum} style={cs} />
                             <EditableCell rowId={w.id} column="samples_posted" value={w.samples_posted} format={fmtNum} style={cs} />
@@ -9368,7 +9367,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                   {(() => {
                     let curQ = ""; const rows = [];
                     const mkQTotal = (qLabel) => {
-                      const qMs = monthly.filter(mm => { const dd = new Date(mm.month_start || mm.month + "-01"); return ("Q" + (Math.floor(dd.getMonth() / 3) + 1) + " " + dd.getFullYear()) === qLabel; });
+                      const qMs = monthly.filter(mm => { const dd = new Date(mm.month_start || mm.month + "-01"); return ("Q" + (Math.floor(dd.getMonth() / 3) + 1) + " '" + String(dd.getFullYear()).slice(-2)) === qLabel; });
                       const qG = qMs.reduce((s, mm) => s + Number(mm.tts_gmv || 0), 0); const qA = qMs.reduce((s, mm) => s + Number(mm.ad_spend || 0), 0); const qN = qMs.reduce((s, mm) => s + Number(mm.net_revenue || 0), 0);
                       const qR = qA > 0 ? (qG / qA).toFixed(2) + "x" : "\u2014"; const qW = qMs.reduce((s, mm) => s + Number(mm.weeks_reported || 0), 0);
                       const mqtc = t.isLight ? "#145a30" : "#4ade80"; const mqtg = t.isLight ? "#0a7c3e" : "#4ade80";
@@ -9384,7 +9383,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                       </tr>;
                     };
                     monthly.forEach((m, mi) => {
-                      const d = new Date(m.month_start || m.month + "-01"); const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " " + d.getFullYear();
+                      const d = new Date(m.month_start || m.month + "-01"); const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " '" + String(d.getFullYear()).slice(-2);
                       if (q !== curQ) {
                         if (curQ) { rows.push(mkQTotal(curQ)); rows.push(<tr key={"qsp-" + curQ} style={{ height: 12 }}><td colSpan={99} style={{ border: "none" }}></td></tr>); }
                         curQ = q;
@@ -9395,7 +9394,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                       const cpm = m.cpm ? "$" + m.cpm : (Number(m.impressions) > 0 ? "$" + (adSpend / (Number(m.impressions) / 1000)).toFixed(2) : "\u2014");
                       const npv = m.net_per_video ? "$" + Number(m.net_per_video).toLocaleString() : (Number(m.videos_posted) > 0 ? "$" + Math.round(netRev / Number(m.videos_posted)).toLocaleString() : "\u2014");
                       const sv = Number(m.videos_posted) > 0 && Number(m.samples_posted || 0) > 0 ? (Number(m.samples_posted) / Number(m.videos_posted)).toFixed(2) : "\u2014";
-                      const monthLabel = new Date(m.month_start || m.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const mld = new Date(m.month_start || m.month + "-01"); const monthLabel = mld.toLocaleDateString("en-US", { month: "long" }) + " '" + String(mld.getFullYear()).slice(-2);
                       const target = targets.find(tg => tg.month === m.month); const gmvPct = target?.target_gmv > 0 ? Math.round((gmv / target.target_gmv) * 100) : null;
                       const prevMonth = monthly[mi + 1] || null; const mc = t.isLight ? "#92600a" : "#fbbf24"; const mc2 = t.isLight ? "#6b5c3a" : "#a0944a";
                       rows.push(
@@ -9451,7 +9450,6 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
     { id: "ugc", label: "UGC" },
     { id: "youtube", label: "YouTube" },
     { id: "sops", label: "SOPs" },
-    { id: "kpis", label: "Team KPIs" },
   ];
 
   useEffect(() => {
