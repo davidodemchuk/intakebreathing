@@ -84,7 +84,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 // notifySlack, notifyOwners moved to utils/notifications.js
 
-const APP_VERSION = "6.60.0";
+const APP_VERSION = "6.63.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -2572,10 +2572,10 @@ async function processElevenPlatformApiResults(cleanHandle, igHandle, raw, exist
 
   // === Store thumbnails NOW while CDN URLs are still fresh ===
   const _thumbVideos = [
-    ...ttRecentVideos.map(v => ({ id: v.id, cover: v.cover, playUrl: v.playUrl || "" })),
+    ...ttRecentVideos.map(v => ({ id: v.id, cover: v.cover, playUrl: v.playUrl || "", url: v.url || "" })),
     ...igRecentPosts.map(p => ({ id: p.id, cover: p.imageUrl, videoUrl: p.videoUrl || "" })),
     ...igRecentReels.map(r => ({ id: r.id, cover: r.coverUrl, videoUrl: r.videoUrl || "" })),
-  ].filter(v => ((v.cover && v.cover.startsWith("http")) || v.playUrl || v.videoUrl) && !(v.cover || "").includes("supabase.co"));
+  ].filter(v => ((v.cover && v.cover.startsWith("http")) || v.playUrl || v.videoUrl || v.url) && !(v.cover || "").includes("supabase.co")).slice(0, 5);
 
   if (_thumbVideos.length > 0) {
     console.log("[enrich] Storing " + _thumbVideos.length + " thumbnails while CDN URLs are fresh...");

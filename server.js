@@ -259,24 +259,61 @@ app.post("/api/store-thumbnails", async (req, res) => {
       } catch (e) { console.log("[thumbs] Cover download failed for " + v.id + ":", e.message); try { fs.unlinkSync(tmpCover); } catch {} }
     }
 
-    // Strategy 2: Download video and extract frame with FFmpeg (works for TikTok!)
-    if (playUrl) {
+    // Strategy 2: For TikTok — get real download URL from ScrapeCreators, then extract frame
+    if ((coverUrl && (coverUrl.includes("tiktok") || coverUrl.includes("tiktokcdn"))) || (playUrl && playUrl.includes("tiktok"))) {
+      const { data: keyData } = await supabaseServer.from("app_settings").select("value").eq("key", "scrapecreators-api-key").maybeSingle();
+      const scrapeKey = keyData?.value;
+      if (scrapeKey && v.url) {
+        const tmpVideo = path.join(os.tmpdir(), "thumb_vid_" + Date.now() + "_" + i + ".mp4");
+        const tmpFrame = path.join(os.tmpdir(), "thumb_frame_" + Date.now() + "_" + i + ".jpg");
+        try {
+          console.log("[thumbs] Getting download URL from ScrapeCreators for " + v.id);
+          const scRes = await fetch("https://api.scrapecreators.com/v2/tiktok/video?url=" + encodeURIComponent(v.url), { headers: { "x-api-key": scrapeKey } });
+          if (scRes.ok) {
+            const scData = await scRes.json();
+            const ad = scData.aweme_detail || scData.data?.aweme_detail || scData;
+            const vd = ad?.video;
+            const videoUrls = [];
+            if (scData.video_url) videoUrls.push(scData.video_url);
+            if (scData.download_url) videoUrls.push(scData.download_url);
+            if (scData.nwm_video_url) videoUrls.push(scData.nwm_video_url);
+            if (ad?.download_url) videoUrls.push(ad.download_url);
+            if (vd?.play_addr?.url_list) videoUrls.push(...vd.play_addr.url_list);
+            const uniqueUrls = [...new Set(videoUrls.filter(Boolean))];
+            console.log("[thumbs] Got " + uniqueUrls.length + " download URLs for " + v.id);
+            if (uniqueUrls.length > 0) {
+              await downloadWithRetry(uniqueUrls, tmpVideo);
+              console.log("[thumbs] Video downloaded: " + (fs.statSync(tmpVideo).size / 1048576).toFixed(1) + "MB");
+              await new Promise((ok, no) => { execFile(FFMPEG, ["-i", tmpVideo, "-ss", "00:00:01", "-vframes", "1", "-vf", "scale=360:-1", "-q:v", "5", "-y", tmpFrame], { timeout: 15000, maxBuffer: 10485760 }, (e) => e ? no(e) : ok()); });
+              const frameBuf = fs.readFileSync(tmpFrame);
+              if (frameBuf.length > 500) {
+                const { error: upErr } = await supabaseServer.storage.from("thumbnails").upload(storagePath, frameBuf, { contentType: "image/jpeg", upsert: true });
+                if (!upErr) { const { data } = supabaseServer.storage.from("thumbnails").getPublicUrl(storagePath); results.push({ index: i, url: data.publicUrl }); stored++; console.log("[thumbs] Stored frame for " + v.id); }
+                else { results.push({ index: i, url: null }); }
+              } else { results.push({ index: i, url: null }); }
+            } else { results.push({ index: i, url: null }); }
+          } else { console.error("[thumbs] ScrapeCreators error for " + v.id + ":", scRes.status); results.push({ index: i, url: null }); }
+        } catch (e) { console.error("[thumbs] TikTok thumbnail failed for " + v.id + ":", e.message); results.push({ index: i, url: null }); }
+        finally { try { fs.unlinkSync(tmpVideo); } catch {} try { fs.unlinkSync(tmpFrame); } catch {} }
+        continue;
+      }
+    }
+
+    // Strategy 2b: Non-TikTok video with playUrl — try direct download
+    if (playUrl && !playUrl.includes("tiktok")) {
       const tmpVideo = path.join(os.tmpdir(), "thumb_vid_" + Date.now() + "_" + i + ".mp4");
       const tmpFrame = path.join(os.tmpdir(), "thumb_frame_" + Date.now() + "_" + i + ".jpg");
       try {
-        console.log("[thumbs] Downloading video for frame extraction: " + v.id);
         await downloadWithRetry([playUrl], tmpVideo);
-        const sz = fs.statSync(tmpVideo).size;
-        console.log("[thumbs] Video downloaded: " + (sz / 1048576).toFixed(1) + "MB");
-        await new Promise((ok, no) => { execFile(FFMPEG, ["-i", tmpVideo, "-ss", "00:00:01", "-vframes", "1", "-vf", "scale=360:-1", "-q:v", "5", "-y", tmpFrame], { timeout: 15000, maxBuffer: 10485760 }, (e) => e ? no(e) : ok()); });
-        const frameBuf = fs.readFileSync(tmpFrame);
-        console.log("[thumbs] Frame extracted: " + frameBuf.length + " bytes");
-        if (frameBuf.length > 500) {
-          const { error: upErr } = await supabaseServer.storage.from("thumbnails").upload(storagePath, frameBuf, { contentType: "image/jpeg", upsert: true });
-          if (!upErr) { const { data } = supabaseServer.storage.from("thumbnails").getPublicUrl(storagePath); results.push({ index: i, url: data.publicUrl }); stored++; console.log("[thumbs] Stored frame for " + v.id); }
-          else { console.error("[thumbs] Upload failed for " + v.id + ":", upErr.message); results.push({ index: i, url: null }); }
+        if (fs.statSync(tmpVideo).size > 5000) {
+          await new Promise((ok, no) => { execFile(FFMPEG, ["-i", tmpVideo, "-ss", "00:00:01", "-vframes", "1", "-vf", "scale=360:-1", "-q:v", "5", "-y", tmpFrame], { timeout: 15000, maxBuffer: 10485760 }, (e) => e ? no(e) : ok()); });
+          const frameBuf = fs.readFileSync(tmpFrame);
+          if (frameBuf.length > 500) {
+            const { error: upErr } = await supabaseServer.storage.from("thumbnails").upload(storagePath, frameBuf, { contentType: "image/jpeg", upsert: true });
+            if (!upErr) { const { data } = supabaseServer.storage.from("thumbnails").getPublicUrl(storagePath); results.push({ index: i, url: data.publicUrl }); stored++; } else { results.push({ index: i, url: null }); }
+          } else { results.push({ index: i, url: null }); }
         } else { results.push({ index: i, url: null }); }
-      } catch (e) { console.error("[thumbs] Video frame extraction failed for " + v.id + ":", e.message); results.push({ index: i, url: null }); }
+      } catch (e) { results.push({ index: i, url: null }); }
       finally { try { fs.unlinkSync(tmpVideo); } catch {} try { fs.unlinkSync(tmpFrame); } catch {} }
       continue;
     }
