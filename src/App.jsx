@@ -9216,19 +9216,29 @@ function TtsNativeTab({ t, S, teamMembers }) {
                     const sumW = (ws, k) => ws.reduce((s, w) => s + (Number(w[k]) || 0), 0);
                     const grouped = [];
                     let curMonth = "", curQ = "", mWeeks = [], qWeeks = [];
-                    weeks.forEach((w, i) => {
+                    weeks.forEach((w) => {
                       const d = new Date(w.week_start);
                       const month = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
                       const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " " + d.getFullYear();
-                      if (q !== curQ) { if (curQ && qWeeks.length) grouped.push({ type: "qt", label: curQ, ws: [...qWeeks] }); curQ = q; qWeeks = []; grouped.push({ type: "qh", label: q }); }
-                      if (month !== curMonth) { if (curMonth && mWeeks.length) grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); curMonth = month; mWeeks = []; grouped.push({ type: "mh", label: month }); }
+                      if (q !== curQ) {
+                        if (curMonth && mWeeks.length) { grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); mWeeks = []; }
+                        if (curQ && qWeeks.length) { grouped.push({ type: "qt", label: curQ, ws: [...qWeeks] }); grouped.push({ type: "sp" }); qWeeks = []; }
+                        curQ = q; grouped.push({ type: "qh", label: q });
+                        curMonth = month; grouped.push({ type: "mh", label: month });
+                      } else if (month !== curMonth) {
+                        if (curMonth && mWeeks.length) { grouped.push({ type: "mt", label: curMonth, ws: [...mWeeks] }); mWeeks = []; }
+                        curMonth = month; grouped.push({ type: "mh", label: month });
+                      }
                       mWeeks.push(w); qWeeks.push(w);
-                      grouped.push({ type: "w", data: w, pw: weeks[i + 1] || null });
+                      grouped.push({ type: "w", data: w, pw: null });
                     });
                     if (mWeeks.length) grouped.push({ type: "mt", label: curMonth, ws: mWeeks });
                     if (qWeeks.length) grouped.push({ type: "qt", label: curQ, ws: qWeeks });
+                    const wRows = grouped.filter(r => r.type === "w");
+                    for (let i = 0; i < wRows.length; i++) wRows[i].pw = wRows[i + 1]?.data || null;
 
                     return grouped.map((row, ri) => {
+                      if (row.type === "sp") return <tr key={"sp" + ri}><td colSpan={99} style={{ padding: 6, borderBottom: "none" }}></td></tr>;
                       if (row.type === "qh") return <tr key={"qh" + ri} style={{ background: t.isLight ? "#d4d0c5" : "#2a2a2a" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", borderBottom: "2px solid " + t.border }}>{row.label}</td></tr>;
                       if (row.type === "mh") return <tr key={"mh" + ri} style={{ background: t.isLight ? "#e2ded4" : "#222222" }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, color: t.textSecondary || t.text, borderBottom: "1px solid " + t.border }}>{row.label}</td></tr>;
                       if (row.type === "mt") {
