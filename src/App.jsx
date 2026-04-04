@@ -101,7 +101,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 // notifySlack, notifyOwners moved to utils/notifications.js
 
-const APP_VERSION = "6.64.0";
+const APP_VERSION = "6.65.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -9864,7 +9864,7 @@ export default function App() {
                   onMouseEnter={(e) => homeHoverIn(e, t.green)} onMouseLeave={(e) => homeHoverOut(e, t.green)}>
                   <div style={{ marginBottom: 14 }}><CardIcon type="ugc" color={t.green} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Hub</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Manage creators across all programs — UGC, TTS, and more</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creators, campaigns, briefs, and messaging — all in one place</div>
                   <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{creators.length} creators · {[...new Set(creators.flatMap(c => c.programs || []))].length} programs</div>
                 </div>
 
@@ -9889,22 +9889,6 @@ export default function App() {
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Tools</div>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Video reformatter and team utilities</div>
                   <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>1 tool available</div>
-                </div>
-
-                <div style={homeCard(t.blue)} onClick={() => navigate("messaging")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.blue)} onMouseLeave={(e) => homeHoverOut(e, t.blue)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.blue} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Messaging</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creator outreach, conversation threads, AI drafting</div>
-                  <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>All conversations</div>
-                </div>
-
-                <div style={homeCard(t.orange)} onClick={() => navigate("campaigns")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.orange)} onMouseLeave={(e) => homeHoverOut(e, t.orange)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="ugc" color={t.orange} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, match creators, bulk AI invites</div>
-                  <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>Manage campaigns</div>
                 </div>
 
                 <div style={homeCard(t.purple)} onClick={() => navigate("sourceOfTruth")}
@@ -9987,6 +9971,7 @@ export default function App() {
             onOpenBrief={openLibraryItem}
             onNewBrief={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}
             CardIcon={CardIcon}
+            teamMembers={teamMembers}
           />
         )}
 
