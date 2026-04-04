@@ -2,25 +2,30 @@ import React, { useState, useMemo } from "react";
 import { dbGetSetting, dbSetSetting } from "../supabaseDb.js";
 
 function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setProgramFilter }) {
-  const programCounts = {
-    ugc: creators.filter(c => (c.programs || []).includes("ugc")).length,
-    tts: creators.filter(c => (c.programs || []).includes("tts")).length,
-    alist: creators.filter(c => (c.programs || []).includes("alist")).length,
-    celebrity: creators.filter(c => (c.programs || []).includes("celebrity")).length,
-    rising: creators.filter(c => (c.programs || []).includes("rising")).length,
-    superfiliate: creators.filter(c => (c.programs || []).includes("superfiliate")).length,
-  };
   const total = creators.length;
+  const active = creators.filter(c => c.status === "Active").length;
+  const scored = creators.filter(c => c.ibScore != null).length;
+  const vids = creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0);
 
   const programs = [
-    { id: "ugc", name: "UGC Army", desc: "Branded content creators making videos for campaign briefs", count: programCounts.ugc, color: "#00FEA9", icon: "creator",
-      stats: [{ label: "Briefs", value: library.length }, { label: "Scored", value: creators.filter(c => c.ibScore != null).length }] },
-    { id: "tts", name: "TTS Creators", desc: "TikTok Shop affiliates driving product sales and GMV", count: programCounts.tts, color: "#63B7BA", icon: "pipeline", stats: [] },
-    { id: "alist", name: "A-Listers", desc: "Proven high-tier influencers with major reach and engagement", count: programCounts.alist, color: "#F59E0B", icon: "creator", stats: [] },
-    { id: "celebrity", name: "Celebrities", desc: "Athletes, public figures, and famous personalities", count: programCounts.celebrity, color: "#8B5CF6", icon: "creator", stats: [] },
-    { id: "rising", name: "Rising Stars", desc: "Regular creators proving themselves and growing fast", count: programCounts.rising, color: "#3B82F6", icon: "creator", stats: [] },
-    { id: "superfiliate", name: "Superfiliate", desc: "Affiliate program members with referral links and commissions", count: programCounts.superfiliate, color: "#EC4899", icon: "creator", stats: [] },
+    { id: "ugc", name: "UGC Army", desc: "Branded content creators making videos for campaign briefs", color: "#00FEA9", icon: "creator" },
+    { id: "tts", name: "TTS Creators", desc: "TikTok Shop affiliates driving product sales and GMV", color: "#63B7BA", icon: "pipeline" },
+    { id: "alist", name: "A-Listers", desc: "Proven high-tier influencers with major reach and engagement", color: "#F59E0B", icon: "creator" },
+    { id: "celebrity", name: "Celebrities", desc: "Athletes, public figures, and famous personalities", color: "#8B5CF6", icon: "creator" },
+    { id: "rising", name: "Rising Stars", desc: "Regular creators proving themselves and growing fast", color: "#3B82F6", icon: "creator" },
+    { id: "superfiliate", name: "Superfiliate", desc: "Affiliate program members with referral links", color: "#EC4899", icon: "creator" },
   ];
+
+  const programCounts = {};
+  programs.forEach(p => { programCounts[p.id] = creators.filter(c => (c.programs || []).includes(p.id)).length; });
+
+  const cardStyle = (accent) => ({
+    background: t.card, border: "2px solid " + accent + "60", borderRadius: 14, padding: 22,
+    cursor: "pointer", boxShadow: "0 2px 8px " + accent + "08",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+  });
+  const hoverIn = (e, accent) => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.boxShadow = "0 4px 16px " + accent + "15"; };
+  const hoverOut = (e, accent) => { e.currentTarget.style.borderColor = accent + "60"; e.currentTarget.style.boxShadow = "0 2px 8px " + accent + "08"; };
 
   const goToProgram = (progId) => {
     localStorage.setItem("creator_program_filter", progId);
@@ -29,76 +34,84 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-      {/* Hero header */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 32, fontWeight: 800, color: t.text, letterSpacing: "-0.03em" }}>Creator Hub</div>
-        <div style={{ fontSize: 14, color: t.textMuted, marginTop: 6 }}>{total} creators across {programs.filter(p => p.count > 0).length} active programs</div>
-      </div>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Intake Breathing</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Hub</div>
 
-      {/* Quick stats */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 32 }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
         {[
-          { label: "Total Creators", value: total, color: t.green },
-          { label: "Briefs Created", value: library.length, color: t.blue },
-          { label: "Videos Tracked", value: creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0), color: t.orange },
-          { label: "Creators Scored", value: creators.filter(c => c.ibScore != null).length, color: t.purple || "#8b6cc4" },
+          { v: active, l: "Active Creators", c: t.green },
+          { v: library.length, l: "Briefs Created", c: t.blue },
+          { v: vids, l: "Videos Tracked", c: t.orange },
+          { v: scored, l: "Creators Scored", c: t.purple || "#8b6cc4" },
         ].map((s, i) => (
-          <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "16px 20px" }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
+          <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: s.c }}>{s.v}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{s.l}</div>
           </div>
         ))}
       </div>
 
-      {/* View all button */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: t.text }}>Programs</div>
-        <button onClick={() => goToProgram("all")} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>View all {total} creators &rarr;</button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em" }}>Programs</div>
+        <button onClick={() => goToProgram("all")} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer", fontWeight: 600 }}>View all {total} creators &rarr;</button>
       </div>
 
-      {/* Program cards — 2 column grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
         {programs.map(prog => (
-          <div key={prog.id}
-            onClick={() => goToProgram(prog.id)}
-            style={{
-              background: t.card, border: "2px solid " + prog.color + "40", borderRadius: 16,
-              padding: "24px 28px", cursor: "pointer", position: "relative", overflow: "hidden",
-              transition: "border-color 0.2s, box-shadow 0.2s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = prog.color; e.currentTarget.style.boxShadow = "0 4px 20px " + prog.color + "15"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = prog.color + "40"; e.currentTarget.style.boxShadow = "none"; }}
-          >
-            {/* Color accent bar */}
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: prog.color }} />
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: t.text, marginBottom: 6 }}>{prog.name}</div>
-                <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 16, maxWidth: 320 }}>{prog.desc}</div>
-              </div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: prog.color, opacity: 0.8 }}>{prog.count}</div>
-            </div>
-
-            <div style={{ display: "flex", gap: 12 }}>
-              <div style={{ fontSize: 11, color: prog.color, fontWeight: 700 }}>
-                {prog.count} creator{prog.count !== 1 ? "s" : ""}
-              </div>
-              {prog.stats.map((s, i) => (
-                <div key={i} style={{ fontSize: 11, color: t.textFaint }}>{s.value} {s.label.toLowerCase()}</div>
-              ))}
-            </div>
+          <div key={prog.id} style={cardStyle(prog.color)} onClick={() => goToProgram(prog.id)}
+            onMouseEnter={(e) => hoverIn(e, prog.color)} onMouseLeave={(e) => hoverOut(e, prog.color)}>
+            <div style={{ marginBottom: 14 }}><CardIcon type={prog.icon} color={prog.color} /></div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>{prog.name}</div>
+            <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>{prog.desc}</div>
+            <div style={{ fontSize: 12, color: prog.color, fontWeight: 600 }}>{programCounts[prog.id]} creator{programCounts[prog.id] !== 1 ? "s" : ""}</div>
           </div>
         ))}
       </div>
 
-      {/* Quick actions */}
-      <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={() => navigate("create")} style={{ padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New Brief</button>
-        <button onClick={() => navigate("campaigns")} style={{ padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>Campaigns</button>
-        <button onClick={() => navigate("library")} style={{ padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>Brief Library ({library.length})</button>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
+        <div style={cardStyle(t.green)} onClick={() => navigate("create")}
+          onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={(e) => hoverOut(e, t.green)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.green} /></div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>New Brief</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create a UGC creator brief with IB-Ai</div>
+          <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>IB-Ai powered</div>
+        </div>
+
+        <div style={cardStyle(t.blue)} onClick={() => navigate("campaigns")}
+          onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={(e) => hoverOut(e, t.blue)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.blue} /></div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, invite creators, track results</div>
+          <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>Manage campaigns</div>
+        </div>
+
+        <div style={cardStyle(t.orange)} onClick={() => navigate("library")}
+          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={(e) => hoverOut(e, t.orange)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.orange} /></div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Library</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Browse, edit, and regenerate your saved briefs</div>
+          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
+        </div>
       </div>
+
+      {library.length > 0 ? (
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", marginBottom: 10 }}>Recent Briefs</div>
+          {library.slice(0, 5).map((item) => (
+            <div key={item.id} onClick={() => navigate("display")}
+              style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.name}</div>
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.formData?.manager || ""} · {item.date}</div>
+              </div>
+              <span style={{ fontSize: 11, color: t.textFaint }}>&rarr;</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
