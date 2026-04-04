@@ -72,7 +72,9 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.54.0";
+async function notifySlack(type, data) { try { await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, data }) }); } catch (e) { console.log("[slack-notify] Failed:", e.message); } }
+
+const APP_VERSION = "6.55.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -7507,7 +7509,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     if (!msgCompose.trim() || !msgConv) return;
     setMsgSending(true);
     const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "outbound", channel: msgChannel, subject: msgSubject, body: msgCompose.trim(), status, sent_at: status === "sent" ? new Date().toISOString() : null, template_id: msgSelTemplate || null });
-    if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); setMsgSelTemplate(""); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); }
+    if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); setMsgSelTemplate(""); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); if (status === "sent") notifySlack("message_sent", { creatorHandle: c.tiktokHandle || c.instagramHandle || c.handle, channel: msgChannel, subject: msgSubject, sentBy: "Team", aiGenerated: !!msgSelTemplate }); }
     setMsgSending(false);
   };
   const addMsgNote = async () => {
@@ -10348,9 +10350,10 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate }) {
     }
     setGenerating(false);
     alert("Generated " + campaignCreators.length + " invite drafts! Go to each creator's Messages to review and send.");
+    notifySlack("campaign_invites_generated", { count: campaignCreators.length, campaignName: selectedCampaign.name });
   };
 
-  const updateStatus = async (c, s) => { await dbSaveCampaign({ ...c, id: c.id, status: s }); setCampaigns(await dbLoadCampaigns()); if (selectedCampaign?.id === c.id) setSelectedCampaign({ ...c, status: s }); };
+  const updateStatus = async (c, s) => { await dbSaveCampaign({ ...c, id: c.id, status: s }); setCampaigns(await dbLoadCampaigns()); if (selectedCampaign?.id === c.id) setSelectedCampaign({ ...c, status: s }); if (s === "active") notifySlack("campaign_live", { campaignName: c.name, creatorCount: campaignCreators.length, product: c.product }); };
 
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>Loading campaigns...</div>;
 
@@ -10992,6 +10995,23 @@ function SettingsPanel({
               </button>
             </div>
             {scrapeStatus === "ok" ? <div style={{ fontSize: 12, color: t.green, marginTop: 8 }}>Key saved (synced via Supabase)</div> : scrapeStatus === "fail" ? <div style={{ fontSize: 12, color: t.red || "#ef4444", marginTop: 8 }}>{scrapeMsg || "Failed"}</div> : scrapeKey ? <div style={{ fontSize: 12, color: t.green, marginTop: 8 }}>Key saved (synced via Supabase)</div> : null}
+          </div>
+
+          {/* Slack Notifications */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Slack notifications</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Auto-post to Slack when messages are sent or campaigns go live.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack channel ID</div>
+                <input type="text" placeholder="e.g. C086Y09VANP" id={instanceId + "-slack-channel"} onBlur={async (e) => { const v = e.target.value.trim(); if (v) await dbSetSetting("slack-notify-channel", v); }} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack bot token</div>
+                <input type="password" placeholder="xoxb-..." id={instanceId + "-slack-token"} onBlur={async (e) => { const v = e.target.value.trim(); if (v) await dbSetSetting("slack-bot-token", v); }} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+                <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>api.slack.com/apps → OAuth → Bot token (chat:write scope)</div>
+              </div>
+            </div>
           </div>
 
           {/* Team Password */}
