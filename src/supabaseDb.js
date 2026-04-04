@@ -474,6 +474,30 @@ export async function dbUpdateConversation(id, updates) {
   return { error };
 }
 
+// ── Campaigns ──
+export async function dbLoadCampaigns() {
+  const { data, error } = await supabase.from("campaigns").select("*").order("created_at", { ascending: false });
+  if (error) { console.error("[db] Load campaigns error:", error); return []; }
+  return data || [];
+}
+export async function dbSaveCampaign(row) {
+  if (row.id) { const { error } = await supabase.from("campaigns").update(row).eq("id", row.id); return { error }; }
+  const { data, error } = await supabase.from("campaigns").insert(row).select().single();
+  return { data, error };
+}
+export async function dbDeleteCampaign(id) { return await supabase.from("campaigns").delete().eq("id", id); }
+export async function dbLoadCampaignCreators(campaignId) {
+  const { data, error } = await supabase.from("campaign_creators").select("*").eq("campaign_id", campaignId).order("invited_at", { ascending: false });
+  if (error) { console.error("[db] Load campaign creators error:", error); return []; }
+  return data || [];
+}
+export async function dbSaveCampaignCreator(row) {
+  if (row.id) { const { error } = await supabase.from("campaign_creators").update(row).eq("id", row.id); return { error }; }
+  const { data, error } = await supabase.from("campaign_creators").insert(row).select().single();
+  return { data, error };
+}
+export async function dbDeleteCampaignCreator(id) { return await supabase.from("campaign_creators").delete().eq("id", id); }
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")
