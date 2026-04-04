@@ -48,7 +48,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.22.0";
+const APP_VERSION = "6.23.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -7490,38 +7490,39 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
 
       <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: t.shadow }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: getCreatorOwners(c.id).length > 0 || ai.oneSentence || enrichMsg ? 10 : 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
-            {getCreatorOwners(c.id).map(member => (
-              <div key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 8, background: t.green + "10", border: "1px solid " + t.green + "30" }}>
-                {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: 10, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 20, height: 20, borderRadius: 10, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green }}>{member.name?.[0]}</div>}
-                <span style={{ fontSize: 11, fontWeight: 600, color: t.text }}>{member.name.split(" ")[0]}</span>
-                {member.slack_id ? <a href={"slack://user?team=TFC94FVGF&id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ display: "flex", opacity: 0.5 }} title={"Message " + member.name.split(" ")[0] + " on Slack"}><svg width="10" height="10" viewBox="0 0 24 24" fill={t.textMuted}><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z"/></svg></a> : null}
-                <button onClick={async (e) => { e.stopPropagation(); await dbUnassignCreator(c.id, member.id); setCreatorAssignments(prev => prev.filter(a => !(a.creator_id === c.id && a.team_member_id === member.id))); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, color: t.textFaint, lineHeight: 1 }} title="Remove">×</button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: getCreatorOwners(c.id).length > 0 ? 10 : 0 }}>
+          <div style={{ fontSize: 12, color: t.textFaint }}>Owned by</div>
+          <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.cardAlt, color: t.textMuted, cursor: "pointer" }}>+ Add</button>
+            {ownerDropdownOpen ? (
+              <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
+                {teamMembers.filter(m => !getCreatorOwners(c.id).find(o => o.id === m.id)).map(m => (
+                  <div key={m.id} onClick={async () => { await dbAssignCreatorMulti(c.id, m.id, "manager"); setCreatorAssignments(prev => [...prev, { creator_id: c.id, team_member_id: m.id, assigned_at: new Date().toISOString() }]); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                    {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{m.name?.[0]}</div>}
+                    <div><div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>{m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-            {getCreatorOwners(c.id).length === 0 ? <span style={{ fontSize: 12, color: t.textFaint }}>Unassigned</span> : null}
+            ) : null}
           </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <button onClick={() => { const creatorUrl = "https://www.intakecreators.com/creator/" + c.id; const handle = c.handle || c.instagramHandle || c.tiktokHandle || "creator"; const msg = "Check out @" + handle + " on Intake Creators: " + creatorUrl; navigator.clipboard.writeText(msg).then(() => { const btn = document.getElementById("share-slack-btn-" + c.id); if (btn) { btn.textContent = "Copied! Opening Slack..."; setTimeout(() => { btn.textContent = "Share on Slack"; }, 3000); } }); window.location.href = "slack://open?team=TFC94FVGF"; }} id={"share-slack-btn-" + c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.blue + "30", background: t.blue + "08", color: t.blue, cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.blue + "18"; }} onMouseLeave={(e) => { e.currentTarget.style.background = t.blue + "08"; }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z" fill="currentColor" opacity="0.8"/></svg>
-              Share on Slack
-            </button>
-            <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => setOwnerDropdownOpen(prev => !prev)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.cardAlt, color: t.textMuted, cursor: "pointer" }}>+ Add</button>
-              {ownerDropdownOpen ? (
-                <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
-                  {teamMembers.filter(m => !getCreatorOwners(c.id).find(o => o.id === m.id)).map(m => (
-                    <div key={m.id} onClick={async () => { await dbAssignCreatorMulti(c.id, m.id, "manager"); setCreatorAssignments(prev => [...prev, { creator_id: c.id, team_member_id: m.id, assigned_at: new Date().toISOString() }]); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                      {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{m.name?.[0]}</div>}
-                      <div><div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>{m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {getCreatorOwners(c.id).map(member => (
+            <div key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 14px 8px 8px", borderRadius: 12, background: t.green + "08", border: "1px solid " + t.green + "25", cursor: "pointer", transition: "all 0.2s" }}
+              onClick={() => { const creatorUrl = "https://www.intakecreators.com/creator/" + c.id; const handle = c.handle || c.instagramHandle || c.tiktokHandle || "creator"; navigator.clipboard.writeText("Re: @" + handle + " — " + creatorUrl); if (member.slack_id) window.location.href = "slack://user?team=TFC94FVGF&id=" + member.slack_id; }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.background = t.green + "12"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.green + "25"; e.currentTarget.style.background = t.green + "08"; }}
+              title={"Open Slack DM with " + member.name + " — creator link copied to clipboard"}>
+              {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: t.green, flexShrink: 0 }}>{member.name?.[0]}</div>}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.2 }}>{member.name}</div>
+                {member.title ? <div style={{ fontSize: 10, color: t.textFaint, lineHeight: 1.2 }}>{member.title}</div> : null}
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z" fill={t.textMuted} opacity="0.6"/></svg>
+              <button onClick={(e) => { e.stopPropagation(); dbUnassignCreator(c.id, member.id); setCreatorAssignments(prev => prev.filter(a => !(a.creator_id === c.id && a.team_member_id === member.id))); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontSize: 14, color: t.textFaint, lineHeight: 1, borderRadius: 4, marginLeft: 2 }} title="Remove" onMouseEnter={(e) => { e.currentTarget.style.color = t.red || "#ef4444"; }} onMouseLeave={(e) => { e.currentTarget.style.color = t.textFaint; }}>×</button>
             </div>
-          </div>
+          ))}
+          {getCreatorOwners(c.id).length === 0 ? <span style={{ fontSize: 12, color: t.textFaint }}>Unassigned</span> : null}
         </div>
       </div>
 
