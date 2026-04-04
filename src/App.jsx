@@ -62,6 +62,67 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 const APP_VERSION = "6.47.0";
 const CHANGELOG = [
+  { version: "6.46.0", date: "2026-04-04", changes: [
+    "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
+    "TTS: resizable columns with drag handles, widths persist to localStorage",
+    "TTS: 8 months of sparkline data, click any data point to scroll to that week",
+    "TTS: quarter visual separation with left border stripe and bold Q labels",
+  ]},
+  { version: "6.40.0", date: "2026-04-04", changes: [
+    "TTS: creator-level attribution per week — track which creators drove GMV",
+    "TTS: AI weekly analysis — Claude reads the week's data and writes executive summary with recommendations",
+    "TTS: organic vs paid GMV split, data completeness warnings, priority form layout",
+    "TTS: content notes template prompting for top video, content types, standout creators",
+  ]},
+  { version: "6.35.0", date: "2026-04-04", changes: [
+    "TTS: month and quarter subtotals with color-coded rows (green quarters, amber months)",
+    "TTS: monthly rollups view redesigned as table matching weekly layout",
+    "TTS: team milestones — mark when team members join or leave the TTS program",
+    "TTS: inline cell editing — click any cell to edit like Google Sheets, auto-save on Enter/blur",
+  ]},
+  { version: "6.30.0", date: "2026-04-04", changes: [
+    "TTS: monthly targets with progress bars, set GMV/video/order/ROAS goals per month",
+    "TTS: week-over-week change arrows (green up, red down) on key metrics",
+    "TTS: rolling 30-day dashboard stats instead of calendar month",
+    "TTS: sparkline trend charts for GMV, impressions, and videos with hover tooltips",
+    "TTS: CSV export for sharing data outside the platform",
+  ]},
+  { version: "6.25.0", date: "2026-04-04", changes: [
+    "TTS Native Pipeline launched — first channel fully off Google Sheets",
+    "Native data entry form with live calculations (ROAS, CPM, S/V ratio auto-compute)",
+    "Historical data imported from Google Sheets (28 weeks of TTS data)",
+    "TTS: entered by tracking with team member avatars, remembers last selection",
+    "TTS: sticky header, separate SF/Requests/Shipped columns, bigger text, better contrast",
+  ]},
+  { version: "6.22.0", date: "2026-04-04", changes: [
+    "Multi-owner creator assignments — multiple team members per creator with stacked avatars",
+    "Owner chips show avatar, title, click to open Slack DM with creator URL auto-copied",
+    "Share on Slack button copies creator profile link and opens native Slack app",
+    "Creator ownership stored in Supabase junction table (creator_assignments)",
+  ]},
+  { version: "6.20.0", date: "2026-04-04", changes: [
+    "Full team synced from Slack — 21 team members with avatars, titles, emails, Slack IDs",
+    "Custom owner dropdown with avatars and titles (replaces plain select)",
+    "Slack deep links open native app directly (slack://user?team=TFC94FVGF&id=...)",
+    "Slack icon in creators table owner column for quick DM access",
+  ]},
+  { version: "6.18.0", date: "2026-04-04", changes: [
+    "Dark mode contrast fix — lighter card surfaces (#141414), visible borders (#2a2a2a)",
+    "Creator ownership system — assign team members to creators, filter by owner",
+    "Team members stored in Supabase with Slack profile data",
+  ]},
+  { version: "6.15.0", date: "2026-04-03", changes: [
+    "Critical bug fixes — thumbnails stored inside enrichment pipeline while CDN URLs are fresh",
+    "Snapchat/Facebook/LinkedIn validate responses to eliminate false positives",
+    "Page leave warning during enrichment prevents data loss",
+    "Error boundary on creator detail view shows crash info instead of white screen",
+    "Rate calculator: platform rates use capped base rate, realistic estimates",
+  ]},
+  { version: "6.12.0", date: "2026-04-03", changes: [
+    "Flow chart and Canva embeds load on click with blurred preview",
+    "Rate calculator uses median views instead of mean — eliminates viral outlier skew",
+    "Dollar amounts show commas, quick stats show Typical views (median)",
+  ]},
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
   ]},
