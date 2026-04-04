@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.42.0";
+const APP_VERSION = "6.43.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9224,6 +9224,20 @@ function TtsNativeTab({ t, S, teamMembers }) {
         </div>
       ) : null}
 
+      {(() => {
+        const tw = weeks.length; if (tw === 0) return null;
+        const wo = weeks.filter(w => Number(w.orders) > 0).length;
+        const wsc = weeks.filter(w => Number(w.sample_cost) > 0).length;
+        const wcp = weeks.filter(w => Number(w.creator_payments) > 0).length;
+        const issues = [];
+        if (wo === 0) issues.push("Orders data missing for all weeks \u2014 conversion rates unavailable");
+        else if (wo < tw * 0.5) issues.push("Orders only tracked for " + wo + "/" + tw + " weeks");
+        if (wsc < tw * 0.3) issues.push("Sample costs missing for " + (tw - wsc) + " weeks \u2014 net revenue may be overstated");
+        if (wcp < tw * 0.1 && tw > 4) issues.push("Creator payments not tracked \u2014 ROAS may be overstated");
+        if (issues.length === 0) return null;
+        return <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: t.isLight ? "#fef3cd" : "#332d1a", border: "1px solid " + (t.isLight ? "#f0d9a8" : "#4d4020"), fontSize: 12, color: t.isLight ? "#856404" : "#fbbf24", lineHeight: 1.6 }}><span style={{ fontWeight: 700 }}>Data gaps:</span> {issues.join(" \u00B7 ")}</div>;
+      })()}
+
       {/* Table view */}
       {viewMode === "table" ? (
         <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, overflow: "hidden", boxShadow: t.shadow }}>
@@ -9234,9 +9248,11 @@ function TtsNativeTab({ t, S, teamMembers }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
-                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
-                      <th key={i} style={{ padding: "10px 12px", textAlign: i < 2 ? "left" : "right", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>{h}</th>
-                    ))}
+                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => {
+                      const hasOrders = weeks.some(w => Number(w.orders) > 0);
+                      const isOrders = h === "Orders";
+                      return <th key={i} style={{ padding: "10px 12px", textAlign: i < 2 ? "left" : "right", fontWeight: 700, color: isOrders && !hasOrders ? (t.orange || "#d4890a") : t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>{h}{isOrders && !hasOrders ? " (!)" : ""}</th>;
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -9399,7 +9415,10 @@ function TtsNativeTab({ t, S, teamMembers }) {
                       const prevMonth = monthly[mi + 1] || null; const mc = t.isLight ? "#92600a" : "#fbbf24"; const mc2 = t.isLight ? "#6b5c3a" : "#a0944a";
                       rows.push(
                         <tr key={"m-" + m.month} style={{ background: t.isLight ? "#fef3e2" : "#2a1f0a", borderBottom: "2px solid " + (t.isLight ? "#f0d9a8" : "#3d2f0f") }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#fdecc8" : "#332808"; }} onMouseLeave={(e) => { e.currentTarget.style.background = t.isLight ? "#fef3e2" : "#2a1f0a"; }}>
-                          <td style={{ padding: "10px 12px", fontWeight: 700, color: mc, whiteSpace: "nowrap" }}>{monthLabel}{gmvPct != null ? <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: gmvPct >= 100 ? t.green : gmvPct >= 75 ? t.orange : (t.red || "#ef4444") }}>{gmvPct}% to target</span> : null}</td>
+                          <td style={{ padding: "10px 12px", fontWeight: 700, color: mc, whiteSpace: "nowrap" }}>
+                            {monthLabel}{gmvPct != null ? <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: gmvPct >= 100 ? t.green : gmvPct >= 75 ? t.orange : (t.red || "#ef4444") }}>{gmvPct}% to target</span> : null}
+                            {Number(m.superfiliate_invites) > 0 && Number(m.videos_posted) > 0 ? <div style={{ fontSize: 9, color: mc2, marginTop: 2, fontWeight: 400 }}>Funnel: {m.superfiliate_invites} invites \u2192 {m.sample_requests || 0} requests \u2192 {m.samples_posted || 0} shipped \u2192 {m.videos_posted} videos ({Math.round((Number(m.videos_posted) / Number(m.superfiliate_invites)) * 100)}% invite-to-video)</div> : null}
+                          </td>
                           <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.superfiliate_invites || 0)}</td>
                           <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.sample_requests || 0)}</td>
                           <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.samples_posted || 0)}</td>
