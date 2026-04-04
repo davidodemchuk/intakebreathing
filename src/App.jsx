@@ -8897,11 +8897,14 @@ function TtsNativeTab({ t, S, teamMembers }) {
   const getMonday = (d) => { const date = new Date(d); const day = date.getDay(); const diff = date.getDate() - day + (day === 0 ? -6 : 1); return new Date(date.setDate(diff)).toISOString().split("T")[0]; };
   const getSunday = (monday) => { const d = new Date(monday); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; };
 
-  const newWeekForm = () => {
+  const newWeekQuick = async () => {
     const monday = getMonday(new Date());
-    setFormData({ week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
-    setEditingRow(null);
-    setShowForm(true);
+    const existing = weeks.find(w => w.week_start === monday);
+    if (existing) { alert("A row for this week already exists. Click any cell to edit it."); return; }
+    const row = { week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "", entered_by: currentEnterer || null };
+    const result = await dbSaveTtsWeek(row);
+    if (!result.error) { const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]); setWeeks(refreshed); setMonthly(refreshedMonthly); }
+    else { alert("Failed to create week: " + (result.error?.message || "Unknown")); }
   };
 
   const editWeek = (row) => { setFormData({ ...row }); setEditingRow(row.id); setShowForm(true); if (row.entered_by) setCurrentEnterer(row.entered_by); };
@@ -9085,9 +9088,9 @@ function TtsNativeTab({ t, S, teamMembers }) {
           }} disabled={importing} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.orange + "40", background: t.orange + "08", color: t.orange, cursor: importing ? "wait" : "pointer", opacity: importing ? 0.6 : 1 }}>
             {importing ? "Importing..." : "Sync from Google Sheets"}
           </button>
-          {weeks.length > 0 ? <button onClick={copyLastWeek} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Copy last week</button> : null}
+          {weeks.length > 0 ? <button onClick={() => { copyLastWeek(); setShowForm(true); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Copy last week</button> : null}
           {weeks.length > 0 ? <button onClick={() => { const hdrs = ["Week start","Week end","SF Invites","Sample requests","Samples shipped","Videos posted","Impressions","Organic impressions","Orders","GMV","Ad spend","Sample cost","Commission","Creator payments","S/V Ratio","ROAS","CPM","Net revenue","Net/video","Notes"]; const csvRows = [hdrs.join(",")]; [...weeks].sort((a,b) => a.week_start.localeCompare(b.week_start)).forEach(w => { const c = calc(w); csvRows.push([w.week_start,w.week_end,w.superfiliate_invites||0,w.sample_requests||0,w.samples_posted||0,w.videos_posted||0,w.impressions||0,w.organic_impressions||0,w.orders||0,w.tts_gmv||0,w.ad_spend||0,w.sample_cost||0,w.tts_commission||0,w.creator_payments||0,c.sv_ratio,c.roas,c.cpm,c.net_revenue.replace(/[$,]/g,""),c.net_per_video.replace(/[$,]/g,""),'"'+(w.notes||"").replace(/"/g,'""')+'"'].join(",")); }); const blob = new Blob([csvRows.join("\n")],{type:"text/csv"}); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "tts_weekly_"+new Date().toISOString().split("T")[0]+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Download CSV</button> : null}
-          <button onClick={newWeekForm} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New week</button>
+          <button onClick={newWeekQuick} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New week</button>
         </div>
       </div>
 
