@@ -398,6 +398,27 @@ app.post("/api/import-tts-from-sheets", async (req, res) => {
   }
 });
 
+// ── TTS API update (respects manual overrides) ──
+app.post("/api/tts-api-update", async (req, res) => {
+  const { week_start, fields } = req.body;
+  if (!week_start || !fields) return res.status(400).json({ error: "Missing week_start or fields" });
+  const { data: existing } = await supabaseServer.from("tts_weekly").select("*").eq("week_start", week_start).maybeSingle();
+  if (!existing) return res.status(404).json({ error: "Week not found" });
+  const overrides = existing.overrides || {};
+  const updates = {};
+  const skipped = [];
+  for (const [key, value] of Object.entries(fields)) {
+    if (overrides[key]) { skipped.push(key); continue; }
+    updates[key] = value;
+  }
+  if (Object.keys(updates).length > 0) {
+    const { error } = await supabaseServer.from("tts_weekly").update(updates).eq("id", existing.id);
+    if (error) return res.status(500).json({ error: error.message });
+  }
+  console.log("[tts-api] Updated", Object.keys(updates).length, "fields for", week_start, "| Skipped:", skipped.join(", ") || "none");
+  res.json({ updated: Object.keys(updates), skipped, week_start });
+});
+
 // ── Stream cached video for browser playback ──
 app.get("/api/cache-video/:cacheId", (req, res) => {
   const entry = videoCache.get(req.params.cacheId);

@@ -362,6 +362,7 @@ export async function dbSaveTtsWeek(row) {
     entered_by: row.entered_by || null, gmv_source: row.gmv_source || "manual",
     impressions_source: row.impressions_source || "manual", ad_spend_source: row.ad_spend_source || "manual",
     ai_summary: row.ai_summary || null, ai_analyzed_at: row.ai_analyzed_at || null,
+    overrides: row.overrides || {},
   };
   if (row.id) {
     const { error } = await supabase.from("tts_weekly").update(clean).eq("id", row.id);

@@ -60,7 +60,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.46.0";
+const APP_VERSION = "6.47.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9013,18 +9013,25 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
 
   const EditableCell = ({ rowId, column, value, format, align, style: cellStyle, step, children }) => {
     const isEditing = editingCell?.rowId === rowId && editingCell?.column === column;
+    const row = weeks.find(w => w.id === rowId);
     const displayVal = format ? format(value) : value;
+    const srcMap = { tts_gmv: "gmv_source", organic_gmv: "gmv_source", paid_gmv: "gmv_source", impressions: "impressions_source", organic_impressions: "impressions_source", ad_spend: "ad_spend_source", orders: "gmv_source" };
+    const srcKey = srcMap[column]; const source = srcKey ? (row?.[srcKey] || "manual") : "manual";
+    const isApi = source !== "manual" && source !== "google_sheets_import";
+    const overrides = row?.overrides || {}; const isOverridden = overrides[column] === true;
+
     const saveCell = async (newVal) => {
-      const row = weeks.find(w => w.id === rowId);
-      if (row && row[column] !== newVal) {
-        const updated = { ...row, [column]: newVal };
-        delete updated.created_at; delete updated.updated_at;
-        await dbSaveTtsWeek(updated);
-        const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]);
-        setWeeks(refreshed); setMonthly(refreshedMonthly);
-      }
-      setEditingCell(null);
+      if (!row) { setEditingCell(null); return; }
+      if (Number(row[column]) === Number(newVal)) { setEditingCell(null); return; }
+      const updated = { ...row, [column]: newVal };
+      if (isApi) updated.overrides = { ...(row.overrides || {}), [column]: true };
+      delete updated.created_at; delete updated.updated_at;
+      const result = await dbSaveTtsWeek(updated);
+      if (result.error) { alert("Save failed: " + (result.error.message || "Unknown")); setEditingCell(null); return; }
+      const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]);
+      setWeeks(refreshed); setMonthly(refreshedMonthly); setEditingCell(null);
     };
+
     if (isEditing) {
       return (
         <td style={{ ...cellStyle, padding: 0 }}>
@@ -9035,9 +9042,17 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
         </td>
       );
     }
+
+    const bgTint = isApi && !isOverridden ? (t.isLight ? "#eff6ff" : "#0c1525") : isOverridden ? (t.isLight ? "#fefce8" : "#1a1a0a") : undefined;
     return (
-      <td onClick={(e) => { e.stopPropagation(); setEditingCell({ rowId, column }); setEditingValue(value ?? 0); }} style={{ ...cellStyle, cursor: "cell" }} title="Click to edit">
-        {displayVal}{children}
+      <td onClick={(e) => { e.stopPropagation(); setEditingCell({ rowId, column }); setEditingValue(value ?? 0); }}
+        style={{ ...cellStyle, cursor: "cell", background: bgTint || cellStyle?.background || "transparent" }}
+        title={isApi ? (isOverridden ? "Manually overridden" : "Auto-filled by " + source) : "Click to edit"}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: cellStyle?.textAlign === "left" ? "flex-start" : "flex-end", gap: 4 }}>
+          {isApi && !isOverridden ? <span style={{ width: 5, height: 5, borderRadius: 3, background: t.blue, flexShrink: 0, opacity: 0.7 }}></span> : isOverridden ? <svg width="10" height="10" viewBox="0 0 16 16" fill={t.orange} opacity="0.6" style={{ flexShrink: 0 }}><rect x="3" y="7" width="10" height="8" rx="1.5" /><path d="M5 7V5a3 3 0 016 0v2" fill="none" stroke={t.orange} strokeWidth="1.5" strokeLinecap="round" /></svg> : null}
+          <span>{displayVal}</span>
+        </div>
+        {children}
       </td>
     );
   };
@@ -9477,6 +9492,14 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
               </table>
             </div>
           )}
+        </div>
+      ) : null}
+
+      {viewMode === "table" ? (
+        <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 10, color: t.textFaint, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.blue + "15", color: t.blue, fontWeight: 600 }}>API</span> Will be automated via TikTok API</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: 3, background: t.blue, display: "inline-block" }}></span> Auto-filled by API</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><svg width="10" height="10" viewBox="0 0 16 16" fill={t.orange}><rect x="3" y="7" width="10" height="8" rx="1.5" /><path d="M5 7V5a3 3 0 016 0v2" fill="none" stroke={t.orange} strokeWidth="1.5" strokeLinecap="round" /></svg> Manually overridden (API won't update)</div>
         </div>
       ) : null}
 
