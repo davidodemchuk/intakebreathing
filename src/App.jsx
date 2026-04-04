@@ -11007,13 +11007,18 @@ function SettingsPanel({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack channel ID</div>
-                <input type="text" placeholder="e.g. C086Y09VANP" id={instanceId + "-slack-channel"} onBlur={async (e) => { const v = e.target.value.trim(); if (v) await dbSetSetting("slack-notify-channel", v); }} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+                <input type="text" placeholder="e.g. C090WBB0ETC" id={instanceId + "-slack-channel"} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+                <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>#internal-creatorship = C090WBB0ETC · #marketing = C086Y09VANP</div>
               </div>
               <div>
                 <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack bot token</div>
-                <input type="password" placeholder="xoxb-..." id={instanceId + "-slack-token"} onBlur={async (e) => { const v = e.target.value.trim(); if (v) await dbSetSetting("slack-bot-token", v); }} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+                <input type="password" placeholder="xoxb-..." id={instanceId + "-slack-token"} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
                 <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>api.slack.com/apps → OAuth → Bot token (chat:write scope)</div>
               </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <button onClick={async () => { const chEl = document.getElementById(instanceId + "-slack-channel"); const tkEl = document.getElementById(instanceId + "-slack-token"); const chVal = chEl?.value?.trim(); const tkVal = tkEl?.value?.trim(); if (chVal) await dbSetSetting("slack-notify-channel", chVal); if (tkVal && !tkVal.startsWith("\u2022")) await dbSetSetting("slack-bot-token", tkVal); alert("Slack notification settings saved!"); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save Slack settings</button>
+              <button onClick={async () => { const chVal = await dbGetSetting("slack-notify-channel"); const tkVal = await dbGetSetting("slack-bot-token"); if (!chVal || !tkVal) { alert("Save channel ID and bot token first."); return; } try { const res = await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "test", data: { text: ":white_check_mark: *Intake Creators Bot connected!*\nSlack notifications are working." } }) }); const data = await res.json(); if (data.sent) alert("Test message sent to Slack! Check the channel."); else alert("Test failed: " + (data.reason || "Unknown")); } catch (e) { alert("Test failed: " + e.message); } }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Test connection</button>
             </div>
           </div>
 
