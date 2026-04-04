@@ -45,7 +45,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.15.0";
+const APP_VERSION = "6.16.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -565,11 +565,11 @@ const CHANGELOG = [
 
 const THEMES = {
   dark: {
-    bg: "#060606", card: "#0d0d0d", cardAlt: "#141414",
-    border: "#1e1e1e", borderLight: "#333",
+    bg: "#060606", card: "#141414", cardAlt: "#1c1c1c",
+    border: "#2a2a2a", borderLight: "#333",
     navBg: "rgba(6,6,6,0.95)",
     text: "#f0f0f0", textSecondary: "#cccccc", textMuted: "#777777", textFaint: "#444444",
-    inputBg: "#111111", inputText: "#f0f0f0",
+    inputBg: "#1a1a1a", inputText: "#f0f0f0",
     green: "#00e09a", blue: "#63B7BA", red: "#ef4444", orange: "#f59200", purple: "#a78bfa",
     discBg: "rgba(0,0,0,0.3)",
     scrollThumb: "#222",
@@ -6998,7 +6998,7 @@ class CreatorDetailErrorBoundary extends React.Component {
           <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24, boxShadow: t.shadow }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: t.red || "#ef4444", marginBottom: 8 }}>Creator profile crashed</div>
             <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>This is a bug — the error has been logged. Try going back and clicking the creator again.</div>
-            <pre style={{ background: "#111", color: "#f97316", padding: 16, borderRadius: 8, fontSize: 11, overflow: "auto", maxHeight: 200, marginBottom: 16 }}>{this.state.error}</pre>
+            <pre style={{ background: t.inputBg, color: "#f97316", padding: 16, borderRadius: 8, fontSize: 11, overflow: "auto", maxHeight: 200, marginBottom: 16 }}>{this.state.error}</pre>
             <button onClick={() => { this.setState({ error: null, errorInfo: null }); window.history.back(); }} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Go back</button>
           </div>
         </div>
