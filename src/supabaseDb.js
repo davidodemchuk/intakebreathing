@@ -342,6 +342,35 @@ export async function dbUnassignCreator(creatorId, teamMemberId) {
   return { error };
 }
 
+export async function dbLoadTtsWeekly() {
+  const { data, error } = await supabase.from("tts_weekly").select("*").order("week_start", { ascending: false });
+  if (error) { console.error("[db] Load TTS weekly error:", error); return []; }
+  return data || [];
+}
+
+export async function dbSaveTtsWeek(row) {
+  if (row.id) {
+    const { error } = await supabase.from("tts_weekly").update(row).eq("id", row.id);
+    if (error) { console.error("[db] Update TTS week error:", error); return { error }; }
+    return { error: null };
+  } else {
+    const { data, error } = await supabase.from("tts_weekly").insert(row).select().single();
+    if (error) { console.error("[db] Insert TTS week error:", error); return { error }; }
+    return { data, error: null };
+  }
+}
+
+export async function dbDeleteTtsWeek(id) {
+  const { error } = await supabase.from("tts_weekly").delete().eq("id", id);
+  return { error };
+}
+
+export async function dbLoadTtsMonthly() {
+  const { data, error } = await supabase.from("tts_monthly").select("*");
+  if (error) { console.error("[db] Load TTS monthly error:", error); return []; }
+  return data || [];
+}
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")

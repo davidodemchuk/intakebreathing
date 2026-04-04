@@ -18,6 +18,10 @@ import {
   dbLoadCreatorAssignments,
   dbAssignCreatorMulti,
   dbUnassignCreator,
+  dbLoadTtsWeekly,
+  dbSaveTtsWeek,
+  dbDeleteTtsWeek,
+  dbLoadTtsMonthly,
 } from "./supabaseDb.js";
 import { supabase } from "./supabase.js";
 
@@ -48,7 +52,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.23.0";
+const APP_VERSION = "6.24.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8804,6 +8808,276 @@ function pipelineColIndexToA1(colIndex) {
   return s;
 }
 
+function TtsNativeTab({ t, S, teamMembers }) {
+  const [weeks, setWeeks] = useState([]);
+  const [monthly, setMonthly] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingRow, setEditingRow] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState("table");
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const [w, m] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]);
+      setWeeks(w);
+      setMonthly(m);
+      setLoading(false);
+    })();
+  }, []);
+
+  const calc = (d) => {
+    const vp = Number(d.videos_posted) || 0;
+    const ss = Number(d.samples_sent) || 0;
+    const sr = Number(d.samples_received) || 0;
+    const sp = Number(d.samples_posted) || 0;
+    const va = Number(d.videos_approved) || 0;
+    const imp = Number(d.impressions) || 0;
+    const orgImp = Number(d.organic_impressions) || 0;
+    const clicks = Number(d.clicks) || 0;
+    const orders = Number(d.orders) || 0;
+    const gmv = Number(d.tts_gmv) || 0;
+    const adSpend = Number(d.ad_spend) || 0;
+    const sampleCost = Number(d.sample_cost) || 0;
+    const creatorPay = Number(d.creator_payments) || 0;
+    const commission = Number(d.tts_commission) || 0;
+    const totalCost = adSpend + sampleCost + creatorPay;
+    return {
+      sv_ratio: vp > 0 ? (ss / vp).toFixed(2) : "\u2014",
+      post_rate: sr > 0 ? ((sp / sr) * 100).toFixed(1) + "%" : "\u2014",
+      approval_rate: vp > 0 ? ((va / vp) * 100).toFixed(1) + "%" : "\u2014",
+      cost_per_video: vp > 0 ? "$" + Math.round(totalCost / vp).toLocaleString() : "\u2014",
+      cpm: imp > 0 ? "$" + (adSpend / (imp / 1000)).toFixed(2) : "\u2014",
+      roas: adSpend > 0 ? (gmv / adSpend).toFixed(2) + "x" : "\u2014",
+      net_revenue: "$" + Math.round(gmv - totalCost - commission).toLocaleString(),
+      net_per_video: vp > 0 ? "$" + Math.round((gmv - totalCost - commission) / vp).toLocaleString() : "\u2014",
+      click_rate: imp > 0 ? ((clicks / imp) * 100).toFixed(2) + "%" : "\u2014",
+      conversion_rate: clicks > 0 ? ((orders / clicks) * 100).toFixed(2) + "%" : "\u2014",
+      avg_order_value: orders > 0 ? "$" + (gmv / orders).toFixed(2) : "\u2014",
+    };
+  };
+
+  const getMonday = (d) => { const date = new Date(d); const day = date.getDay(); const diff = date.getDate() - day + (day === 0 ? -6 : 1); return new Date(date.setDate(diff)).toISOString().split("T")[0]; };
+  const getSunday = (monday) => { const d = new Date(monday); d.setDate(d.getDate() + 6); return d.toISOString().split("T")[0]; };
+
+  const newWeekForm = () => {
+    const monday = getMonday(new Date());
+    setFormData({ week_start: monday, week_end: getSunday(monday), samples_sent: 0, samples_received: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, clicks: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
+    setEditingRow(null);
+    setShowForm(true);
+  };
+
+  const editWeek = (row) => { setFormData({ ...row }); setEditingRow(row.id); setShowForm(true); };
+
+  const copyLastWeek = () => {
+    if (weeks.length > 0) {
+      const last = weeks[0];
+      const monday = getMonday(new Date());
+      setFormData({ ...last, id: undefined, week_start: monday, week_end: getSunday(monday), notes: "", created_at: undefined, updated_at: undefined });
+    }
+  };
+
+  const saveForm = async () => {
+    setSaving(true);
+    const payload = { ...formData };
+    delete payload.created_at; delete payload.updated_at;
+    if (!editingRow) delete payload.id;
+    const result = editingRow ? await dbSaveTtsWeek({ ...payload, id: editingRow }) : await dbSaveTtsWeek(payload);
+    if (!result.error) {
+      const [refreshed, refreshedMonthly] = await Promise.all([dbLoadTtsWeekly(), dbLoadTtsMonthly()]);
+      setWeeks(refreshed); setMonthly(refreshedMonthly); setShowForm(false); setEditingRow(null);
+    } else { alert("Save failed: " + (result.error?.message || "Unknown error")); }
+    setSaving(false);
+  };
+
+  const deleteWeek = async (id) => { if (!window.confirm("Delete this week's data permanently?")) return; await dbDeleteTtsWeek(id); setWeeks(prev => prev.filter(w => w.id !== id)); };
+
+  const inputField = (label, key, type = "number") => (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>{label}</div>
+      <input type={type} value={formData[key] ?? ""} onChange={(e) => setFormData(prev => ({ ...prev, [key]: type === "number" ? (e.target.value === "" ? 0 : Number(e.target.value)) : e.target.value }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }} />
+    </div>
+  );
+
+  const fmtNum = (n) => n != null && n !== 0 ? Number(n).toLocaleString() : "0";
+  const fmtDol = (n) => n != null ? "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "$0.00";
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>Loading TTS data...</div>;
+
+  return (
+    <div>
+      {/* Dashboard stats */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        {(() => {
+          const thisMonth = monthly.find(m => m.month === new Date().toISOString().substring(0, 7));
+          return [
+            { label: "This month GMV", value: thisMonth ? fmtDol(thisMonth.tts_gmv) : "$0.00", color: t.green },
+            { label: "This month ROAS", value: thisMonth?.roas ? thisMonth.roas + "x" : "\u2014", color: t.blue },
+            { label: "Videos this month", value: thisMonth ? fmtNum(thisMonth.videos_posted) : "0", color: t.text },
+            { label: "Net revenue", value: thisMonth ? fmtDol(thisMonth.net_revenue) : "$0.00", color: thisMonth && thisMonth.net_revenue > 0 ? t.green : (t.red || "#ef4444") },
+          ].map((stat, i) => (
+            <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", boxShadow: t.shadow }}>
+              <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{stat.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, marginTop: 2 }}>{stat.value}</div>
+            </div>
+          ));
+        })()}
+      </div>
+
+      {/* Actions bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          {["table", "monthly"].map(m => (
+            <button key={m} onClick={() => setViewMode(m)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: viewMode === m ? "2px solid " + t.green + "60" : "1px solid " + t.border, background: viewMode === m ? t.green + "10" : t.card, color: viewMode === m ? t.green : t.textMuted, textTransform: "capitalize" }}>{m === "monthly" ? "Monthly rollups" : "Weekly data"}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {weeks.length > 0 ? <button onClick={copyLastWeek} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Copy last week</button> : null}
+          <button onClick={newWeekForm} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New week</button>
+        </div>
+      </div>
+
+      {/* Entry form */}
+      {showForm ? (
+        <div style={{ background: t.card, border: "2px solid " + t.green + "40", borderRadius: 14, padding: 24, marginBottom: 20, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{editingRow ? "Edit week" : "New week entry"}</div>
+            <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 18, color: t.textFaint, cursor: "pointer" }}>x</button>
+          </div>
+          <div style={{ display: "flex", gap: 24 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                {inputField("Week start (Monday)", "week_start", "date")}
+                {inputField("Week end (Sunday)", "week_end", "date")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Samples</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {inputField("Sent", "samples_sent")}{inputField("Received", "samples_received")}{inputField("Posted", "samples_posted")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Videos</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {inputField("Posted", "videos_posted")}{inputField("Approved", "videos_approved")}{inputField("Rejected", "videos_rejected")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Performance</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+                {inputField("Impressions", "impressions")}{inputField("Organic imp.", "organic_impressions")}{inputField("Clicks", "clicks")}{inputField("Orders", "orders")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Revenue & spend</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {inputField("TTS GMV ($)", "tts_gmv")}{inputField("Ad spend ($)", "ad_spend")}{inputField("Commission ($)", "tts_commission")}
+                {inputField("Sample cost ($)", "sample_cost")}{inputField("Creator payments ($)", "creator_payments")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Creators</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {inputField("New added", "new_creators_added")}{inputField("Active", "active_creators")}{inputField("Total", "total_creators")}
+              </div>
+              {inputField("Notes", "notes", "text")}
+            </div>
+            <div style={{ width: 220, flexShrink: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 10 }}>Live calculations</div>
+              <div style={{ background: t.cardAlt, borderRadius: 10, padding: 14 }}>
+                {Object.entries(calc(formData)).map(([key, val]) => (
+                  <div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid " + t.border + "40" }}>
+                    <span style={{ fontSize: 11, color: t.textMuted }}>{key.replace(/_/g, " ")}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: String(val).includes("\u2014") ? t.textFaint : t.text }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button onClick={() => setShowForm(false)} style={{ padding: "8px 20px", borderRadius: 8, fontSize: 13, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Cancel</button>
+            <button onClick={saveForm} disabled={saving} style={{ padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "Saving..." : editingRow ? "Update" : "Save week"}</button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Table view */}
+      {viewMode === "table" ? (
+        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, overflow: "hidden", boxShadow: t.shadow }}>
+          {weeks.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data yet. Click "+ New week" to start entering TTS data.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1200 }}>
+                <thead>
+                  <tr style={{ background: t.cardAlt }}>
+                    {["Week", "Samples S/R/P", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", ""].map((h, i) => (
+                      <th key={i} style={{ padding: "8px 10px", textAlign: i < 2 ? "left" : "right", fontWeight: 600, color: t.textMuted, borderBottom: "1px solid " + t.border, whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {weeks.map((w, ri) => {
+                    const c = calc(w);
+                    return (
+                      <tr key={w.id} style={{ background: ri % 2 ? t.cardAlt + "40" : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? t.cardAlt + "40" : "transparent"; }}>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{w.samples_sent}/{w.samples_received}/{w.samples_posted}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.impressions)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.clicks)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{fmtNum(w.orders)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", fontWeight: 700, color: t.green }}>{fmtDol(w.tts_gmv)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{fmtDol(w.ad_spend)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", color: t.textMuted }}>{c.sv_ratio}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", fontWeight: 700, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", color: t.textMuted }}>{c.cpm}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right" }}>{c.net_per_video}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "right", fontWeight: 700, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: "1px solid " + t.border + "40", textAlign: "center" }}>
+                          <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">x</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Monthly rollup view */}
+      {viewMode === "monthly" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {monthly.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: t.textFaint, background: t.card, borderRadius: 12, border: "1px solid " + t.border }}>No monthly data yet. Add weekly data first.</div>
+          ) : monthly.map(m => (
+            <div key={m.month} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{m.month}</div>
+                <div style={{ fontSize: 11, color: t.textFaint }}>{m.weeks_reported} weeks reported</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
+                {[
+                  { label: "GMV", value: fmtDol(m.tts_gmv), color: t.green },
+                  { label: "ROAS", value: m.roas ? m.roas + "x" : "\u2014", color: t.blue },
+                  { label: "Net revenue", value: fmtDol(m.net_revenue), color: m.net_revenue > 0 ? t.green : (t.red || "#ef4444") },
+                  { label: "Videos", value: fmtNum(m.videos_posted), color: t.text },
+                  { label: "Net/video", value: m.net_per_video ? "$" + Number(m.net_per_video).toLocaleString() : "\u2014", color: t.text },
+                  { label: "Impressions", value: fmtNum(m.impressions), color: t.text },
+                  { label: "CPM", value: m.cpm ? "$" + m.cpm : "\u2014", color: t.textMuted },
+                  { label: "Orders", value: fmtNum(m.orders), color: t.text },
+                  { label: "Ad spend", value: fmtDol(m.ad_spend), color: t.textMuted },
+                  { label: "Creators", value: fmtNum(m.total_creators), color: t.text },
+                ].map((stat, i) => (
+                  <div key={i} style={{ padding: "8px 10px", background: t.cardAlt, borderRadius: 8 }}>
+                    <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>{stat.label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: stat.color }}>{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
   const [tab, setTab] = useState("overview");
   const [sheetData, setSheetData] = useState({});
@@ -8819,6 +9093,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
     { id: "overview", label: "Overview" },
     { id: "spend", label: "Spend" },
     { id: "tts", label: "TTS" },
+    { id: "tts_native", label: "TTS Native" },
     { id: "instagram", label: "Instagram" },
     { id: "ugc", label: "UGC" },
     { id: "youtube", label: "YouTube" },
@@ -9219,12 +9494,14 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
 
       {loading ? <div style={{ padding: 40, textAlign: "center", color: t.textMuted }}>Loading sheet data...</div> : null}
 
-      {!loading && tab !== "sops" && activeSheetName ? (
+      {!loading && tab !== "sops" && tab !== "tts_native" && activeSheetName ? (
         <div>
           <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 12 }}>{activeSheetName}</div>
           {renderSheetTable(activeSheetName, tab === "instagram" ? { headerRowIndex: 1 } : {})}
         </div>
       ) : null}
+
+      {tab === "tts_native" ? <TtsNativeTab t={t} S={_S} teamMembers={[]} /> : null}
 
       {!loading && tab === "sops" ? (
         <div>
