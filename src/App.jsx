@@ -9385,7 +9385,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
             <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data yet. Click "+ New week" to start entering TTS data.</div>
           ) : (
             <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed", minWidth: Object.values(colWidths).reduce((s, w) => s + w, 0) }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0", fontSize: 12, tableLayout: "fixed", minWidth: Object.values(colWidths).reduce((s, w) => s + w, 0) }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border, height: 44 }}>
                     {(() => { const hs = { padding: "10px 12px", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }; const ho = weeks.some(w => Number(w.orders) > 0); const api = <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.blue + "15", color: t.blue, fontWeight: 600, verticalAlign: "middle", textTransform: "none", marginLeft: 3 }}>API</span>; return <>
@@ -9410,8 +9410,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                     </>; })()}
                   </tr>
                 </thead>
-                <tbody>
-                  {(() => {
+                {(() => {
                     const sumW = (ws, k) => ws.reduce((s, w) => s + (Number(w[k]) || 0), 0);
                     const grouped = [];
                     let curMonth = "", curQ = "", mWeeks = [], qWeeks = [];
@@ -9437,7 +9436,20 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                     const wRows = grouped.filter(r => r.type === "w");
                     for (let i = 0; i < wRows.length; i++) wRows[i].pw = wRows[i + 1]?.data || null;
 
-                    return grouped.map((row, ri) => {
+                    const qColor = t.isLight ? "#c2dccb" : "#1a3322";
+                    const qLabelBg = t.isLight ? "#eef7f0" : "#0d1f14";
+                    const qLabelColor = t.isLight ? "#1a5c35" : "#4ade80";
+                    const qGroups = []; let cqG = null; let cqRows = [];
+                    grouped.forEach((row, ri) => {
+                      let q = null;
+                      if (row.type === "w") { const d = new Date(row.data.week_start); q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " '" + String(d.getFullYear()).slice(-2); }
+                      else if ((row.type === "mt" || row.type === "qt") && row.ws?.length > 0) { const d = new Date(row.ws[0].week_start); q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " '" + String(d.getFullYear()).slice(-2); }
+                      if (q && q !== cqG) { if (cqRows.length > 0) qGroups.push({ q: cqG, rows: [...cqRows] }); cqG = q; cqRows = [{ row, ri }]; }
+                      else { cqRows.push({ row, ri }); }
+                    });
+                    if (cqRows.length > 0) qGroups.push({ q: cqG, rows: cqRows });
+
+                    const renderRow = (row, ri) => {
                       if (row.type === "ms") { const ms = row.data; const member = teamMembers.find(m => m.id === ms.team_member_id); return <tr key={"ms-" + ms.id} style={{ background: t.isLight ? "#eff6ff" : "#0c1929" }}><td colSpan={99} style={{ padding: "8px 14px", borderBottom: "1px solid " + (t.isLight ? "#bfdbfe" : "#1e3a5f") }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: t.blue, flexShrink: 0 }}></div>{member?.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover" }} /> : null}<span style={{ fontSize: 12, fontWeight: 700, color: t.isLight ? "#1e40af" : "#60a5fa" }}>{ms.label}</span>{member ? <span style={{ fontSize: 10, color: t.isLight ? "#6b7280" : "#9ca3af" }}>— {member.name}</span> : null}<button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this milestone?")) dbDeleteTtsMilestone(ms.id).then(() => setMilestones(prev => prev.filter(m => m.id !== ms.id))); }} style={{ marginLeft: "auto", background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 10 }}>remove</button></div></td></tr>; }
                       if (row.type === "mt") {
                         const ws = row.ws; const tg = sumW(ws,"tts_gmv"); const ta = sumW(ws,"ad_spend"); const tv = sumW(ws,"videos_posted"); const ti = sumW(ws,"impressions"); const to = sumW(ws,"orders");
@@ -9445,7 +9457,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                         const roas = ta > 0 ? (tg/ta).toFixed(2)+"x" : "\u2014";
                         const mtb = "2px solid " + (t.isLight ? "#f0d9a8" : "#3d2f0f"); const mtc = t.isLight ? "#92600a" : "#fbbf24"; const mts = { padding: "8px 12px", fontSize: 11, fontWeight: 700, textAlign: "right", color: mtc, borderBottom: mtb };
                         return <tr key={"mt"+ri} style={{ background: t.isLight ? "#fef3e2" : "#2a1f0a" }}>
-                          <td style={{ ...mts, textAlign: "left", borderLeft: "4px solid " + (t.isLight ? "#c2dccb" : "#1a3322") }}>{row.label} total</td>
+                          <td style={{ ...mts, textAlign: "left" }}>{row.label} total</td>
                           <td style={mts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={mts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={mts}>{fmtNum(sumW(ws,"samples_posted"))}</td><td style={mts}>{fmtNum(tv)}</td>
                           <td style={mts}>{fmtNum(ti)}</td><td style={mts}>{fmtNum(to)}</td>
                           <td style={{ ...mts, fontSize: 12, fontWeight: 800, color: t.green }}>{fmtDol(tg)}</td><td style={mts}>{fmtDol(sumW(ws,"organic_gmv"))}</td><td style={mts}>{fmtDol(sumW(ws,"paid_gmv"))}</td><td style={mts}>{fmtDol(ta)}</td><td style={mts}>{"\u2014"}</td>
@@ -9462,8 +9474,8 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                         const cpm = ti > 0 ? "$" + (ta / (ti / 1000)).toFixed(2) : "\u2014";
                         const npv = tv > 0 ? "$" + Math.round(nr / tv).toLocaleString() : "\u2014";
                         const qtb = "3px solid " + (t.isLight ? "#b8d4c0" : "#2a4a32"); const qtc = t.isLight ? "#145a30" : "#4ade80"; const qts = { padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "right", color: qtc, borderBottom: qtb };
-                        return [<tr key={"qt"+ri} style={{ background: t.isLight ? "#c2dccb" : "#1a3322" }}>
-                          <td style={{ ...qts, textAlign: "left", padding: "10px 14px", borderLeft: "4px solid " + (t.isLight ? "#347a56" : "#2d6b4a") }}>{row.label} total</td>
+                        return <tr key={"qt"+ri} style={{ background: t.isLight ? "#c2dccb" : "#1a3322" }}>
+                          <td style={{ ...qts, textAlign: "left", padding: "10px 14px" }}>{row.label} total</td>
                           <td style={qts}>{fmtNum(sumW(ws,"superfiliate_invites"))}</td><td style={qts}>{fmtNum(sumW(ws,"sample_requests"))}</td><td style={qts}>{fmtNum(tsp)}</td><td style={qts}>{fmtNum(tv)}</td>
                           <td style={qts}>{fmtNum(ti)}</td><td style={qts}>{fmtNum(to)}</td>
                           <td style={{ ...qts, fontSize: 14, color: t.isLight ? "#0a7c3e" : "#4ade80" }}>{fmtDol(tg)}</td><td style={qts}>{fmtDol(sumW(ws,"organic_gmv"))}</td><td style={qts}>{fmtDol(sumW(ws,"paid_gmv"))}</td><td style={qts}>{fmtDol(ta)}</td>
@@ -9472,7 +9484,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                           <td style={qts}>{cpm}</td><td style={qts}>{npv}</td>
                           <td style={{ ...qts, fontSize: 14, color: nr >= 0 ? (t.isLight ? "#0a7c3e" : "#4ade80") : "#ef4444" }}>{"$"+Math.round(nr).toLocaleString()}</td>
                           <td style={{ borderBottom: qtb }}></td><td style={{ borderBottom: qtb }}></td>
-                        </tr>, grouped[ri + 1] ? <tr key={"qdiv-" + ri}><td colSpan={99} style={{ padding: "10px 0", border: "none", background: "transparent" }}><div style={{ display: "flex", alignItems: "center" }}><div style={{ width: 80, height: 3, background: t.isLight ? "#8bc4a0" : "#2d6b4a", borderRadius: "2px 0 0 2px" }} /><div style={{ flex: 1, height: 1, background: t.isLight ? "#d4e0d8" : "#1a2e22" }} /></div></td></tr> : null];
+                        </tr>;
                       }
                       if (row.type === "w") {
                         const w = row.data; const pw = row.pw; const c = calc(w);
@@ -9481,7 +9493,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                         const result = [];
                         result.push(
                           <tr key={"w-"+w.id} data-week={w.week_start} style={{ background: "transparent" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#ece9e0" : "#1e1e1e"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                            <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap", borderLeft: "4px solid " + (t.isLight ? "#c2dccb" : "#1a3322") }}>{w.week_start.substring(5)} — {w.week_end?.substring(5)}</td>
+                            <td style={{ ...cs, textAlign: "left", whiteSpace: "nowrap" }}>{w.week_start.substring(5)} — {w.week_end?.substring(5)}</td>
                             <EditableCell rowId={w.id} column="superfiliate_invites" value={w.superfiliate_invites} format={fmtNum} style={cs} />
                             <EditableCell rowId={w.id} column="sample_requests" value={w.sample_requests} format={fmtNum} style={cs} />
                             <EditableCell rowId={w.id} column="samples_posted" value={w.samples_posted} format={fmtNum} style={cs} />
@@ -9546,9 +9558,20 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                         return result;
                       }
                       return null;
+                    };
+
+                    return qGroups.flatMap((group, gi) => {
+                      const els = [];
+                      if (gi > 0) els.push(<tbody key={"qsep-" + gi}><tr><td colSpan={99} style={{ height: 16, border: "none", background: "transparent", padding: 0 }}></td></tr></tbody>);
+                      els.push(
+                        <tbody key={"qtbody-" + gi} style={{ outline: "2px solid " + qColor, outlineOffset: "-1px" }}>
+                          <tr style={{ background: qLabelBg }}><td colSpan={99} style={{ padding: "8px 14px", fontSize: 13, fontWeight: 800, color: qLabelColor, borderBottom: "1px solid " + qColor, letterSpacing: "-0.01em" }}>{group.q}</td></tr>
+                          {group.rows.flatMap(({ row, ri }) => renderRow(row, ri))}
+                        </tbody>
+                      );
+                      return els;
                     });
                   })()}
-                </tbody>
               </table>
             </div>
           )}
