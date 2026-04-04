@@ -45,7 +45,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.16.0";
+const APP_VERSION = "6.17.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -7008,7 +7008,7 @@ class CreatorDetailErrorBoundary extends React.Component {
   }
 }
 
-function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge, teamMembers = [] }) {
+function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, apiKey, t, S, onScrapeCreditUsed = () => {}, setDbError, aiKnowledge, teamMembers = [], setTeamMembers = () => {} }) {
   const ak = mergeAiKnowledge(aiKnowledge);
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoDraft, setVideoDraft] = useState({
@@ -7485,13 +7485,25 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             <select
               value={c.assignedTo || ""}
               onChange={async (e) => {
-                const memberId = e.target.value || null;
+                const val = e.target.value;
+                if (val === "__add_new__") {
+                  const newName = prompt("Enter new team member name:");
+                  if (!newName || !newName.trim()) return;
+                  const { data, error } = await supabase.from("team_members").insert({ name: newName.trim(), role: "manager" }).select().single();
+                  if (error) { alert("Failed to add: " + error.message); return; }
+                  setTeamMembers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+                  updateCreator(c.id, { assignedTo: data.id, assignedAt: new Date().toISOString() });
+                  await dbAssignCreator(c.id, data.id, "manager");
+                  return;
+                }
+                const memberId = val || null;
                 updateCreator(c.id, { assignedTo: memberId, assignedAt: memberId ? new Date().toISOString() : null });
                 await dbAssignCreator(c.id, memberId, "manager");
               }}
               style={{ padding: "5px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "1px solid " + (c.assignedTo ? t.green + "50" : t.border), background: c.assignedTo ? t.green + "08" : t.inputBg, color: c.assignedTo ? t.text : t.textFaint, cursor: "pointer", outline: "none" }}>
               <option value="">Unassigned</option>
               {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              <option value="__add_new__">+ Add team member...</option>
             </select>
             {c.assignedAt ? <div style={{ fontSize: 10, color: t.textFaint }}>since {new Date(c.assignedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div> : null}
           </div>
@@ -12765,6 +12777,7 @@ export default function App() {
                 setDbError={setDbError}
                 aiKnowledge={aiKnowledge}
                 teamMembers={teamMembers}
+                setTeamMembers={setTeamMembers}
               />
             </CreatorDetailErrorBoundary>
           )
