@@ -8846,7 +8846,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
     const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.cursor = ""; document.body.style.userSelect = ""; setColWidths(prev => { try { localStorage.setItem("tts_col_widths", JSON.stringify(prev)); } catch {} return prev; }); };
     document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; document.addEventListener("mousemove", onMove); document.addEventListener("mouseup", onUp);
   };
-  const ResizableTh = ({ colKey, children, style: thStyle }) => <th style={{ ...thStyle, width: colWidths[colKey] || 100, minWidth: 40, position: "relative", overflow: "hidden" }}>{children}<div onMouseDown={(e) => onResizeStart(e, colKey)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", background: "transparent", zIndex: 5 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.green + "40"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }} /></th>;
+  const ResizableTh = ({ colKey, children, style: thStyle }) => <th style={{ ...thStyle, width: colWidths[colKey] || 100, minWidth: 40, position: "relative", overflow: "hidden", verticalAlign: "middle" }}>{children}<div onMouseDown={(e) => onResizeStart(e, colKey)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", background: "transparent", zIndex: 5 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.green + "40"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }} /></th>;
 
   useEffect(() => {
     (async () => {
@@ -9311,7 +9311,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
             <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed", minWidth: Object.values(colWidths).reduce((s, w) => s + w, 0) }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
-                  <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
+                  <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border, height: 44 }}>
                     {(() => { const hs = { padding: "10px 12px", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }; const ho = weeks.some(w => Number(w.orders) > 0); const api = <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.blue + "15", color: t.blue, fontWeight: 600, verticalAlign: "middle", textTransform: "none", marginLeft: 3 }}>API</span>; return <>
                       <ResizableTh colKey="week" style={{ ...hs, textAlign: "left" }}>Week</ResizableTh>
                       <ResizableTh colKey="sf_invites" style={{ ...hs, textAlign: "right" }}>SF Invites</ResizableTh>
@@ -9490,7 +9490,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
             <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1600 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
-                  <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
+                  <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border, height: 44 }}>
                     {["Month", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad Spend", "S/V", "ROAS", "CPM", "Net/video", "Net Revenue", "Weeks"].map((h, i) => (
                       <th key={i} style={{ padding: "10px 12px", textAlign: i === 0 || i === 14 ? "left" : "right", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 11 }}>{h}</th>
                     ))}
