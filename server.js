@@ -230,6 +230,7 @@ app.post("/api/store-thumbnails", async (req, res) => {
 
   const handle = String(creatorHandle).replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
   const results = [];
+  console.log("[thumbs] Processing " + videos.length + " thumbnails for @" + handle);
   let stored = 0;
 
   for (let i = 0; i < videos.length; i++) {
@@ -293,12 +294,49 @@ app.post("/api/store-thumbnails", async (req, res) => {
       results.push({ index: i, url: pubUrl.publicUrl });
       stored++;
     } catch (e) {
-      results.push({ index: i, url: null });
+      console.error("[thumbs] Download/upload error for video " + i + ":", e.message);
+      results.push({ index: i, url: null, error: e.message });
     }
   }
 
   console.log("[thumbs] Stored " + stored + "/" + videos.length + " thumbnails for @" + handle);
   res.json({ results, stored });
+});
+
+// ── Thumbnail pipeline diagnostic ──
+app.get("/api/test-thumbnail-pipeline", async (req, res) => {
+  const results = { steps: [], error: null };
+  const testUrl = "https://p16-sign-va.tiktokcdn.com/obj/tos-maliva-p-0068/oMBAEB5AQknIAGefbRfBLBMwI7AgB1xEbh0gNi";
+  results.steps.push({ step: "start", testUrl });
+  try {
+    const imgBuffer = await new Promise((resolve, reject) => {
+      const req = https.get(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://www.tiktok.com/", "Accept": "image/*" }, timeout: 10000 }, (resp) => {
+        results.steps.push({ step: "http_response", status: resp.statusCode, contentType: resp.headers["content-type"], contentLength: resp.headers["content-length"] });
+        if (resp.statusCode !== 200) return reject(new Error("HTTP " + resp.statusCode));
+        const chunks = []; resp.on("data", c => chunks.push(c)); resp.on("end", () => resolve(Buffer.concat(chunks))); resp.on("error", reject);
+      }); req.on("error", reject); req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+    });
+    results.steps.push({ step: "download", size: imgBuffer.length, ok: imgBuffer.length > 500 });
+    if (imgBuffer.length < 500) { results.steps.push({ step: "download_too_small" }); return res.json(results); }
+
+    const filePath = "_test/test_" + Date.now() + ".jpg";
+    const { error: upErr } = await supabaseServer.storage.from("thumbnails").upload(filePath, imgBuffer, { contentType: "image/jpeg", upsert: true });
+    if (upErr) { results.steps.push({ step: "upload_FAILED", error: upErr.message, details: JSON.stringify(upErr) }); results.error = "Upload failed: " + upErr.message; return res.json(results); }
+    results.steps.push({ step: "upload_ok", filePath });
+
+    const { data: pubUrl } = supabaseServer.storage.from("thumbnails").getPublicUrl(filePath);
+    results.steps.push({ step: "public_url", url: pubUrl.publicUrl });
+
+    try {
+      const verifyRes = await new Promise((resolve, reject) => { https.get(pubUrl.publicUrl, { timeout: 5000 }, (resp) => { resolve({ status: resp.statusCode, contentType: resp.headers["content-type"] }); }).on("error", reject); });
+      results.steps.push({ step: "verify_url", ...verifyRes, accessible: verifyRes.status === 200 });
+    } catch (ve) { results.steps.push({ step: "verify_url_FAILED", error: ve.message }); }
+
+    await supabaseServer.storage.from("thumbnails").remove([filePath]);
+    results.steps.push({ step: "cleanup_ok" });
+    results.success = true;
+  } catch (e) { results.steps.push({ step: "FAILED", error: e.message }); results.error = e.message; }
+  res.json(results);
 });
 
 // ── Import TTS data from Google Sheets ──
