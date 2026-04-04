@@ -60,7 +60,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.48.0";
+const APP_VERSION = "6.49.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -756,6 +756,7 @@ function getViewFromPath() {
   if (path === "/brief") return "publicBrief";
   if (path === "/ugc-army/creators") return "creators";
   if (path === "/ugc-army/creator") return "creatorDetail";
+  if (path === "/channel-pipeline" || path.startsWith("/channel-pipeline/")) return "pipeline";
   return ROUTES[path] || "home";
 }
 
@@ -9671,7 +9672,17 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
 }
 
 function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
-  const [tab, setTab] = useState("overview");
+  const getTabFromUrl = () => {
+    const p = window.location.pathname;
+    const m = p.match(/\/channel-pipeline\/([^/]+)/);
+    if (m) { const u = m[1].replace(/-/g, "_"); const valid = ["overview","spend","tts","tts_native","instagram","ugc","youtube","sops"]; if (valid.includes(u)) return u; }
+    return "overview";
+  };
+  const [tab, setTab] = useState(getTabFromUrl);
+  const setTabWithUrl = (newTab) => { setTab(newTab); window.history.pushState(null, "", "/channel-pipeline/" + newTab.replace(/_/g, "-")); };
+
+  useEffect(() => { if (window.location.pathname === "/channel-pipeline") window.history.replaceState(null, "", "/channel-pipeline/overview"); }, []);
+  useEffect(() => { const h = () => setTab(getTabFromUrl()); window.addEventListener("popstate", h); return () => window.removeEventListener("popstate", h); }, []);
   const [sheetData, setSheetData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -10061,7 +10072,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
           <button
             key={tb.id}
             type="button"
-            onClick={() => setTab(tb.id)}
+            onClick={() => setTabWithUrl(tb.id)}
             style={{
               padding: "10px 16px",
               fontSize: 13,
