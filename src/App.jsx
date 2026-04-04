@@ -9101,7 +9101,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
           { label: "Impressions", key: "impressions", color: t.blue, format: (v) => v >= 1000000 ? (v / 1000000).toFixed(1) + "M" : v >= 1000 ? Math.round(v / 1000).toLocaleString() + "K" : String(v) },
           { label: "Videos posted", key: "videos_posted", color: t.orange || "#d4890a", format: (v) => String(Math.round(v)) },
         ].map(chart => {
-          const sorted = [...weeks].filter(w => Number(w[chart.key]) > 0).sort((a, b) => a.week_start.localeCompare(b.week_start)).slice(-20);
+          const sorted = [...weeks].filter(w => Number(w[chart.key]) > 0).sort((a, b) => a.week_start.localeCompare(b.week_start)).slice(-35);
           if (sorted.length < 2) return <div key={chart.key} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "16px 18px", boxShadow: t.shadow }}><div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 4 }}>{chart.label}</div><div style={{ fontSize: 12, color: t.textFaint, textAlign: "center", padding: 30 }}>Not enough data</div></div>;
           const values = sorted.map(w => Number(w[chart.key]) || 0);
           const max = Math.max(...values, 1); const min = Math.min(...values, 0); const range = max - min || 1;
@@ -9119,7 +9119,7 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                 <div style={{ fontSize: 16, fontWeight: 800, color: chart.color }}>{chart.format(lastVal)}</div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: t.textFaint }}>{sorted.length} weeks with data</div>
+                <div style={{ fontSize: 10, color: t.textFaint }}>{sorted.length} weeks ({Math.round(sorted.length / 4.3)} months) of data</div>
                 {totalChange !== 0 ? <div style={{ fontSize: 11, fontWeight: 700, color: totalChange > 0 ? t.green : (t.red || "#ef4444") }}>{totalChange > 0 ? "+" : ""}{totalChange}% overall</div> : null}
               </div>
               <div style={{ position: "relative" }}
