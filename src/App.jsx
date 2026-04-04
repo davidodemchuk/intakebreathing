@@ -75,7 +75,7 @@ function buildCreatorGridTemplate(colWidths) {
 async function notifySlack(type, data) { try { await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, data }) }); } catch (e) { console.log("[slack-notify] Failed:", e.message); } }
 async function notifyOwners(creatorId, creatorHandle, messageType, extra = {}) { try { await fetch("/api/notify-owners", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creatorId, creatorHandle, messageType, ...extra }) }); } catch (e) { console.log("[notify] Failed:", e.message); } }
 
-const APP_VERSION = "6.55.0";
+const APP_VERSION = "6.56.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -10858,6 +10858,7 @@ function SettingsPanel({
                 { name: "Resend", desc: "Email delivery for creator portal", url: "https://resend.com", status: "configured", color: t.green },
                 { name: "Google Sheets", desc: "Channel Pipeline data source", url: "https://docs.google.com/spreadsheets/d/1aM51vSoGUhuhDJu8VyukeIp59XS2G_yv3alJxTJ2Aak", status: "connected", color: t.green },
                 { name: "GitHub", desc: "Source code repository", url: "https://github.com/davidodemchuk/intakebreathing", status: "active", color: t.green },
+                { name: "Slack", desc: "Creator notifications", url: "https://api.slack.com/apps", status: "configured", color: t.green },
               ].map((s, i) => (
                 <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, border: "1px solid " + t.border, textDecoration: "none", transition: "border-color 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = s.color + "60"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                   <div>
@@ -11003,22 +11004,15 @@ function SettingsPanel({
           {/* Slack Notifications */}
           <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Slack notifications</div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Auto-post to Slack when messages are sent or campaigns go live.</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack channel ID</div>
-                <input type="text" placeholder="e.g. C090WBB0ETC" id={instanceId + "-slack-channel"} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
-                <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>#internal-creatorship = C090WBB0ETC · #marketing = C086Y09VANP</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack bot token</div>
-                <input type="password" placeholder="xoxb-..." id={instanceId + "-slack-token"} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
-                <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>api.slack.com/apps → OAuth → Bot token (chat:write scope)</div>
-              </div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>Auto-post to #internal-creatorship when messages are sent or campaigns go live.</div>
+            <div>
+              <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Slack webhook URL</div>
+              <input type="text" id={instanceId + "-slack-webhook"} placeholder="https://hooks.slack.com/services/..." style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+              <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>api.slack.com/apps → your app → Incoming Webhooks → Add to #internal-creatorship</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-              <button onClick={async () => { const chEl = document.getElementById(instanceId + "-slack-channel"); const tkEl = document.getElementById(instanceId + "-slack-token"); const chVal = chEl?.value?.trim(); const tkVal = tkEl?.value?.trim(); if (chVal) await dbSetSetting("slack-notify-channel", chVal); if (tkVal && !tkVal.startsWith("\u2022")) await dbSetSetting("slack-bot-token", tkVal); alert("Slack notification settings saved!"); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save Slack settings</button>
-              <button onClick={async () => { const chVal = await dbGetSetting("slack-notify-channel"); const tkVal = await dbGetSetting("slack-bot-token"); if (!chVal || !tkVal) { alert("Save channel ID and bot token first."); return; } try { const res = await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "test", data: { text: ":white_check_mark: *Intake Creators Bot connected!*\nSlack notifications are working." } }) }); const data = await res.json(); if (data.sent) alert("Test message sent to Slack! Check the channel."); else alert("Test failed: " + (data.reason || "Unknown")); } catch (e) { alert("Test failed: " + e.message); } }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Test connection</button>
+              <button onClick={async () => { const el = document.getElementById(instanceId + "-slack-webhook"); const val = el?.value?.trim(); if (!val) { alert("Paste your webhook URL first."); return; } await dbSetSetting("slack-webhook-url", val); alert("Slack webhook saved!"); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save</button>
+              <button onClick={async () => { try { const res = await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "test", data: { text: ":white_check_mark: *Intake Creators Bot connected!*\nSlack notifications are working.\n<https://www.intakecreators.com|Open Intake Creators>" } }) }); const d = await res.json(); if (d.sent) alert("Test sent! Check #internal-creatorship."); else alert("Failed: " + (d.reason || "Unknown. Make sure webhook URL is saved.")); } catch (e) { alert("Failed: " + e.message); } }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Test connection</button>
             </div>
           </div>
 

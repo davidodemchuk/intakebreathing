@@ -448,28 +448,27 @@ app.post("/api/tts-api-update", async (req, res) => {
   res.json({ updated: Object.keys(updates), skipped, week_start });
 });
 
-// ── Slack notifications ──
+// ── Slack notifications (webhook) ──
 app.post("/api/slack-notify", async (req, res) => {
   const { type, data } = req.body;
   if (!type || !data) return res.status(400).json({ error: "Missing type or data" });
-  const { data: chSetting } = await supabaseServer.from("app_settings").select("value").eq("key", "slack-notify-channel").maybeSingle();
-  const channelId = chSetting?.value;
-  if (!channelId) return res.json({ sent: false, reason: "No Slack channel configured" });
-  const { data: tkSetting } = await supabaseServer.from("app_settings").select("value").eq("key", "slack-bot-token").maybeSingle();
-  const botToken = tkSetting?.value;
-  if (!botToken) return res.json({ sent: false, reason: "No Slack bot token configured" });
+  const { data: setting } = await supabaseServer.from("app_settings").select("value").eq("key", "slack-webhook-url").maybeSingle();
+  const webhookUrl = setting?.value;
+  if (!webhookUrl) return res.json({ sent: false, reason: "No Slack webhook URL configured" });
 
-  let message = "";
-  if (type === "message_sent") message = ":speech_balloon: *Message sent to @" + (data.creatorHandle || "creator") + "*\nVia: " + (data.channel || "email") + "\nSubject: " + (data.subject || "No subject") + "\nSent by: " + (data.sentBy || "Unknown") + (data.aiGenerated ? "\n:robot_face: _AI-drafted_" : "");
-  else if (type === "campaign_live") message = ":mega: *Campaign launched: " + (data.campaignName || "Untitled") + "*\nCreators invited: " + (data.creatorCount || 0) + "\nProduct: " + (data.product || "N/A");
-  else if (type === "campaign_invites_generated") message = ":sparkles: *" + (data.count || 0) + " AI invites generated for " + (data.campaignName || "campaign") + "*\nReview drafts in each creator's Messages tab\n:link: <https://www.intakecreators.com/messaging|Open Messaging Hub>";
-  else message = data.text || "Notification from Intake Creators";
+  let text = "";
+  if (type === "message_sent") text = ":speech_balloon: *Message sent to @" + (data.creatorHandle || "creator") + "*\n" + (data.channel ? "Via: " + data.channel + "\n" : "") + (data.subject ? "Subject: " + data.subject + "\n" : "") + (data.sentBy ? "Sent by: " + data.sentBy + "\n" : "") + (data.aiGenerated ? ":robot_face: _AI-drafted_\n" : "") + "<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|View conversation>";
+  else if (type === "campaign_live") text = ":mega: *Campaign launched: " + (data.campaignName || "Untitled") + "*\nCreators invited: " + (data.creatorCount || 0) + "\nProduct: " + (data.product || "N/A") + "\n<https://www.intakecreators.com/campaigns|View campaign>";
+  else if (type === "campaign_invites_generated") text = ":sparkles: *" + (data.count || 0) + " AI invites generated for " + (data.campaignName || "campaign") + "*\nReview drafts in each creator's Messages tab\n<https://www.intakecreators.com/messaging|Open Messaging Hub>";
+  else if (type === "creator_replied") text = ":incoming_envelope: *@" + (data.creatorHandle || "creator") + " replied!*\n<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|View conversation>";
+  else if (type === "draft_ready") text = ":pencil2: *AI draft ready for @" + (data.creatorHandle || "creator") + "*\n<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|Review and send>";
+  else if (type === "test") text = data.text || ":white_check_mark: *Intake Creators Bot connected!*\nSlack notifications are working.";
+  else text = data.text || ":bell: Notification from Intake Creators";
 
   try {
-    const slackRes = await fetch("https://slack.com/api/chat.postMessage", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + botToken }, body: JSON.stringify({ channel: channelId, text: message, unfurl_links: false }) });
-    const slackData = await slackRes.json();
-    if (slackData.ok) { console.log("[slack-notify] Posted:", type); res.json({ sent: true }); }
-    else { console.error("[slack-notify] Error:", slackData.error); res.json({ sent: false, reason: slackData.error }); }
+    const slackRes = await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    if (slackRes.ok) { console.log("[slack-notify] Posted:", type); res.json({ sent: true }); }
+    else { const errText = await slackRes.text(); console.error("[slack-notify] Webhook error:", slackRes.status, errText); res.json({ sent: false, reason: errText }); }
   } catch (e) { console.error("[slack-notify] Error:", e.message); res.status(500).json({ error: e.message }); }
 });
 
