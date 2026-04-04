@@ -58,6 +58,7 @@ import { supabase } from "./supabase.js";
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
 const CREATOR_COLUMNS = [
+  { key: "select", label: "", width: 28, sortable: false },
   { key: "status", label: "Status", width: 100, filterable: true, sortable: true },
   { key: "owner", label: "Owner", width: 100, sortable: true, filterable: true },
   { key: "avatar", label: "", width: 36, sortable: false },
@@ -101,7 +102,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 // notifySlack, notifyOwners moved to utils/notifications.js
 
-const APP_VERSION = "6.66.0";
+const APP_VERSION = "6.67.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -8274,6 +8275,7 @@ export default function App() {
   }, []);
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
+  const [selectedCreators, setSelectedCreators] = useState(new Set());
   const [programFilter, setProgramFilter] = useState(() => {
     const saved = localStorage.getItem("creator_program_filter");
     if (saved) { localStorage.removeItem("creator_program_filter"); return saved; }
@@ -10121,7 +10123,28 @@ export default function App() {
                 : fk === "quality"
                   ? filters.quality !== "All"
                   : false;
+          const toggleSelect = (id) => {
+            setSelectedCreators(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            });
+          };
+          const selectAllDisplayed = () => {
+            const ids = sortedCreators.map(c => c.id);
+            if (selectedCreators.size > 0 && ids.every(id => selectedCreators.has(id))) setSelectedCreators(new Set());
+            else setSelectedCreators(new Set(ids));
+          };
+
           const renderHeaderCell = (col) => {
+            if (col.key === "select") {
+              const allChecked = sortedCreators.length > 0 && sortedCreators.every(c => selectedCreators.has(c.id));
+              return (
+                <div key={col.key} onClick={(e) => { e.stopPropagation(); selectAllDisplayed(); }} style={{ width: 28, minWidth: 28, maxWidth: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 0", cursor: "pointer" }}>
+                  <input type="checkbox" checked={allChecked && sortedCreators.length > 0} readOnly style={{ cursor: "pointer", accentColor: t.green }} />
+                </div>
+              );
+            }
             if (col.key === "avatar") {
               const cw = colWidths[col.key] ?? col.width ?? 36;
               return (
@@ -10398,6 +10421,13 @@ export default function App() {
               : {};
             const base = { ...cellBase, ...fixedColStyle, ...align };
 
+            if (col.key === "select") {
+              return (
+                <div key={col.key} onClick={(e) => { e.stopPropagation(); toggleSelect(c.id); }} style={{ width: 28, minWidth: 28, maxWidth: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: "6px 0", cursor: "pointer" }}>
+                  <input type="checkbox" checked={selectedCreators.has(c.id)} readOnly style={{ cursor: "pointer", accentColor: t.green }} />
+                </div>
+              );
+            }
             if (col.key === "status") {
               const s = c.status || "Active";
               const colors = {
@@ -11169,6 +11199,60 @@ export default function App() {
               </div>
             ) : null}
 
+            {/* Bulk actions bar */}
+            {selectedCreators.size > 0 ? (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "10px 16px", marginBottom: 10, borderRadius: 10,
+                background: t.green + "10", border: "2px solid " + t.green + "40",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: t.green }}>{selectedCreators.size} selected</span>
+                  <button onClick={() => setSelectedCreators(new Set())} style={{ fontSize: 11, color: t.textFaint, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Clear</button>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <select onChange={async (e) => {
+                    const prog = e.target.value; if (!prog) return;
+                    const ids = [...selectedCreators];
+                    for (const id of ids) {
+                      const cr = creators.find(c => c.id === id); if (!cr) continue;
+                      const cur = cr.programs || [];
+                      if (!cur.includes(prog)) updateCreator(id, { programs: [...cur, prog] });
+                    }
+                    e.target.value = "";
+                    setSelectedCreators(new Set());
+                  }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.card, color: t.text, cursor: "pointer" }}>
+                    <option value="">+ Add to program</option>
+                    {CREATOR_PROGRAMS.filter(p => p.id !== "all").map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+
+                  <select onChange={async (e) => {
+                    const tier = e.target.value; if (!tier) return;
+                    for (const id of selectedCreators) updateCreator(id, { creator_tier: tier });
+                    e.target.value = "";
+                    setSelectedCreators(new Set());
+                  }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>
+                    <option value="">Change tier</option>
+                    {CREATOR_TIERS.map(ti => <option key={ti.id} value={ti.id}>{ti.label}</option>)}
+                  </select>
+
+                  {programFilter && programFilter !== "all" ? (
+                    <button onClick={() => {
+                      if (!window.confirm("Remove " + selectedCreators.size + " creators from this program?")) return;
+                      for (const id of selectedCreators) {
+                        const cr = creators.find(c => c.id === id); if (!cr) continue;
+                        const updated = (cr.programs || []).filter(p => p !== programFilter);
+                        updateCreator(id, { programs: updated.length ? updated : [] });
+                      }
+                      setSelectedCreators(new Set());
+                    }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + (t.red || "#ef4444") + "40", background: (t.red || "#ef4444") + "08", color: t.red || "#ef4444", cursor: "pointer" }}>
+                      Remove from program
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <div
               style={{
                 overflowX: "auto",
@@ -11210,8 +11294,9 @@ export default function App() {
                 ) : (
                   sortedCreators.map((c, rowIdx) => {
                     const isApplied = c.status === "Applied";
+                    const isSelected = selectedCreators.has(c.id);
                     const stripeBg = rowIdx % 2 === 1 ? t.cardAlt + "30" : "transparent";
-                    const defaultRowBg = isApplied ? t.purple + "06" : stripeBg;
+                    const defaultRowBg = isSelected ? t.green + "08" : isApplied ? t.purple + "06" : stripeBg;
                     return (
                     <div
                       key={c.id}
@@ -11227,7 +11312,7 @@ export default function App() {
                         cursor: "pointer",
                         transition: "background 0.1s",
                         background: defaultRowBg,
-                        borderLeft: isApplied ? `3px solid ${t.purple}` : "none",
+                        borderLeft: isSelected ? `3px solid ${t.green}` : isApplied ? `3px solid ${t.purple}` : "3px solid transparent",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = t.cardAlt + "80";
