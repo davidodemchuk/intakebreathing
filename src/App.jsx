@@ -2506,19 +2506,31 @@ function processElevenPlatformApiResults(cleanHandle, igHandle, raw, existingIns
 
   if (_thumbVideos.length > 0) {
     console.log("[enrich] Storing " + _thumbVideos.length + " thumbnails while CDN URLs are fresh...");
-    fetch("/api/store-thumbnails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creatorHandle: cleanHandle, videos: _thumbVideos }),
-    }).then(r => r.ok ? r.json() : null).then(data => {
-      if (!data?.results) { console.warn("[enrich] Thumbnail storage returned no results"); return; }
-      const _urlMap = {};
-      data.results.forEach((r, i) => { if (r.url && _thumbVideos[i]) _urlMap[_thumbVideos[i].id] = r.url; });
-      ttRecentVideos.forEach(v => { if (_urlMap[v.id]) { v.cover = _urlMap[v.id]; v.coverUrl = _urlMap[v.id]; } });
-      igRecentPosts.forEach(p => { if (_urlMap[p.id]) p.imageUrl = _urlMap[p.id]; });
-      igRecentReels.forEach(r => { if (_urlMap[r.id]) r.coverUrl = _urlMap[r.id]; });
-      console.log("[enrich] Stored " + Object.keys(_urlMap).length + " permanent thumbnails (early pipeline)");
-    }).catch(e => console.error("[enrich] Early thumbnail storage failed:", e.message));
+    try {
+      const _thumbRes = await fetch("/api/store-thumbnails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creatorHandle: cleanHandle, videos: _thumbVideos }),
+      });
+      if (_thumbRes.ok) {
+        const _thumbData = await _thumbRes.json();
+        if (_thumbData?.results) {
+          const _urlMap = {};
+          _thumbData.results.forEach((r, i) => { if (r.url && _thumbVideos[i]) _urlMap[_thumbVideos[i].id] = r.url; });
+          ttRecentVideos.forEach(v => { if (_urlMap[v.id]) { v.cover = _urlMap[v.id]; v.coverUrl = _urlMap[v.id]; } });
+          igRecentPosts.forEach(p => { if (_urlMap[p.id]) p.imageUrl = _urlMap[p.id]; });
+          igRecentReels.forEach(r => { if (_urlMap[r.id]) r.coverUrl = _urlMap[r.id]; });
+          console.log("[enrich] Stored " + Object.keys(_urlMap).length + "/" + _thumbVideos.length + " permanent thumbnails");
+        } else {
+          console.warn("[enrich] Thumbnail storage returned no results");
+        }
+      } else {
+        const errBody = await _thumbRes.text().catch(() => "");
+        console.error("[enrich] Thumbnail storage failed:", _thumbRes.status, errBody.substring(0, 200));
+      }
+    } catch (e) {
+      console.error("[enrich] Thumbnail storage error:", e.message);
+    }
   }
 
   // YouTube — try every possible response structure
