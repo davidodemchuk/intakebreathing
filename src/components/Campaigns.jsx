@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { dbLoadCampaigns, dbSaveCampaign, dbLoadCampaignCreators, dbSaveCampaignCreator, dbDeleteCampaignCreator, dbGetOrCreateConversation, dbSaveMessage, dbGetSetting } from "../supabaseDb.js";
 import { notifySlack, notifyOwners } from "../utils/notifications.js";
 
-function CampaignsPage({ t, S, teamMembers, creators, navigate }) {
+function CampaignsPage({ t, S, teamMembers, creators, navigate, briefs = [] }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -82,6 +82,14 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate }) {
             <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>End date</div><input type="date" value={formData.end_date || ""} onChange={(e) => setFormData(p => ({ ...p, end_date: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
           </div>
           <div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Description</div><textarea value={formData.description || ""} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))} placeholder="What should creators do?" style={{ width: "100%", minHeight: 60, padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} /></div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Attach a brief</div>
+            <select value={formData.brief_id || ""} onChange={(e) => setFormData(p => ({ ...p, brief_id: e.target.value || null }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }}>
+              <option value="">No brief attached</option>
+              {briefs.map(b => <option key={b.id} value={b.id}>{b.name || "Untitled brief"} — {b.formData?.manager || b.form_data?.manager || ""}</option>)}
+            </select>
+            <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>Creators will see this brief when invited to the campaign</div>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Product</div><input value={formData.product || ""} onChange={(e) => setFormData(p => ({ ...p, product: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
             <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target creators</div><input type="number" value={formData.target_creators || ""} onChange={(e) => setFormData(p => ({ ...p, target_creators: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
@@ -115,7 +123,9 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate }) {
         {selectedCampaign ? (
           <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div><div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{selectedCampaign.name}</div><div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{selectedCampaign.description || ""}</div></div>
+              <div><div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{selectedCampaign.name}</div><div style={{ fontSize: 12, color: t.textFaint, marginTop: 2 }}>{selectedCampaign.description || ""}</div>
+                {selectedCampaign.brief_id ? (() => { const br = briefs.find(b => b.id === selectedCampaign.brief_id); if (!br) return null; return <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 8, padding: "10px 14px", marginTop: 8 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.04em" }}>Attached brief</div><div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginTop: 2 }}>{br.name || "Brief"}</div></div><button onClick={() => navigate("display", { briefId: br.id })} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, fontWeight: 600, cursor: "pointer" }}>View brief</button></div></div>; })() : null}
+              </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {selectedCampaign.status === "draft" ? <button onClick={() => updateStatus(selectedCampaign, "active")} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: "none", background: t.green, color: "#fff", cursor: "pointer" }}>Go Live</button> : selectedCampaign.status === "active" ? <button onClick={() => updateStatus(selectedCampaign, "paused")} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.orange, cursor: "pointer" }}>Pause</button> : selectedCampaign.status === "paused" ? <button onClick={() => updateStatus(selectedCampaign, "active")} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: "none", background: t.green, color: "#fff", cursor: "pointer" }}>Resume</button> : null}
                 <button onClick={() => { setFormData(selectedCampaign); setEditingId(selectedCampaign.id); setShowForm(true); }} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Edit</button>

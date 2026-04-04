@@ -106,6 +106,10 @@ create policy "messages_all_anon" on messages for all using (true) with check (t
 -- alter table creators add column if not exists programs jsonb default '[]'::jsonb;
 -- alter table creators add column if not exists creator_tier text;
 
+-- Campaign-Brief connection (run once if tables already exist)
+-- alter table campaigns add column if not exists brief_id uuid references briefs(id);
+-- alter table brief_assignments add column if not exists campaign_id uuid references campaigns(id);
+
 -- App-wide settings (API keys, manager-password-hash SHA-256, etc.). Run in Supabase SQL Editor if this table is missing.
 create table if not exists app_settings (
   key text primary key,

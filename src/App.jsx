@@ -10004,7 +10004,7 @@ export default function App() {
         {!aiLoading && isCreatorViewAllowed && view === "campaigns" && (
           <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <button type="button" onClick={() => navigate("home")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
-            <CampaignsPage t={t} S={S} teamMembers={teamMembers} creators={creators} navigate={navigate} />
+            <CampaignsPage t={t} S={S} teamMembers={teamMembers} creators={creators} navigate={navigate} briefs={library} />
           </div>
         )}
 
