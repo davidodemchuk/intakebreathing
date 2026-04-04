@@ -473,6 +473,40 @@ app.post("/api/slack-notify", async (req, res) => {
   } catch (e) { console.error("[slack-notify] Error:", e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ── Notify creator owners via Slack DM ──
+app.post("/api/notify-owners", async (req, res) => {
+  const { creatorId, creatorHandle, messageType, subject, sentByName, campaignName } = req.body;
+  if (!creatorId) return res.status(400).json({ error: "Missing creatorId" });
+  try {
+    const { data: assignments } = await supabaseServer.from("creator_assignments").select("team_member_id").eq("creator_id", creatorId);
+    if (!assignments?.length) return res.json({ notified: 0, reason: "No owners assigned" });
+    const { data: members } = await supabaseServer.from("team_members").select("id, name, slack_id").in("id", assignments.map(a => a.team_member_id));
+    if (!members?.length) return res.json({ notified: 0, reason: "No team members found" });
+    const { data: tkSetting } = await supabaseServer.from("app_settings").select("value").eq("key", "slack-bot-token").maybeSingle();
+    if (!tkSetting?.value) return res.json({ notified: 0, reason: "No Slack bot token" });
+    const botToken = tkSetting.value;
+    const handle = creatorHandle || "creator";
+    const link = "https://www.intakecreators.com/creator/" + handle;
+    let notified = 0;
+    for (const m of members) {
+      if (!m.slack_id) continue;
+      let text = "";
+      if (messageType === "message_sent") text = ":speech_balloon: *Message sent to @" + handle + "*" + (subject ? "\nSubject: " + subject : "") + (sentByName ? "\nSent by: " + sentByName : "") + "\n<" + link + "|View conversation>";
+      else if (messageType === "campaign_invite") text = ":mega: *@" + handle + " invited to: " + (campaignName || "campaign") + "*\n<" + link + "|View profile>";
+      else if (messageType === "creator_replied") text = ":incoming_envelope: *@" + handle + " replied!*\n<" + link + "|View conversation>";
+      else if (messageType === "draft_ready") text = ":pencil2: *AI draft ready for @" + handle + "*\n<" + link + "|Open profile>";
+      else text = ":bell: Update for @" + handle + "\n<" + link + "|View>";
+      try {
+        const sr = await fetch("https://slack.com/api/chat.postMessage", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + botToken }, body: JSON.stringify({ channel: m.slack_id, text, unfurl_links: false }) });
+        const sd = await sr.json();
+        if (sd.ok) { notified++; console.log("[notify] DMed " + m.name + " about @" + handle); }
+        else console.error("[notify] DM failed for " + m.name + ":", sd.error);
+      } catch (e) { console.error("[notify] DM error:", e.message); }
+    }
+    res.json({ notified, total: members.length });
+  } catch (e) { console.error("[notify] Error:", e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ── Stream cached video for browser playback ──
 app.get("/api/cache-video/:cacheId", (req, res) => {
   const entry = videoCache.get(req.params.cacheId);

@@ -73,6 +73,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 async function notifySlack(type, data) { try { await fetch("/api/slack-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, data }) }); } catch (e) { console.log("[slack-notify] Failed:", e.message); } }
+async function notifyOwners(creatorId, creatorHandle, messageType, extra = {}) { try { await fetch("/api/notify-owners", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creatorId, creatorHandle, messageType, ...extra }) }); } catch (e) { console.log("[notify] Failed:", e.message); } }
 
 const APP_VERSION = "6.55.0";
 const CHANGELOG = [
@@ -7509,7 +7510,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     if (!msgCompose.trim() || !msgConv) return;
     setMsgSending(true);
     const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "outbound", channel: msgChannel, subject: msgSubject, body: msgCompose.trim(), status, sent_at: status === "sent" ? new Date().toISOString() : null, template_id: msgSelTemplate || null });
-    if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); setMsgSelTemplate(""); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); if (status === "sent") notifySlack("message_sent", { creatorHandle: c.tiktokHandle || c.instagramHandle || c.handle, channel: msgChannel, subject: msgSubject, sentBy: "Team", aiGenerated: !!msgSelTemplate }); }
+    if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); setMsgSelTemplate(""); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); if (status === "sent") { notifySlack("message_sent", { creatorHandle: c.tiktokHandle || c.instagramHandle || c.handle, channel: msgChannel, subject: msgSubject, sentBy: "Team", aiGenerated: !!msgSelTemplate }); notifyOwners(c.id, c.tiktokHandle || c.instagramHandle || c.handle, "message_sent", { subject: msgSubject, sentByName: "Team" }); } }
     setMsgSending(false);
   };
   const addMsgNote = async () => {
@@ -7533,6 +7534,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       const data = await res.json();
       setMsgCompose(data.content?.[0]?.text || "");
       if (!msgSubject) setMsgSubject("Partnership opportunity with Intake Breathing");
+      notifyOwners(c.id, c.tiktokHandle || c.instagramHandle || c.handle, "draft_ready");
     } catch (e) { alert("AI draft failed: " + e.message); }
     setMsgDrafting(false);
   };
@@ -7720,6 +7722,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={draftMsgWithAi} disabled={msgDrafting} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer", opacity: msgDrafting ? 0.6 : 1 }}>{msgDrafting ? "Drafting..." : "Draft with IB-Ai"}</button>
                 <button onClick={addMsgNote} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + (t.isLight ? "#fde68a" : "#3d3d0f"), background: t.isLight ? "#fef9c350" : "#1a1a0a", color: t.isLight ? "#92400e" : "#fbbf24", cursor: "pointer" }}>Save as note</button>
+                <button onClick={async () => { if (!msgCompose.trim() || !msgConv) return; setMsgSending(true); const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "inbound", channel: msgChannel, subject: msgSubject, body: msgCompose.trim(), status: "sent", sent_at: new Date().toISOString() }); if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); notifyOwners(c.id, c.tiktokHandle || c.instagramHandle || c.handle, "creator_replied"); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); } setMsgSending(false); }} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.blue + "40", background: t.blue + "08", color: t.blue, cursor: "pointer" }}>Log received reply</button>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => sendMsg("draft")} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Save draft</button>
@@ -10345,7 +10348,7 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate }) {
       const cn = cr.tiktokData?.displayName || cr.instagramData?.fullName || cr.handle || ""; const ch = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
       try {
         const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 300, messages: [{ role: "user", content: "You are a creator partnerships manager at Intake Breathing. Write a personalized campaign invite to @" + ch + ".\n\nCAMPAIGN: " + selectedCampaign.name + "\nDESCRIPTION: " + (selectedCampaign.description || "") + "\nPRODUCT: " + (selectedCampaign.product || "Intake Breathing Starter Kit") + "\n\nCREATOR: " + cn + " (@" + ch + "), " + (Number(cr.tiktokData?.followers) || Number(cr.instagramData?.followers) || 0).toLocaleString() + " followers, IB Score " + (cr.ibScore?.overall || "N/A") + "\n\nWrite a short authentic invite under 120 words. Reference their content. Sound human, not corporate. Write ONLY the message body." }] }) });
-        if (res.ok) { const data = await res.json(); const body = data.content?.[0]?.text || ""; if (body) { const conv = await dbGetOrCreateConversation(cr.id); if (conv) await dbSaveMessage({ conversation_id: conv.id, creator_id: cr.id, direction: "outbound", channel: "email", subject: "You're invited: " + selectedCampaign.name, body, status: "draft", ai_generated: true, campaign_id: selectedCampaign.id }); } }
+        if (res.ok) { const data = await res.json(); const body = data.content?.[0]?.text || ""; if (body) { const conv = await dbGetOrCreateConversation(cr.id); if (conv) await dbSaveMessage({ conversation_id: conv.id, creator_id: cr.id, direction: "outbound", channel: "email", subject: "You're invited: " + selectedCampaign.name, body, status: "draft", ai_generated: true, campaign_id: selectedCampaign.id }); notifyOwners(cr.id, ch, "campaign_invite", { campaignName: selectedCampaign.name }); } }
       } catch (e) { console.error("[campaigns] Generate failed for", ch, e.message); }
     }
     setGenerating(false);
