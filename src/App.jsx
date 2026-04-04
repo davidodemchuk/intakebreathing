@@ -7022,63 +7022,76 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
       </div>
 
-      {/* Messages toggle */}
-      <button onClick={openMessages} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 16px", borderRadius: 12, marginBottom: showMessages ? 0 : 16, border: "1px solid " + (showMessages ? t.blue + "40" : t.border), background: showMessages ? t.blue + "08" : t.card, color: showMessages ? t.blue : t.textMuted, cursor: "pointer", fontSize: 13, fontWeight: 700, boxShadow: t.shadow, textAlign: "left", borderBottomLeftRadius: showMessages ? 0 : 12, borderBottomRightRadius: showMessages ? 0 : 12 }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        Messages{msgList.length > 0 ? " (" + msgList.length + ")" : ""}
-        <span style={{ marginLeft: "auto", fontSize: 10, color: t.textFaint }}>{showMessages ? "Hide" : "Show"}</span>
-      </button>
-
-      {showMessages ? (
-        <div style={{ background: t.card, border: "1px solid " + t.blue + "40", borderTop: "none", borderRadius: "0 0 12px 12px", marginBottom: 16, boxShadow: t.shadow, overflow: "hidden", maxHeight: 500 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid " + t.border, background: t.blue + "05" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>Conversation with @{c.tiktokHandle || c.instagramHandle || c.handle}</div>
-            <button onClick={() => setShowMessages(false)} style={{ background: "none", border: "none", fontSize: 16, color: t.textFaint, cursor: "pointer" }}>x</button>
+      {/* Messages — iMessage style */}
+      <div style={{ marginBottom: 16 }}>
+        <div onClick={openMessages} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: showMessages ? "14px 14px 0 0" : 14, background: showMessages ? t.green + "08" : t.card, border: showMessages ? "2px solid " + t.green + "30" : "1px solid " + t.border, borderBottom: showMessages ? "none" : undefined, cursor: "pointer", boxShadow: t.shadow, transition: "all 0.2s ease" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={showMessages ? t.green : t.textMuted} strokeWidth="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span style={{ fontSize: 14, fontWeight: 700, color: showMessages ? t.green : t.text }}>Messages</span>
+            {msgList.length > 0 ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: t.green + "15", color: t.green, fontWeight: 700 }}>{msgList.length}</span> : null}
           </div>
-          <div data-msg-scroll="true" style={{ maxHeight: 300, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-            {msgList.length === 0 ? <div style={{ textAlign: "center", color: t.textFaint, padding: 20, fontSize: 12 }}>No messages yet. Start a conversation below.</div> : msgList.map(msg => {
-              const isOut = msg.direction === "outbound"; const isNote = msg.direction === "internal_note";
-              return (
-                <div key={msg.id} style={{ maxWidth: isNote ? "100%" : "75%", alignSelf: isOut ? "flex-end" : isNote ? "center" : "flex-start", background: isNote ? (t.isLight ? "#fef9c3" : "#1a1a0a") : isOut ? t.green + "12" : (t.isLight ? "#f3f4f6" : "#1e1e1e"), border: "1px solid " + (isNote ? (t.isLight ? "#fde68a" : "#3d3d0f") : isOut ? t.green + "30" : t.border), borderRadius: 12, padding: "10px 14px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 12 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: isNote ? (t.isLight ? "#92400e" : "#fbbf24") : isOut ? t.green : t.blue, textTransform: "uppercase" }}>{isNote ? "Note" : isOut ? "Sent via " + msg.channel : "Received"}</span>
-                    <span style={{ fontSize: 9, color: t.textFaint }}>{msg.sent_at ? new Date(msg.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Draft"}</span>
-                  </div>
-                  {msg.subject ? <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 4 }}>{msg.subject}</div> : null}
-                  <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{msg.body}</div>
-                  <div style={{ textAlign: "right", marginTop: 4 }}><button onClick={async () => { if (window.confirm("Delete?")) { await dbDeleteMessage(msg.id); setMsgList(prev => prev.filter(m => m.id !== msg.id)); } }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 9, opacity: 0.5 }}>delete</button></div>
-                </div>
-              );
-            })}
-            <div ref={msgEndRef} />
-          </div>
-          <div style={{ borderTop: "1px solid " + t.border, padding: "12px 16px", background: t.cardAlt }}>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <select value={msgSelTemplate} onChange={(e) => { if (e.target.value) { const tmpl = msgTemplates.find(tp => tp.id === e.target.value); if (tmpl) { let b = tmpl.body.replace(/\{\{creator_name\}\}/g, c.tiktokData?.displayName || c.handle || "").replace(/\{\{handle\}\}/g, c.tiktokHandle || c.handle || ""); setMsgCompose(b); setMsgSubject((tmpl.subject || "").replace(/\{\{creator_name\}\}/g, c.tiktokData?.displayName || c.handle || "")); } } setMsgSelTemplate(e.target.value); }} style={{ flex: 1, padding: "5px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11 }}>
-                <option value="">Use a template...</option>
-                {msgTemplates.map(tp => <option key={tp.id} value={tp.id}>{tp.name}</option>)}
-              </select>
-              <select value={msgChannel} onChange={(e) => setMsgChannel(e.target.value)} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, width: 120 }}>
-                <option value="email">Email</option><option value="instagram_dm">IG DM</option><option value="tiktok_dm">TT DM</option><option value="sms">SMS</option><option value="manual">Manual</option>
-              </select>
-            </div>
-            {msgChannel === "email" ? <input value={msgSubject} onChange={(e) => setMsgSubject(e.target.value)} placeholder="Subject line..." style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, marginBottom: 8, boxSizing: "border-box" }} /> : null}
-            <textarea value={msgCompose} onChange={(e) => setMsgCompose(e.target.value)} placeholder={"Write a message to @" + (c.tiktokHandle || c.handle || "") + "..."} style={{ width: "100%", minHeight: 80, padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6 }} />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={draftMsgWithAi} disabled={msgDrafting} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer", opacity: msgDrafting ? 0.6 : 1 }}>{msgDrafting ? "Drafting..." : "Draft with IB-Ai"}</button>
-                <button onClick={addMsgNote} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + (t.isLight ? "#fde68a" : "#3d3d0f"), background: t.isLight ? "#fef9c350" : "#1a1a0a", color: t.isLight ? "#92400e" : "#fbbf24", cursor: "pointer" }}>Save as note</button>
-                <button onClick={async () => { if (!msgCompose.trim() || !msgConv) return; setMsgSending(true); const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "inbound", channel: msgChannel, subject: msgSubject, body: msgCompose.trim(), status: "sent", sent_at: new Date().toISOString() }); if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); notifyOwners(c.id, c.tiktokHandle || c.instagramHandle || c.handle, "creator_replied"); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); } setMsgSending(false); }} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.blue + "40", background: t.blue + "08", color: t.blue, cursor: "pointer" }}>Log received reply</button>
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => sendMsg("draft")} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Save draft</button>
-                <button onClick={() => sendMsg("sent")} disabled={!msgCompose.trim() || msgSending} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer", opacity: msgSending ? 0.6 : 1 }}>{msgSending ? "Sending..." : "Mark as sent"}</button>
-              </div>
-            </div>
-            <div style={{ fontSize: 9, color: t.textFaint, marginTop: 6 }}>Messages logged for tracking. Actual email/SMS sending coming in Phase 2.</div>
-          </div>
+          <span style={{ fontSize: 20, color: t.textFaint, transform: showMessages ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>{"\u25BE"}</span>
         </div>
-      ) : null}
+
+        {showMessages ? (
+          <div style={{ border: "2px solid " + t.green + "30", borderTop: "none", borderRadius: "0 0 14px 14px", overflow: "hidden", background: t.isLight ? "#f9fafb" : "#0d0d0d" }}>
+            <div data-msg-scroll="true" style={{ height: 420, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+              {msgList.length === 0 ? (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 40 }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={t.textFaint} strokeWidth="1" opacity="0.3"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: t.textFaint, marginTop: 12 }}>No messages yet</div>
+                  <div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>Start a conversation with @{c.tiktokHandle || c.instagramHandle || c.handle}</div>
+                </div>
+              ) : msgList.map(msg => {
+                const isOut = msg.direction === "outbound"; const isNote = msg.direction === "internal_note";
+                return (
+                  <div key={msg.id} style={{ maxWidth: isNote ? "100%" : "70%", alignSelf: isOut ? "flex-end" : isNote ? "stretch" : "flex-start" }}>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 3, textAlign: isOut ? "right" : "left", padding: "0 4px" }}>{isNote ? "Internal note" : isOut ? "You \u00B7 " + (msg.channel || "") : "@" + (c.tiktokHandle || c.handle || "creator")}{msg.ai_generated ? " \u00B7 AI drafted" : ""}</div>
+                    <div style={{ padding: isNote ? "10px 14px" : "12px 16px", borderRadius: isOut ? "18px 18px 4px 18px" : isNote ? 10 : "18px 18px 18px 4px", background: isNote ? (t.isLight ? "#fef9c3" : "#1a1a0a") : isOut ? t.green : (t.isLight ? "#e5e7eb" : "#262626"), color: isOut && !isNote ? (t.isLight ? "#fff" : "#000") : t.text, fontSize: 14, lineHeight: 1.6, wordBreak: "break-word", border: isNote ? "1px solid " + (t.isLight ? "#fde68a" : "#3d3d0f") : "none" }}>
+                      {msg.subject ? <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, opacity: isOut && !isNote ? 0.9 : 0.7 }}>{msg.subject}</div> : null}
+                      <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: isOut ? "flex-end" : "flex-start", alignItems: "center", gap: 6, marginTop: 3, padding: "0 4px" }}>
+                      <span style={{ fontSize: 10, color: t.textFaint }}>{msg.sent_at ? new Date(msg.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Draft"}</span>
+                      {msg.status === "draft" ? <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 4, background: t.orange + "15", color: t.orange, fontWeight: 600 }}>Draft</span> : null}
+                      {msg.status === "sent" && isOut ? <span style={{ fontSize: 10, color: t.green }}>Sent</span> : null}
+                      <button onClick={async () => { if (window.confirm("Delete?")) { await dbDeleteMessage(msg.id); setMsgList(prev => prev.filter(m => m.id !== msg.id)); } }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 9, opacity: 0.4 }}>delete</button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={msgEndRef} />
+            </div>
+            <div style={{ borderTop: "1px solid " + t.border, padding: "16px 20px", background: t.card }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <select value={msgSelTemplate} onChange={(e) => { if (e.target.value) { const tmpl = msgTemplates.find(tp => tp.id === e.target.value); if (tmpl) { setMsgCompose(tmpl.body.replace(/\{\{creator_name\}\}/g, c.tiktokData?.displayName || c.handle || "").replace(/\{\{handle\}\}/g, c.tiktokHandle || c.handle || "")); setMsgSubject((tmpl.subject || "").replace(/\{\{creator_name\}\}/g, c.tiktokData?.displayName || c.handle || "")); } } setMsgSelTemplate(e.target.value); }} style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                  <option value="">Use a template...</option>
+                  {msgTemplates.map(tp => <option key={tp.id} value={tp.id}>{tp.name}</option>)}
+                </select>
+                <select value={msgChannel} onChange={(e) => setMsgChannel(e.target.value)} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, width: 130 }}>
+                  <option value="email">Email</option><option value="instagram_dm">IG DM</option><option value="tiktok_dm">TikTok DM</option><option value="sms">SMS</option><option value="manual">Other</option>
+                </select>
+              </div>
+              {msgChannel === "email" ? <input value={msgSubject} onChange={(e) => setMsgSubject(e.target.value)} placeholder="Subject..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 10, boxSizing: "border-box" }} /> : null}
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                <textarea value={msgCompose} onChange={(e) => setMsgCompose(e.target.value)} placeholder={"Message @" + (c.tiktokHandle || c.instagramHandle || c.handle || "creator") + "..."} rows={2} style={{ flex: 1, padding: "10px 14px", borderRadius: 14, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5, minHeight: 44, maxHeight: 120 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
+                <button onClick={() => sendMsg("sent")} disabled={!msgCompose.trim() || msgSending} style={{ width: 40, height: 40, borderRadius: 20, border: "none", background: msgCompose.trim() ? t.green : t.border, color: msgCompose.trim() ? (t.isLight ? "#fff" : "#000") : t.textFaint, cursor: msgCompose.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={draftMsgWithAi} disabled={msgDrafting} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "1px solid " + t.green + "30", background: t.green + "06", color: t.green, cursor: "pointer" }}>{msgDrafting ? "Drafting..." : "Draft with IB-Ai"}</button>
+                  <button onClick={() => { if (msgCompose.trim()) addMsgNote(); }} disabled={!msgCompose.trim()} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "1px solid " + (t.isLight ? "#fde68a" : "#3d3d0f"), background: "transparent", color: t.isLight ? "#92400e" : "#fbbf24", cursor: "pointer" }}>Save as note</button>
+                  <button onClick={async () => { if (!msgCompose.trim() || !msgConv) return; setMsgSending(true); const result = await dbSaveMessage({ conversation_id: msgConv.id, creator_id: c.id, direction: "inbound", channel: msgChannel, subject: msgSubject, body: msgCompose.trim(), status: "sent", sent_at: new Date().toISOString() }); if (!result.error && result.data) { setMsgList(prev => [...prev, result.data]); setMsgCompose(""); setMsgSubject(""); notifyOwners(c.id, c.tiktokHandle || c.instagramHandle || c.handle, "creator_replied"); await dbUpdateConversation(msgConv.id, { last_message_at: new Date().toISOString() }); } setMsgSending(false); }} disabled={!msgCompose.trim()} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "1px solid " + t.blue + "30", background: "transparent", color: t.blue, cursor: "pointer" }}>Log received reply</button>
+                </div>
+                <button onClick={() => sendMsg("draft")} disabled={!msgCompose.trim()} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>Save draft</button>
+              </div>
+              <div style={{ fontSize: 9, color: t.textFaint, marginTop: 8 }}>Messages are tracked here. Actual sending via email/SMS coming in a future update.</div>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       {(() => {
         const igF = Number(c.instagramData?.followers) || 0;
