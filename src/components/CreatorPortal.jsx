@@ -60,88 +60,77 @@ function ManagerCreatorChat({ creatorId, t }) {
 
 function CreatorLogin({ navigate, t }) {
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
   const [step, setStep] = useState("email");
   const [error, setError] = useState(null);
 
-  const sendCode = async () => {
-    const clean = email.trim().toLowerCase();
-    if (!clean || !clean.includes("@")) {
-      setError("Enter a valid email.");
-      return;
-    }
-    setStep("sending");
-    setError(null);
-    try {
-      const { error: e } = await supabase.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true } });
-      if (e) throw e;
-      setStep("code");
-    } catch (e) {
-      setError(e.message || "Failed to send code.");
-      setStep("email");
-    }
-  };
-
-  const verify = async () => {
-    if (code.length !== 6) {
-      setError("Enter the 6-digit code.");
-      return;
-    }
-    setStep("verifying");
-    setError(null);
-    try {
-      const { error: e } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code, type: "email" });
-      if (e) throw e;
-
-      const { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", email.trim().toLowerCase()).maybeSingle();
-
-      if (!creator) {
-        setError("Your email isn't in our creator database. Contact your Intake manager to get invited.");
-        await supabase.auth.signOut();
-        setStep("email");
-        return;
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        const { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", session.user.email.toLowerCase()).maybeSingle();
+        if (creator) navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
       }
+    })();
+  }, []);
 
-      navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
-    } catch (e) {
-      setError(e.message || "Invalid code.");
-      setStep("code");
-    }
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user?.email) {
+        const userEmail = session.user.email.toLowerCase();
+        let { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", userEmail).maybeSingle();
+        if (!creator) {
+          const handle = userEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
+          const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: "", status: "Active", onboarded: false }).select().single();
+          if (ie) { setError("Account creation failed. Contact your Intake manager."); return; }
+          creator = nc;
+        }
+        navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
+      }
+    });
+    return () => subscription?.unsubscribe();
+  }, []);
+
+  const sendMagicLink = async () => {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !clean.includes("@")) { setError("Enter a valid email."); return; }
+    setStep("sending"); setError(null);
+    try {
+      const { error: e } = await supabase.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true, emailRedirectTo: window.location.origin + "/creator/dashboard" } });
+      if (e) throw e;
+      setStep("sent");
+    } catch (e) { setError(e.message || "Failed to send link."); setStep("email"); }
   };
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 400 }}>
+      <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <img src="/favicon-32.png" alt="Intake" style={{ width: 48, height: 48, marginBottom: 12 }} onError={(e) => { e.target.style.display = "none"; }} />
-          <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>Creator Portal</div>
-          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Intake Breathing</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>Creator Portal</div>
+          <div style={{ fontSize: 14, color: t.textMuted, marginTop: 6 }}>Intake Breathing Technology</div>
         </div>
-
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 28 }}>
+        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 16, padding: 32, boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
           {step === "email" || step === "sending" ? (
             <>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Sign in</div>
-              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>We&apos;ll send a 6-digit code to your email</div>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendCode()} placeholder="your@email.com" autoFocus style={{ width: "100%", padding: "12px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
-              <button type="button" onClick={sendCode} disabled={step === "sending"} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: step === "sending" ? "wait" : "pointer", opacity: step === "sending" ? 0.6 : 1 }}>
-                {step === "sending" ? "Sending..." : "Send Code"}
-              </button>
+              <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 6 }}>Welcome</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 24, lineHeight: 1.6 }}>Enter your email to sign in or create your account. We'll send you a magic link.</div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email address</div>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMagicLink()} placeholder="you@email.com" autoFocus style={{ width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 15, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <button onClick={sendMagicLink} disabled={step === "sending"} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 700, cursor: step === "sending" ? "wait" : "pointer", opacity: step === "sending" ? 0.6 : 1 }}>{step === "sending" ? "Sending..." : "Continue with email"}</button>
+              <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: t.textFaint }}>New here? Entering your email creates your account automatically.</div>
             </>
-          ) : (
-            <>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Check your email</div>
-              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Code sent to <strong style={{ color: t.text }}>{email}</strong></div>
-              <input type="text" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} onKeyDown={(e) => e.key === "Enter" && verify()} placeholder="000000" autoFocus style={{ width: "100%", padding: 14, borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 24, fontWeight: 800, textAlign: "center", letterSpacing: "0.3em", outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
-              <button type="button" onClick={verify} disabled={step === "verifying"} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: step === "verifying" ? "wait" : "pointer", opacity: step === "verifying" ? 0.6 : 1 }}>
-                {step === "verifying" ? "Verifying..." : "Sign In"}
-              </button>
-              <button type="button" onClick={() => { setStep("email"); setCode(""); setError(null); }} style={{ width: "100%", marginTop: 8, padding: 10, border: "none", background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>Different email</button>
-            </>
-          )}
-          {error ? <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: t.red + "10", border: `1px solid ${t.red}25`, fontSize: 13, color: t.red }}>{error}</div> : null}
+          ) : step === "sent" ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 8 }}>Check your email</div>
+              <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 20 }}>We sent a sign-in link to<br /><strong style={{ color: t.text }}>{email}</strong></div>
+              <div style={{ fontSize: 13, color: t.textFaint, lineHeight: 1.6, marginBottom: 24 }}>Click the link to sign in. Check spam if you don't see it.</div>
+              <button onClick={() => { setStep("email"); setError(null); }} style={{ padding: "10px 24px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Use a different email</button>
+            </div>
+          ) : null}
+          {error ? <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: (t.red || "#ef4444") + "10", border: "1px solid " + (t.red || "#ef4444") + "25", fontSize: 13, color: t.red || "#ef4444" }}>{error}</div> : null}
         </div>
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: t.textFaint }}>Contact your Intake manager if you don&apos;t have access.</div>
+        <div style={{ textAlign: "center", marginTop: 24, fontSize: 12, color: t.textFaint }}><a href="/" style={{ color: t.textFaint, textDecoration: "none" }}>Back to Intake Creators</a></div>
       </div>
     </div>
   );
