@@ -57,7 +57,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.36.0";
+const APP_VERSION = "6.37.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9356,39 +9356,79 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
       {/* Monthly rollup view */}
       {viewMode === "monthly" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, overflow: "hidden", boxShadow: t.shadow }}>
           {monthly.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: t.textFaint, background: t.card, borderRadius: 12, border: "1px solid " + t.border }}>No monthly data yet. Add weekly data first.</div>
-          ) : monthly.map(m => (
-            <div key={m.month} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 20, boxShadow: t.shadow }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{m.month}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, color: t.textFaint }}>{m.weeks_reported} weeks reported</span>
-                  {(() => { const tgt = targets.find(tg => tg.month === m.month); if (!tgt || !tgt.target_gmv) return null; const gmvPct = Math.round((Number(m.tts_gmv) / tgt.target_gmv) * 100); return <span style={{ fontSize: 11, fontWeight: 700, color: gmvPct >= 100 ? t.green : gmvPct >= 75 ? t.orange : (t.red || "#ef4444") }}>{gmvPct}% to GMV target</span>; })()}
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
-                {[
-                  { label: "GMV", value: fmtDol(m.tts_gmv), color: t.green },
-                  { label: "ROAS", value: m.roas ? m.roas + "x" : "\u2014", color: t.blue },
-                  { label: "Net revenue", value: fmtDol(m.net_revenue), color: m.net_revenue > 0 ? t.green : (t.red || "#ef4444") },
-                  { label: "Videos", value: fmtNum(m.videos_posted), color: t.text },
-                  { label: "Net/video", value: m.net_per_video ? "$" + Number(m.net_per_video).toLocaleString() : "\u2014", color: t.text },
-                  { label: "Impressions", value: fmtNum(m.impressions), color: t.text },
-                  { label: "CPM", value: m.cpm ? "$" + m.cpm : "\u2014", color: t.textMuted },
-                  { label: "Orders", value: fmtNum(m.orders), color: t.text },
-                  { label: "Ad spend", value: fmtDol(m.ad_spend), color: t.textMuted },
-                  { label: "Creators", value: fmtNum(m.total_creators), color: t.text },
-                ].map((stat, i) => (
-                  <div key={i} style={{ padding: "8px 10px", background: t.cardAlt, borderRadius: 8 }}>
-                    <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>{stat.label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: stat.color }}>{stat.value}</div>
-                  </div>
-                ))}
-              </div>
+            <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No monthly data yet. Add weekly data first.</div>
+          ) : (
+            <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
+                <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
+                  <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
+                    {["Month", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Orders", "GMV", "Ad Spend", "S/V", "ROAS", "CPM", "Net/video", "Net Revenue", "Weeks"].map((h, i) => (
+                      <th key={i} style={{ padding: "10px 12px", textAlign: i === 0 || i === 14 ? "left" : "right", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 11 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    let curQ = ""; const rows = [];
+                    const mkQTotal = (qLabel) => {
+                      const qMs = monthly.filter(mm => { const dd = new Date(mm.month_start || mm.month + "-01"); return ("Q" + (Math.floor(dd.getMonth() / 3) + 1) + " " + dd.getFullYear()) === qLabel; });
+                      const qG = qMs.reduce((s, mm) => s + Number(mm.tts_gmv || 0), 0); const qA = qMs.reduce((s, mm) => s + Number(mm.ad_spend || 0), 0); const qN = qMs.reduce((s, mm) => s + Number(mm.net_revenue || 0), 0);
+                      const qR = qA > 0 ? (qG / qA).toFixed(2) + "x" : "\u2014"; const qW = qMs.reduce((s, mm) => s + Number(mm.weeks_reported || 0), 0);
+                      return <tr key={"qt-" + qLabel} style={{ background: "#0f2e1f" }}>
+                        <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: "#fff" }}>{qLabel} total</td><td colSpan={4}></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#fff" }}>{fmtNum(qMs.reduce((s, mm) => s + Number(mm.impressions || 0), 0))}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#fff" }}>{fmtNum(qMs.reduce((s, mm) => s + Number(mm.orders || 0), 0))}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 14, fontWeight: 800, color: "#4ade80" }}>{fmtDol(qG)}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#fff" }}>{fmtDol(qA)}</td><td></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 800, color: "#4ade80" }}>{qR}</td><td></td><td></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 13, fontWeight: 800, color: qN >= 0 ? "#4ade80" : "#f87171" }}>${Math.round(qN).toLocaleString()}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, color: "#fff" }}>{qW}w</td>
+                      </tr>;
+                    };
+                    monthly.forEach((m, mi) => {
+                      const d = new Date(m.month_start || m.month + "-01"); const q = "Q" + (Math.floor(d.getMonth() / 3) + 1) + " " + d.getFullYear();
+                      if (q !== curQ) {
+                        if (curQ) { rows.push(mkQTotal(curQ)); rows.push(<tr key={"qsp-" + curQ} style={{ height: 12 }}><td colSpan={99} style={{ border: "none" }}></td></tr>); }
+                        curQ = q;
+                        rows.push(<tr key={"qh-" + q} style={{ background: "#1a3a2a" }}><td colSpan={99} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{q}</td></tr>);
+                      }
+                      const gmv = Number(m.tts_gmv) || 0; const adSpend = Number(m.ad_spend) || 0; const netRev = Number(m.net_revenue) || 0;
+                      const roas = m.roas ? m.roas + "x" : (adSpend > 0 ? (gmv / adSpend).toFixed(2) + "x" : "\u2014");
+                      const cpm = m.cpm ? "$" + m.cpm : (Number(m.impressions) > 0 ? "$" + (adSpend / (Number(m.impressions) / 1000)).toFixed(2) : "\u2014");
+                      const npv = m.net_per_video ? "$" + Number(m.net_per_video).toLocaleString() : (Number(m.videos_posted) > 0 ? "$" + Math.round(netRev / Number(m.videos_posted)).toLocaleString() : "\u2014");
+                      const sv = Number(m.videos_posted) > 0 && Number(m.samples_posted || 0) > 0 ? (Number(m.samples_posted) / Number(m.videos_posted)).toFixed(2) : "\u2014";
+                      const monthLabel = new Date(m.month_start || m.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const target = targets.find(tg => tg.month === m.month); const gmvPct = target?.target_gmv > 0 ? Math.round((gmv / target.target_gmv) * 100) : null;
+                      const prevMonth = monthly[mi + 1] || null; const mc = t.isLight ? "#92600a" : "#fbbf24"; const mc2 = t.isLight ? "#6b5c3a" : "#a0944a";
+                      rows.push(
+                        <tr key={"m-" + m.month} style={{ background: t.isLight ? "#fef3e2" : "#2a1f0a", borderBottom: "2px solid " + (t.isLight ? "#f0d9a8" : "#3d2f0f") }} onMouseEnter={(e) => { e.currentTarget.style.background = t.isLight ? "#fdecc8" : "#332808"; }} onMouseLeave={(e) => { e.currentTarget.style.background = t.isLight ? "#fef3e2" : "#2a1f0a"; }}>
+                          <td style={{ padding: "10px 12px", fontWeight: 700, color: mc, whiteSpace: "nowrap" }}>{monthLabel}{gmvPct != null ? <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: gmvPct >= 100 ? t.green : gmvPct >= 75 ? t.orange : (t.red || "#ef4444") }}>{gmvPct}% to target</span> : null}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.superfiliate_invites || 0)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.sample_requests || 0)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.samples_posted || 0)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: mc }}>{fmtNum(m.videos_posted)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.impressions)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc }}>{fmtNum(m.orders)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 800, fontSize: 13, color: t.green }}>{fmtDol(gmv)}{prevMonth ? (() => { const pG = Number(prevMonth.tts_gmv) || 0; if (pG === 0) return null; const pct = Math.round(((gmv - pG) / pG) * 100); if (pct === 0) return null; return <span style={{ fontSize: 9, fontWeight: 700, color: pct > 0 ? t.green : (t.red || "#ef4444"), marginLeft: 4 }}>{pct > 0 ? "\u25B2" : "\u25BC"}{Math.abs(pct)}%</span>; })() : null}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: adSpend > 0 ? (t.red || "#ef4444") : t.textFaint }}>{fmtDol(adSpend)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc2 }}>{sv}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: roas !== "\u2014" && parseFloat(roas) >= 2 ? t.green : t.text }}>{roas}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc2 }}>{cpm}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: mc2 }}>{npv}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 800, fontSize: 13, color: netRev >= 0 ? t.green : (t.red || "#ef4444") }}>${Math.round(netRev).toLocaleString()}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, color: t.textFaint }}>{m.weeks_reported}w</td>
+                        </tr>
+                      );
+                    });
+                    if (curQ) rows.push(mkQTotal(curQ));
+                    return rows;
+                  })()}
+                </tbody>
+              </table>
             </div>
-          ))}
+          )}
         </div>
       ) : null}
     </div>
