@@ -9055,10 +9055,10 @@ function TtsNativeTab({ t, S, teamMembers }) {
             <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data yet. Click "+ New week" to start entering TTS data.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1200 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1400 }}>
                 <thead>
                   <tr style={{ background: t.cardAlt }}>
-                    {["Week", "SF/Req/Ship", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
+                    {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
                       <th key={i} style={{ padding: "8px 10px", textAlign: i < 2 ? "left" : "right", fontWeight: 600, color: t.textMuted, borderBottom: "1px solid " + t.border, whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -9071,7 +9071,9 @@ function TtsNativeTab({ t, S, teamMembers }) {
                     return (
                       <tr key={w.id} style={{ background: ri % 2 ? t.cardAlt + "40" : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? t.cardAlt + "40" : "transparent"; }}>
                         <td style={{ padding: "8px 10px", borderBottom: bb, whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}/{fmtNum(w.sample_requests)}/{fmtNum(w.samples_posted)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.sample_requests)}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.samples_posted)}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.impressions)}{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.clicks)}</td>
