@@ -349,13 +349,25 @@ export async function dbLoadTtsWeekly() {
 }
 
 export async function dbSaveTtsWeek(row) {
+  const clean = {
+    week_start: row.week_start, week_end: row.week_end,
+    samples_sent: row.samples_sent || 0, sample_requests: row.sample_requests || 0, samples_posted: row.samples_posted || 0,
+    videos_posted: row.videos_posted || 0, videos_approved: row.videos_approved || 0, videos_rejected: row.videos_rejected || 0,
+    impressions: row.impressions || 0, organic_impressions: row.organic_impressions || 0, clicks: row.clicks || 0, orders: row.orders || 0,
+    tts_gmv: row.tts_gmv || 0, tts_commission: row.tts_commission || 0, ad_spend: row.ad_spend || 0,
+    sample_cost: row.sample_cost || 0, creator_payments: row.creator_payments || 0,
+    new_creators_added: row.new_creators_added || 0, active_creators: row.active_creators || 0, total_creators: row.total_creators || 0,
+    superfiliate_invites: row.superfiliate_invites || 0, notes: row.notes || "",
+    entered_by: row.entered_by || null, gmv_source: row.gmv_source || "manual",
+    impressions_source: row.impressions_source || "manual", ad_spend_source: row.ad_spend_source || "manual",
+  };
   if (row.id) {
-    const { error } = await supabase.from("tts_weekly").update(row).eq("id", row.id);
-    if (error) { console.error("[db] Update TTS week error:", error); return { error }; }
+    const { error } = await supabase.from("tts_weekly").update(clean).eq("id", row.id);
+    if (error) { console.error("[db] Update TTS week error:", error.message); return { error }; }
     return { error: null };
   } else {
-    const { data, error } = await supabase.from("tts_weekly").insert(row).select().single();
-    if (error) { console.error("[db] Insert TTS week error:", error); return { error }; }
+    const { data, error } = await supabase.from("tts_weekly").insert(clean).select().single();
+    if (error) { console.error("[db] Insert TTS week error:", error.message); return { error }; }
     return { data, error: null };
   }
 }
