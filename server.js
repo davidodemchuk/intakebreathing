@@ -499,6 +499,7 @@ app.post("/api/slack-notify", async (req, res) => {
   else if (type === "campaign_invites_generated") text = ":sparkles: *" + (data.count || 0) + " AI invites generated for " + (data.campaignName || "campaign") + "*\nReview drafts in each creator's Messages tab\n<https://www.intakecreators.com/messaging|Open Messaging Hub>";
   else if (type === "creator_replied") text = ":incoming_envelope: *@" + (data.creatorHandle || "creator") + " replied!*\n<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|View conversation>";
   else if (type === "draft_ready") text = ":pencil2: *AI draft ready for @" + (data.creatorHandle || "creator") + "*\n<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|Review and send>";
+  else if (type === "new_creator_signup") text = data.text || ":tada: New creator signed up!";
   else if (type === "test") text = data.text || ":white_check_mark: *Intake Creators Bot connected!*\nSlack notifications are working.";
   else text = data.text || ":bell: Notification from Intake Creators";
 

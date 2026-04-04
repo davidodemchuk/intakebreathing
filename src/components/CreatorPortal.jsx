@@ -161,22 +161,69 @@ function CreatorLogin({ navigate, t }) {
       const ttClean = ttHandle.replace(/^@/, "").trim();
       const ytClean = ytHandle.replace(/^@/, "").trim();
       const handle = igClean;
-      const socialData = {
-        instagramHandle: igClean,
-        tiktokHandle: ttClean || null,
-        youtubeHandle: ytClean || null,
-        otherPlatforms: otherPlatforms.trim() || null,
-      };
-      if (igProfile) { socialData.igFollowers = igProfile.followers; socialData.igBio = igProfile.bio; socialData.igAvatarUrl = igProfile.avatarUrl; }
-      if (ttProfile) { socialData.ttFollowers = ttProfile.followers; socialData.ttBio = ttProfile.bio; socialData.ttAvatarUrl = ttProfile.avatarUrl; }
+
+      const igData = igProfile?.followers ? {
+        followers: igProfile.followers, bio: igProfile.bio || "", avatarUrl: igProfile.avatarUrl || "",
+        lastEnriched: new Date().toISOString(),
+      } : null;
+      const ttData = ttProfile?.followers ? {
+        followers: ttProfile.followers, bio: ttProfile.bio || "", avatarUrl: ttProfile.avatarUrl || "",
+        lastEnriched: new Date().toISOString(),
+      } : null;
 
       let { data: creator } = await supabase.from("creators").select("id, onboarded").eq("email", userEmail).maybeSingle();
       if (creator) {
-        await supabase.from("creators").update({ name: name.trim(), handle, ...socialData }).eq("id", creator.id);
+        await supabase.from("creators").update({
+          name: name.trim(),
+          handle,
+          instagram_handle: igClean,
+          tiktok_handle: ttClean || null,
+          youtube_handle: ytClean || null,
+          instagram_url: igClean ? "https://www.instagram.com/" + igClean + "/" : "",
+          tiktok_url: ttClean ? "https://www.tiktok.com/@" + ttClean : "",
+          ...(igData ? { instagram_data: igData } : {}),
+          ...(ttData ? { tiktok_data: ttData } : {}),
+        }).eq("id", creator.id);
       } else {
-        const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: name.trim(), status: "Active", onboarded: false, programs: ["ugc"], creator_tier: "rising", ...socialData }).select().single();
+        const { data: nc, error: ie } = await supabase.from("creators").insert({
+          handle,
+          email: userEmail,
+          name: name.trim(),
+          instagram_handle: igClean,
+          tiktok_handle: ttClean || null,
+          youtube_handle: ytClean || null,
+          instagram_url: igClean ? "https://www.instagram.com/" + igClean + "/" : "",
+          tiktok_url: ttClean ? "https://www.tiktok.com/@" + ttClean : "",
+          instagram_data: igData,
+          tiktok_data: ttData,
+          status: "Active",
+          onboarded: false,
+          programs: ["ugc"],
+          creator_tier: "rising",
+          niche: "",
+        }).select().single();
         if (ie) { setError("Account created but profile setup failed. Try logging in."); setLoading(false); return; }
         creator = nc;
+
+        // Notify team via Slack
+        try {
+          const igStats = igProfile?.followers ? " (" + Number(igProfile.followers).toLocaleString() + " followers)" : "";
+          const ttStats = ttProfile?.followers ? " (" + Number(ttProfile.followers).toLocaleString() + " followers)" : "";
+          await fetch("/api/slack-notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "new_creator_signup",
+              data: {
+                text: ":tada: *New creator signed up!*\n"
+                  + "Name: " + name.trim() + "\n"
+                  + "Instagram: @" + igClean + igStats + "\n"
+                  + (ttClean ? "TikTok: @" + ttClean + ttStats + "\n" : "")
+                  + "<https://www.intakecreators.com/ugc-army/creator?id=" + creator.id + "|View in Creator Hub>",
+              },
+            }),
+          });
+        } catch (e) { console.log("[signup] Slack notify failed:", e.message); }
       }
       navigate(creator.onboarded ? "creatorDashboard" : "creatorOnboard");
     } catch (e) { setError(e.message?.includes("already registered") ? "This email is already registered. Try logging in." : (e.message || "Sign up failed.")); }
