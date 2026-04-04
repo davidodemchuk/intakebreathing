@@ -52,7 +52,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.26.0";
+const APP_VERSION = "6.27.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -8832,9 +8832,9 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
   const calc = (d) => {
     const vp = Number(d.videos_posted) || 0;
-    const ss = Number(d.samples_sent) || 0;
-    const sr = Number(d.samples_received) || 0;
-    const sp = Number(d.samples_posted) || 0;
+    const sf = Number(d.superfiliate_invites) || 0;
+    const sr = Number(d.sample_requests) || 0;
+    const sp = Number(d.samples_shipped) || 0;
     const va = Number(d.videos_approved) || 0;
     const imp = Number(d.impressions) || 0;
     const orgImp = Number(d.organic_impressions) || 0;
@@ -8847,7 +8847,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
     const commission = Number(d.tts_commission) || 0;
     const totalCost = adSpend + sampleCost + creatorPay;
     return {
-      sv_ratio: vp > 0 ? (ss / vp).toFixed(2) : "\u2014",
+      sv_ratio: vp > 0 ? (sp / vp).toFixed(2) : "\u2014",
       post_rate: sr > 0 ? ((sp / sr) * 100).toFixed(1) + "%" : "\u2014",
       approval_rate: vp > 0 ? ((va / vp) * 100).toFixed(1) + "%" : "\u2014",
       cost_per_video: vp > 0 ? "$" + Math.round(totalCost / vp).toLocaleString() : "\u2014",
@@ -8884,7 +8884,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
 
   const newWeekForm = () => {
     const monday = getMonday(new Date());
-    setFormData({ week_start: monday, week_end: getSunday(monday), samples_sent: 0, samples_received: 0, samples_posted: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, clicks: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
+    setFormData({ week_start: monday, week_end: getSunday(monday), superfiliate_invites: 0, sample_requests: 0, samples_shipped: 0, videos_posted: 0, videos_approved: 0, videos_rejected: 0, impressions: 0, organic_impressions: 0, clicks: 0, orders: 0, tts_gmv: 0, tts_commission: 0, ad_spend: 0, sample_cost: 0, creator_payments: 0, new_creators_added: 0, active_creators: 0, total_creators: 0, notes: "" });
     setEditingRow(null);
     setShowForm(true);
   };
@@ -8996,13 +8996,13 @@ function TtsNativeTab({ t, S, teamMembers }) {
                 {inputField("Week start (Monday)", "week_start", "date")}
                 {inputField("Week end (Sunday)", "week_end", "date")}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Samples</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {inputField("Sent", "samples_sent")}{inputField("Received", "samples_received")}{inputField("Posted", "samples_posted")}
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Outreach & samples</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+                {inputField("SF invites", "superfiliate_invites")}{inputField("Sample requests", "sample_requests")}{inputField("Samples shipped", "samples_shipped")}{inputField("Videos posted", "videos_posted")}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Videos</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {inputField("Posted", "videos_posted")}{inputField("Approved", "videos_approved")}{inputField("Rejected", "videos_rejected")}
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Video review</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {inputField("Approved", "videos_approved")}{inputField("Rejected", "videos_rejected")}
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, marginTop: 8 }}>Performance</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
@@ -9048,7 +9048,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1200 }}>
                 <thead>
                   <tr style={{ background: t.cardAlt }}>
-                    {["Week", "Samples S/R/P", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", ""].map((h, i) => (
+                    {["Week", "SF/Req/Ship", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", ""].map((h, i) => (
                       <th key={i} style={{ padding: "8px 10px", textAlign: i < 2 ? "left" : "right", fontWeight: 600, color: t.textMuted, borderBottom: "1px solid " + t.border, whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -9061,7 +9061,7 @@ function TtsNativeTab({ t, S, teamMembers }) {
                     return (
                       <tr key={w.id} style={{ background: ri % 2 ? t.cardAlt + "40" : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? t.cardAlt + "40" : "transparent"; }}>
                         <td style={{ padding: "8px 10px", borderBottom: bb, whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{w.samples_sent}/{w.samples_received}/{w.samples_posted}</td>
+                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}/{fmtNum(w.sample_requests)}/{fmtNum(w.samples_shipped)}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.impressions)}{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</td>
                         <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.clicks)}</td>

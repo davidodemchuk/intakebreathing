@@ -310,81 +310,82 @@ app.post("/api/import-tts-from-sheets", async (req, res) => {
       range: "TTS Weekly!A1:Z200",
     });
     const rows = response.data.values || [];
-    if (rows.length < 2) return res.json({ imported: 0, skipped: 0, total: 0, message: "No data found in sheet" });
+    if (rows.length < 2) return res.json({ imported: 0, skipped: 0, total: 0, message: "No data found" });
 
-    const headers = rows[0].map(h => String(h).trim().toLowerCase());
-    console.log("[import-tts] Headers found:", headers.join(", "));
+    const headers = rows[0].map(h => String(h).trim());
+    console.log("[import-tts] Headers:", headers.join(" | "));
 
-    const dataRows = rows.slice(1).filter(r => r.length > 0 && r[0]);
-    const results = [];
+    const parseNum = (val) => {
+      if (val == null || val === "") return 0;
+      const cleaned = String(val).replace(/[$,%]/g, "").replace(/,/g, "").trim();
+      const n = Number(cleaned);
+      return isNaN(n) ? 0 : n;
+    };
 
-    for (const row of dataRows) {
-      const rowMap = {};
-      headers.forEach((h, i) => { rowMap[h] = (row[i] || "").trim(); });
-
-      const weekStartRaw = rowMap["week start"] || rowMap["week_start"] || rowMap["week"] || rowMap["date"] || rowMap["start"] || row[0];
-      if (!weekStartRaw) continue;
-
-      let weekStart;
-      try {
-        const d = new Date(weekStartRaw);
-        if (isNaN(d.getTime())) continue;
-        weekStart = d.toISOString().split("T")[0];
-      } catch { continue; }
-
-      const weekEndDate = new Date(weekStart);
-      weekEndDate.setDate(weekEndDate.getDate() + 6);
-      const weekEnd = weekEndDate.toISOString().split("T")[0];
-
-      const num = (keys) => {
-        for (const k of (Array.isArray(keys) ? keys : [keys])) {
-          const v = rowMap[k.toLowerCase()];
-          if (v != null && v !== "") {
-            const cleaned = String(v).replace(/[$,%]/g, "").replace(/,/g, "").trim();
-            const n = Number(cleaned);
-            if (!isNaN(n)) return n;
-          }
+    const parseWeekDates = (val) => {
+      if (!val) return null;
+      const parts = String(val).split(/\s*[-\u2013]\s*/);
+      const first = parts[0].trim();
+      const match = first.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (!match) return null;
+      let year = Number(match[3]);
+      if (year < 100) year += 2000;
+      const start = year + "-" + String(match[1]).padStart(2, "0") + "-" + String(match[2]).padStart(2, "0");
+      let end;
+      if (parts[1]) {
+        const m2 = parts[1].trim().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+        if (m2) {
+          let y2 = Number(m2[3]);
+          if (y2 < 100) y2 += 2000;
+          end = y2 + "-" + String(m2[1]).padStart(2, "0") + "-" + String(m2[2]).padStart(2, "0");
         }
-        return 0;
-      };
+      }
+      if (!end) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + 6);
+        end = d.toISOString().split("T")[0];
+      }
+      return { start, end };
+    };
 
+    const results = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row[0]) continue;
+      const dates = parseWeekDates(row[0]);
+      if (!dates) { console.log("[import-tts] Skipping row", i, "bad date:", row[0]); continue; }
+
+      // Column mapping by index from actual sheet:
+      // A=0:Weekly B=1:SF Tr C=2:% D=3:Sample Requests E=4:Samples Shipped F=5:Posted G=6:Sample Cost
+      // H=7:S/V Ratio I=8:CPVideo J=9:Impressions K=10:Organic Impressions L=11:Ad Impressions
+      // M=12:TTS GMV N=13:Ad Spend O=14:CPV Ad Spend P=15:Net Per Video
       results.push({
-        week_start: weekStart,
-        week_end: weekEnd,
-        samples_sent: num(["samples sent", "samples_sent", "sent"]),
-        samples_received: num(["samples received", "samples_received", "received"]),
-        samples_posted: num(["samples posted", "samples_posted", "posted samples"]),
-        videos_posted: num(["videos posted", "videos_posted", "videos", "new videos"]),
-        videos_approved: num(["videos approved", "videos_approved", "approved"]),
-        videos_rejected: num(["videos rejected", "videos_rejected", "rejected"]),
-        impressions: num(["impressions", "total impressions", "views", "total views"]),
-        organic_impressions: num(["organic impressions", "organic_impressions", "organic"]),
-        clicks: num(["clicks", "product clicks"]),
-        orders: num(["orders", "total orders", "conversions"]),
-        tts_gmv: num(["gmv", "tts gmv", "tts_gmv", "gross merchandise value", "revenue", "total revenue"]),
-        tts_commission: num(["commission", "tts commission", "tts_commission", "creator commission"]),
-        ad_spend: num(["ad spend", "ad_spend", "ads spend", "total ad spend", "spend"]),
-        sample_cost: num(["sample cost", "sample_cost", "sampling cost"]),
-        creator_payments: num(["creator payments", "creator_payments", "creator pay"]),
-        new_creators_added: num(["new creators", "new_creators_added", "new creators added"]),
-        active_creators: num(["active creators", "active_creators"]),
-        total_creators: num(["total creators", "total_creators", "creator count"]),
-        notes: rowMap["notes"] || rowMap["note"] || "",
+        week_start: dates.start,
+        week_end: dates.end,
+        superfiliate_invites: parseNum(row[1]),
+        sample_requests: parseNum(row[3]),
+        samples_shipped: parseNum(row[4]),
+        videos_posted: parseNum(row[5]),
+        sample_cost: parseNum(row[6]),
+        impressions: parseNum(row[9]),
+        organic_impressions: parseNum(row[10]),
+        tts_gmv: parseNum(row[12]),
+        ad_spend: parseNum(row[13]),
+        notes: "",
         gmv_source: "google_sheets_import",
       });
     }
 
-    let imported = 0;
-    let skipped = 0;
+    let imported = 0, skipped = 0;
     for (const entry of results) {
       const { data: existing } = await supabaseServer.from("tts_weekly").select("id").eq("week_start", entry.week_start).maybeSingle();
       if (existing) { skipped++; continue; }
       const { error } = await supabaseServer.from("tts_weekly").insert(entry);
-      if (error) { console.error("[import-tts] Insert error for", entry.week_start, error.message); }
+      if (error) { console.error("[import-tts] Error:", entry.week_start, error.message); }
       else { imported++; }
     }
 
-    console.log("[import-tts] Done: " + imported + " imported, " + skipped + " skipped, " + results.length + " total");
+    console.log("[import-tts] Done:", imported, "imported,", skipped, "skipped,", results.length, "parsed");
     res.json({ imported, skipped, total: results.length, headers });
   } catch (e) {
     console.error("[import-tts] Error:", e.message);
