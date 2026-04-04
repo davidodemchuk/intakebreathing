@@ -52,7 +52,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.28.0";
+const APP_VERSION = "6.29.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -9054,12 +9054,12 @@ function TtsNativeTab({ t, S, teamMembers }) {
           {weeks.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: t.textFaint }}>No data yet. Click "+ New week" to start entering TTS data.</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 1400 }}>
-                <thead>
-                  <tr style={{ background: t.cardAlt }}>
+            <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 1400 }}>
+                <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
+                  <tr style={{ background: t.isLight ? "#e8e5dc" : "#222222", borderBottom: "2px solid " + t.border }}>
                     {["Week", "SF Invites", "Requests", "Shipped", "Videos", "Impressions", "Clicks", "Orders", "GMV", "Ad spend", "S/V", "ROAS", "CPM", "Net/video", "Net rev", "By", ""].map((h, i) => (
-                      <th key={i} style={{ padding: "8px 10px", textAlign: i < 2 ? "left" : "right", fontWeight: 600, color: t.textMuted, borderBottom: "1px solid " + t.border, whiteSpace: "nowrap" }}>{h}</th>
+                      <th key={i} style={{ padding: "10px 12px", textAlign: i < 2 ? "left" : "right", fontWeight: 700, color: t.text, borderBottom: "2px solid " + t.border, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -9068,28 +9068,30 @@ function TtsNativeTab({ t, S, teamMembers }) {
                     const c = calc(w);
                     const pw = weeks[ri + 1] || null;
                     const bb = "1px solid " + t.border + "40";
+                    const altBg = t.isLight ? "#f2f0ea" : "#1a1a1a";
+                    const hoverBg = t.isLight ? "#ece9e0" : "#1e1e1e";
                     return (
-                      <tr key={w.id} style={{ background: ri % 2 ? t.cardAlt + "40" : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? t.cardAlt + "40" : "transparent"; }}>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.sample_requests)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.samples_posted)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.impressions)}{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.clicks)}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.orders)}{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: t.green }}>{fmtDol(w.tts_gmv)}{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{fmtDol(w.ad_spend)}{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.sv_ratio}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}{pw ? <WowArrow current={Number(w.ad_spend) > 0 ? Number(w.tts_gmv) / Number(w.ad_spend) : 0} previous={Number(pw.ad_spend) > 0 ? Number(pw.tts_gmv) / Number(pw.ad_spend) : 0} /> : null}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.cpm}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right" }}>{c.net_per_video}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "right", fontWeight: 700, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}{pw ? (() => { const p = calc(pw); const cVal = Number(String(c.net_revenue).replace(/[$,]/g, "")) || 0; const pVal = Number(String(p.net_revenue).replace(/[$,]/g, "")) || 0; return <WowArrow current={cVal} previous={pVal} />; })() : null}</td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb }}>
+                      <tr key={w.id} style={{ background: ri % 2 ? altBg : "transparent", cursor: "pointer" }} onClick={() => editWeek(w)} onMouseEnter={(e) => { e.currentTarget.style.background = hoverBg; }} onMouseLeave={(e) => { e.currentTarget.style.background = ri % 2 ? altBg : "transparent"; }}>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, whiteSpace: "nowrap" }}>{w.week_start} — {w.week_end?.substring(5)}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.superfiliate_invites)}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.sample_requests)}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.samples_posted)}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.videos_posted)}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.impressions)}{pw ? <WowArrow current={w.impressions} previous={pw.impressions} /> : null}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.clicks)}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{fmtNum(w.orders)}{pw ? <WowArrow current={w.orders} previous={pw.orders} /> : null}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right", fontWeight: 700, fontSize: 13, color: t.green }}>{fmtDol(w.tts_gmv)}{pw ? <WowArrow current={w.tts_gmv} previous={pw.tts_gmv} /> : null}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right", color: Number(w.ad_spend) > 0 ? (t.red || "#ef4444") : t.textFaint }}>{fmtDol(w.ad_spend)}{pw ? <WowArrow current={w.ad_spend} previous={pw.ad_spend} invert /> : null}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.sv_ratio}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right", fontWeight: 700, fontSize: 13, color: c.roas !== "\u2014" && parseFloat(c.roas) >= 2 ? t.green : t.text }}>{c.roas}{pw ? <WowArrow current={Number(w.ad_spend) > 0 ? Number(w.tts_gmv) / Number(w.ad_spend) : 0} previous={Number(pw.ad_spend) > 0 ? Number(pw.tts_gmv) / Number(pw.ad_spend) : 0} /> : null}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right", color: t.textMuted }}>{c.cpm}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right" }}>{c.net_per_video}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "right", fontWeight: 700, fontSize: 13, color: c.net_revenue.includes("-") ? (t.red || "#ef4444") : t.green }}>{c.net_revenue}{pw ? (() => { const p = calc(pw); const cVal = Number(String(c.net_revenue).replace(/[$,]/g, "")) || 0; const pVal = Number(String(p.net_revenue).replace(/[$,]/g, "")) || 0; return <WowArrow current={cVal} previous={pVal} />; })() : null}</td>
+                        <td style={{ padding: "10px 12px", borderBottom: bb }}>
                           {(() => { const member = teamMembers.find(m => m.id === w.entered_by); if (!member) return <span style={{ fontSize: 10, color: t.textFaint }}>{"\u2014"}</span>; return <div style={{ display: "flex", alignItems: "center", gap: 4 }}>{member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: 9, objectFit: "cover" }} /> : null}<span style={{ fontSize: 10, color: t.textMuted }}>{member.name.split(" ")[0]}</span></div>; })()}
                         </td>
-                        <td style={{ padding: "8px 10px", borderBottom: bb, textAlign: "center" }}>
-                          <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 11 }} title="Delete">x</button>
+                        <td style={{ padding: "10px 12px", borderBottom: bb, textAlign: "center" }}>
+                          <button onClick={(e) => { e.stopPropagation(); deleteWeek(w.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 12 }} title="Delete">x</button>
                         </td>
                       </tr>
                     );
