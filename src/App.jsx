@@ -45,7 +45,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Add new version at the TOP of this array
 // Bump APP_VERSION to match
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
-const APP_VERSION = "6.19.0";
+const APP_VERSION = "6.20.0";
 const CHANGELOG = [
   { version: "6.11.0", date: "2026-04-03", changes: [
     "Flow chart and Canva embeds load on click with blurred preview — no more slow homepage loads",
@@ -7526,7 +7526,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             </div>
             {c.assignedAt ? <div style={{ fontSize: 10, color: t.textFaint }}>since {new Date(c.assignedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div> : null}
             {(() => { const member = teamMembers.find(m => m.id === c.assignedTo); if (!member?.slack_id) return null; return (
-              <a href={"https://intakebreathing.slack.com/team/" + member.slack_id} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: t.blue + "10", border: "1px solid " + t.blue + "30", color: t.blue, textDecoration: "none", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.blue + "20"; }} onMouseLeave={(e) => { e.currentTarget.style.background = t.blue + "10"; }}>
+              <a href={"slack://user?id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: t.blue + "10", border: "1px solid " + t.blue + "30", color: t.blue, textDecoration: "none", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.blue + "20"; }} onMouseLeave={(e) => { e.currentTarget.style.background = t.blue + "10"; }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z" fill="currentColor" opacity="0.8"/></svg>
                 Slack
               </a>
@@ -12113,7 +12113,7 @@ export default function App() {
                       )}
                       <span style={{ fontSize: 11, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.name.split(" ")[0]}</span>
                       {member?.slack_id ? (
-                        <a href={"https://intakebreathing.slack.com/team/" + member.slack_id} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ marginLeft: 4, opacity: 0.4, transition: "opacity 0.2s", display: "flex" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.4"; }}>
+                        <a href={"slack://user?id=" + member.slack_id} onClick={(e) => e.stopPropagation()} style={{ marginLeft: 4, opacity: 0.4, transition: "opacity 0.2s", display: "flex" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.4"; }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill={t.textMuted}><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z"/></svg>
                         </a>
                       ) : null}
