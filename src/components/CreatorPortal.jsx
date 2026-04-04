@@ -174,7 +174,7 @@ function CreatorLogin({ navigate, t }) {
       if (creator) {
         await supabase.from("creators").update({ name: name.trim(), handle, ...socialData }).eq("id", creator.id);
       } else {
-        const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: name.trim(), status: "Active", onboarded: false, ...socialData }).select().single();
+        const { data: nc, error: ie } = await supabase.from("creators").insert({ handle, email: userEmail, name: name.trim(), status: "Active", onboarded: false, programs: ["ugc"], creator_tier: "rising", ...socialData }).select().single();
         if (ie) { setError("Account created but profile setup failed. Try logging in."); setLoading(false); return; }
         creator = nc;
       }

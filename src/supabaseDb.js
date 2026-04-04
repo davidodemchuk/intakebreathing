@@ -60,6 +60,8 @@ export function creatorToRow(c) {
     assigned_to: c.assignedTo || null,
     assigned_at: c.assignedAt || null,
     assigned_by: c.assignedBy || null,
+    programs: c.programs || [],
+    creator_tier: c.creator_tier || null,
   };
 
   const clean = {};
@@ -134,6 +136,8 @@ export function rowToCreator(row) {
     assignedTo: row.assigned_to || null,
     assignedAt: row.assigned_at || null,
     assignedBy: row.assigned_by || null,
+    programs: row.programs || [],
+    creator_tier: row.creator_tier || null,
   };
 }
 

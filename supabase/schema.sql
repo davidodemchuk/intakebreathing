@@ -49,6 +49,8 @@ create table if not exists creators (
   invite_token text,
   onboarded boolean default false,
   onboarded_at timestamptz,
+  programs jsonb default '[]'::jsonb,
+  creator_tier text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -99,6 +101,10 @@ create policy "messages_all_anon" on messages for all using (true) with check (t
 
 -- If `creators` already existed without onboarded_at, run once:
 -- alter table creators add column if not exists onboarded_at timestamptz;
+
+-- Creator Hub: programs and tier columns (run once if creators table already exists)
+-- alter table creators add column if not exists programs jsonb default '[]'::jsonb;
+-- alter table creators add column if not exists creator_tier text;
 
 -- App-wide settings (API keys, manager-password-hash SHA-256, etc.). Run in Supabase SQL Editor if this table is missing.
 create table if not exists app_settings (

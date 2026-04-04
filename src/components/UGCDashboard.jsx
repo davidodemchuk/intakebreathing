@@ -17,8 +17,8 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-      <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>UGC Army</div>
-      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 28 }}>Manage creators, build briefs, and track your UGC pipeline</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creator Hub</div>
+      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 28 }}>Manage creators across all programs — UGC, TTS, A-Listers, Celebrities, and more</div>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
         {[
@@ -26,6 +26,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
           { v: library.length, l: "Briefs Created", c: t.blue },
           { v: vids, l: "Videos Tracked", c: t.orange },
           { v: scored, l: "Creators Scored", c: t.purple },
+          { v: [...new Set(creators.flatMap(c => c.programs || []))].length, l: "Programs Active", c: t.purple || "#8b5cf6" },
         ].map((s, i) => (
           <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: s.c }}>{s.v}</div>

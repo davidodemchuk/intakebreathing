@@ -74,6 +74,23 @@ const CREATOR_COLUMNS = [
   { key: "notes", label: "Notes", width: null, editable: true },
 ];
 
+const CREATOR_PROGRAMS = [
+  { id: "all", label: "All", color: null },
+  { id: "ugc", label: "UGC Army", color: "#00FEA9" },
+  { id: "tts", label: "TTS", color: "#63B7BA" },
+  { id: "alist", label: "A-Listers", color: "#F59E0B" },
+  { id: "celebrity", label: "Celebrities", color: "#8B5CF6" },
+  { id: "rising", label: "Rising Stars", color: "#3B82F6" },
+  { id: "superfiliate", label: "Superfiliate", color: "#EC4899" },
+];
+
+const CREATOR_TIERS = [
+  { id: "rising", label: "Rising Star", color: "#3B82F6" },
+  { id: "established", label: "Established", color: "#10B981" },
+  { id: "alist", label: "A-Lister", color: "#F59E0B" },
+  { id: "celebrity", label: "Celebrity", color: "#8B5CF6" },
+];
+
 function buildCreatorGridTemplate(colWidths) {
   return CREATOR_COLUMNS.map((c) => (c.width == null ? "1fr" : `${colWidths[c.key] ?? c.width}px`)).join(" ");
 }
@@ -84,7 +101,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 // notifySlack, notifyOwners moved to utils/notifications.js
 
-const APP_VERSION = "6.63.0";
+const APP_VERSION = "6.64.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -710,7 +727,7 @@ function getCurrentSection(view) {
 
 const NAV_SUB_LABELS = {
   dashboard: "Creator Partnerships",
-  ugcArmy: "UGC Army",
+  ugcArmy: "Creator Hub",
   tools: "Tools",
   pipeline: "Channel Pipeline",
   influencer: "Influencer Buys",
@@ -7022,6 +7039,41 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
       </div>
 
+      {/* Programs & Tier */}
+      <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: t.shadow }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 12, color: t.textFaint }}>Programs</span>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {CREATOR_PROGRAMS.filter(p => p.id !== "all").map(prog => {
+              const isIn = (c.programs || []).includes(prog.id);
+              return (
+                <button key={prog.id} onClick={async () => {
+                  const newPrograms = isIn
+                    ? (c.programs || []).filter(p => p !== prog.id)
+                    : [...(c.programs || []), prog.id];
+                  await updateCreator(c.id, { programs: newPrograms });
+                }} style={{
+                  padding: "3px 10px", borderRadius: 12, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                  border: isIn ? "2px solid " + prog.color : "1px solid " + t.border,
+                  background: isIn ? prog.color + "15" : "transparent",
+                  color: isIn ? prog.color : t.textFaint,
+                }}>
+                  {isIn ? "\u2713 " : ""}{prog.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: t.textFaint }}>Tier</span>
+          <select value={c.creator_tier || "rising"} onChange={async (e) => {
+            await updateCreator(c.id, { creator_tier: e.target.value });
+          }} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, cursor: "pointer" }}>
+            {CREATOR_TIERS.map(tier => <option key={tier.id} value={tier.id}>{tier.label}</option>)}
+          </select>
+        </div>
+      </div>
+
       {/* Messages — iMessage style */}
       <div style={{ marginBottom: 16 }}>
         <div onClick={openMessages} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: showMessages ? "14px 14px 0 0" : 14, background: showMessages ? t.green + "08" : t.card, border: showMessages ? "2px solid " + t.green + "30" : "1px solid " + t.border, borderBottom: showMessages ? "none" : undefined, cursor: "pointer", boxShadow: t.shadow, transition: "all 0.2s ease" }}>
@@ -8214,6 +8266,7 @@ export default function App() {
   }, []);
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
+  const [programFilter, setProgramFilter] = useState("all");
   const [sortCol, setSortCol] = useState("ibScore");
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All", owner: "All" });
@@ -9391,6 +9444,7 @@ export default function App() {
   const sortedCreators = useMemo(() => {
     let list = [...creators];
 
+    if (programFilter !== "all") list = list.filter(c => (c.programs || []).includes(programFilter));
     if (filters.status !== "All") list = list.filter((c) => c.status === filters.status);
     if (filters.quality !== "All") list = list.filter((c) => (c.quality || "Standard") === filters.quality);
     if (filters.niche !== "All") {
@@ -9470,7 +9524,7 @@ export default function App() {
     });
 
     return list;
-  }, [creators, filters, creatorSearch, sortCol, sortDir]);
+  }, [creators, filters, creatorSearch, sortCol, sortDir, programFilter]);
 
   const toggleSort = useCallback((col) => {
     setSortCol((prev) => {
@@ -9579,7 +9633,7 @@ export default function App() {
         )}
         {!hideManagerShell && <>
 
-        {/* NAV — context-aware (creators: UGC Army library only) */}
+        {/* NAV — context-aware (creators: Creator Hub library only) */}
         {(() => {
           if (currentRole === ROLES.CREATOR) {
             return (
@@ -9627,7 +9681,7 @@ export default function App() {
                 )}
                 {section === "ugcArmy" && (
                   <>
-                    <button type="button" style={S.navBtn(view === "ugcDashboard")} onClick={() => navigate("ugcDashboard")}>UGC Army</button>
+                    <button type="button" style={S.navBtn(view === "ugcDashboard")} onClick={() => navigate("ugcDashboard")}>Creator Hub</button>
                     <button type="button" style={S.navBtn(view === "creators" || view === "creatorDetail")} onClick={() => navigate("creators")}>Creators</button>
                     <button type="button" style={S.navBtn(view === "create")} onClick={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
                     <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
@@ -9809,9 +9863,9 @@ export default function App() {
                 <div style={homeCard(t.green)} onClick={() => navigate("ugcDashboard")}
                   onMouseEnter={(e) => homeHoverIn(e, t.green)} onMouseLeave={(e) => homeHoverOut(e, t.green)}>
                   <div style={{ marginBottom: 14 }}><CardIcon type="ugc" color={t.green} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>UGC Army</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create briefs, manage creators, and track content</div>
-                  <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{library.length} briefs · {activeCreatorCount} creators</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Hub</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Manage creators across all programs — UGC, TTS, and more</div>
+                  <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{creators.length} creators · {[...new Set(creators.flatMap(c => c.programs || []))].length} programs</div>
                 </div>
 
                 <div style={homeCard(t.orange)} onClick={() => navigate("pipeline")}
@@ -10486,6 +10540,8 @@ export default function App() {
             if (col.key === "handle") {
               const hDisp = fmtHandle(c.handle);
               const nm = (c.name || "").trim();
+              const progs = c.programs || [];
+              const tier = CREATOR_TIERS.find(x => x.id === c.creator_tier);
               return (
                 <div key={col.key} style={{ ...base }} title={nm ? `${hDisp} · ${nm}` : hDisp}>
                   <div style={{ minWidth: 0 }}>
@@ -10512,6 +10568,16 @@ export default function App() {
                         }}
                       >
                         {nm}
+                      </div>
+                    ) : null}
+                    {(progs.length > 0 || tier) ? (
+                      <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>
+                        {progs.map(prog => {
+                          const p = CREATOR_PROGRAMS.find(x => x.id === prog);
+                          if (!p) return null;
+                          return <span key={prog} style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: (p.color || "#888") + "15", color: p.color || "#888", fontWeight: 700 }}>{p.label}</span>;
+                        })}
+                        {tier ? <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: tier.color + "15", color: tier.color, fontWeight: 700 }}>{tier.label}</span> : null}
                       </div>
                     ) : null}
                   </div>
@@ -10866,6 +10932,23 @@ export default function App() {
                 </div>
               </div>
             </div>
+            <div style={{ display: "flex", gap: 4, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
+              {CREATOR_PROGRAMS.map(prog => {
+                const count = prog.id === "all" ? creators.length : creators.filter(c => (c.programs || []).includes(prog.id)).length;
+                return (
+                  <button key={prog.id} onClick={() => setProgramFilter(prog.id)} style={{
+                    padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    border: programFilter === prog.id ? "2px solid " + (prog.color || t.green) + "80" : "1px solid " + t.border,
+                    background: programFilter === prog.id ? (prog.color || t.green) + "12" : t.card,
+                    color: programFilter === prog.id ? (prog.color || t.green) : t.textMuted,
+                    whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6,
+                  }}>
+                    {prog.label}
+                    <span style={{ fontSize: 9, opacity: 0.7 }}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <input
                 type="text"
@@ -11155,7 +11238,7 @@ export default function App() {
         {(() => {
           const pageNames = {
             home: "Homepage",
-            ugcDashboard: "UGC Army Dashboard",
+            ugcDashboard: "Creator Hub Dashboard",
             creators: "Creators List",
             creatorDetail: "Creator Profile" + (detailCreator ? ` — ${detailCreator.handle || detailCreator.id}` : ""),
             create: "Brief Creator",
