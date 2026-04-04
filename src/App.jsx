@@ -46,7 +46,7 @@ import {
 import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
 import { ManagerCreatorChat, CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView } from "./components/CreatorPortal.jsx";
 import SettingsPanel, { HomepageSettingsBlock } from "./components/Settings.jsx";
-import { UGCDashboard, ManagerLogin } from "./components/UGCDashboard.jsx";
+import { UGCDashboard, ManagerLogin, CreatorHubLanding } from "./components/UGCDashboard.jsx";
 import TtsNativeTab from "./components/TtsNative.jsx";
 import ChannelPipeline from "./components/ChannelPipeline.jsx";
 import CampaignsPage from "./components/Campaigns.jsx";
@@ -101,7 +101,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 // notifySlack, notifyOwners moved to utils/notifications.js
 
-const APP_VERSION = "6.65.0";
+const APP_VERSION = "6.66.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -711,7 +711,7 @@ const ThemeContext = createContext();
 
 const NAV_SECTIONS = {
   dashboard: ["home"],
-  ugcArmy: ["ugcDashboard", "create", "display", "library", "creators", "creatorDetail"],
+  creatorHub: ["creatorHub", "ugcDashboard", "create", "display", "library", "creators", "creatorDetail"],
   tools: ["tools", "videotool"],
   pipeline: ["pipeline"],
   influencer: ["influencer"],
@@ -727,7 +727,7 @@ function getCurrentSection(view) {
 
 const NAV_SUB_LABELS = {
   dashboard: "Creator Partnerships",
-  ugcArmy: "Creator Hub",
+  creatorHub: "Creator Hub",
   tools: "Tools",
   pipeline: "Channel Pipeline",
   influencer: "Influencer Buys",
@@ -736,7 +736,13 @@ const NAV_SUB_LABELS = {
 
 const ROUTES = {
   "/": "home",
-  "/ugc-army": "ugcDashboard",
+  "/creator-hub": "creatorHub",
+  "/creator-hub/new": "create",
+  "/creator-hub/brief": "display",
+  "/creator-hub/library": "library",
+  "/creator-hub/creators": "creators",
+  "/creator-hub/creator": "creatorDetail",
+  "/ugc-army": "creatorHub",
   "/ugc-army/new": "create",
   "/ugc-army/brief": "display",
   "/ugc-army/library": "library",
@@ -762,12 +768,13 @@ const ROUTES = {
 
 const VIEW_TO_PATH = {
   home: "/",
-  ugcDashboard: "/ugc-army",
-  create: "/ugc-army/new",
-  display: "/ugc-army/brief",
-  library: "/ugc-army/library",
-  creators: "/ugc-army/creators",
-  creatorDetail: "/ugc-army/creator",
+  creatorHub: "/creator-hub",
+  ugcDashboard: "/creator-hub",
+  create: "/creator-hub/new",
+  display: "/creator-hub/brief",
+  library: "/creator-hub/library",
+  creators: "/creator-hub/creators",
+  creatorDetail: "/creator-hub/creator",
   pipeline: "/channel-pipeline",
   influencer: "/influencer-buys",
   tools: "/tools",
@@ -799,8 +806,11 @@ function getViewFromPath() {
   if (path === "/creator/brief") return "creatorBriefView";
   if (path === "/creator/messages") return "creatorMessages";
   if (path === "/brief") return "publicBrief";
-  if (path === "/ugc-army/creators") return "creators";
-  if (path === "/ugc-army/creator") return "creatorDetail";
+  // Redirect old /ugc-army URLs to /creator-hub
+  if (path === "/ugc-army") { window.history.replaceState(null, "", "/creator-hub"); return "creatorHub"; }
+  if (path.startsWith("/ugc-army/")) { const newPath = path.replace("/ugc-army", "/creator-hub"); window.history.replaceState(null, "", newPath + window.location.search); }
+  if (path === "/creator-hub/creators" || path === "/ugc-army/creators") return "creators";
+  if (path === "/creator-hub/creator" || path === "/ugc-army/creator") return "creatorDetail";
   if (path === "/channel-pipeline" || path.startsWith("/channel-pipeline/")) return "pipeline";
   if (path === "/messaging") return "messaging";
   if (path === "/campaigns" || path.startsWith("/campaigns")) return "campaigns";
@@ -8214,7 +8224,7 @@ export default function App() {
     const o = opts && typeof opts === "object" ? opts : {};
     let path = VIEW_TO_PATH[newView] || "/";
     if (newView === "creatorDetail" && o.creatorId) {
-      path = `/ugc-army/creator?id=${encodeURIComponent(String(o.creatorId))}`;
+      path = `/creator-hub/creator?id=${encodeURIComponent(String(o.creatorId))}`;
     }
     if (newView === "creatorBriefView" && (o.briefId || o.assignmentId)) {
       const q = new URLSearchParams();
@@ -8266,7 +8276,11 @@ export default function App() {
   }, []);
   const [creators, setCreators] = useState([]);
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [programFilter, setProgramFilter] = useState("all");
+  const [programFilter, setProgramFilter] = useState(() => {
+    const saved = localStorage.getItem("creator_program_filter");
+    if (saved) { localStorage.removeItem("creator_program_filter"); return saved; }
+    return "all";
+  });
   const [sortCol, setSortCol] = useState("ibScore");
   const [sortDir, setSortDir] = useState("desc");
   const [filters, setFilters] = useState({ status: "All", niche: "All", quality: "All", owner: "All" });
@@ -9648,7 +9662,7 @@ export default function App() {
                   />
                   <div onClick={() => navigate("library")} style={{ cursor: "pointer" }}>
                     <div style={S.navTitle}>Intake Breathing</div>
-                    <div style={S.navSub}>{NAV_SUB_LABELS.ugcArmy}</div>
+                    <div style={S.navSub}>{NAV_SUB_LABELS.creatorHub}</div>
                   </div>
                 </div>
                 <div style={S.navLinks}>
@@ -9679,9 +9693,9 @@ export default function App() {
                 {section !== "dashboard" && (
                   <button type="button" style={dashBtn} onClick={() => navigate("home")}>← Dashboard</button>
                 )}
-                {section === "ugcArmy" && (
+                {section === "creatorHub" && (
                   <>
-                    <button type="button" style={S.navBtn(view === "ugcDashboard")} onClick={() => navigate("ugcDashboard")}>Creator Hub</button>
+                    <button type="button" style={S.navBtn(view === "creatorHub" || view === "ugcDashboard")} onClick={() => navigate("creatorHub")}>Creator Hub</button>
                     <button type="button" style={S.navBtn(view === "creators" || view === "creatorDetail")} onClick={() => navigate("creators")}>Creators</button>
                     <button type="button" style={S.navBtn(view === "create")} onClick={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}>New Brief</button>
                     <button type="button" style={S.navBtn(view === "library")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
@@ -9860,11 +9874,11 @@ export default function App() {
               <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Partnerships</div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
-                <div style={homeCard(t.green)} onClick={() => navigate("ugcDashboard")}
+                <div style={homeCard(t.green)} onClick={() => navigate("creatorHub")}
                   onMouseEnter={(e) => homeHoverIn(e, t.green)} onMouseLeave={(e) => homeHoverOut(e, t.green)}>
                   <div style={{ marginBottom: 14 }}><CardIcon type="ugc" color={t.green} /></div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Hub</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creators, campaigns, briefs, and messaging — all in one place</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creators, campaigns, briefs — all programs in one place</div>
                   <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{creators.length} creators · {[...new Set(creators.flatMap(c => c.programs || []))].length} programs</div>
                 </div>
 
@@ -9961,17 +9975,15 @@ export default function App() {
           );
         })()}
 
-        {!aiLoading && isCreatorViewAllowed && view === "ugcDashboard" && (
-          <UGCDashboard
+        {!aiLoading && isCreatorViewAllowed && (view === "creatorHub" || view === "ugcDashboard") && (
+          <CreatorHubLanding
             navigate={navigate}
-            library={library}
             creators={creators}
             t={t}
             S={S}
-            onOpenBrief={openLibraryItem}
-            onNewBrief={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}
+            library={library}
             CardIcon={CardIcon}
-            teamMembers={teamMembers}
+            setProgramFilter={setProgramFilter}
           />
         )}
 
@@ -10871,7 +10883,7 @@ export default function App() {
 
           return (
           <div style={{ maxWidth: "100%", margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-            <button type="button" onClick={() => navigate("ugcDashboard")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
+            <button type="button" onClick={() => navigate("creatorHub")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>← Back</button>
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
                 <div>
@@ -11223,7 +11235,8 @@ export default function App() {
         {(() => {
           const pageNames = {
             home: "Homepage",
-            ugcDashboard: "Creator Hub Dashboard",
+            creatorHub: "Creator Hub",
+            ugcDashboard: "Creator Hub",
             creators: "Creators List",
             creatorDetail: "Creator Profile" + (detailCreator ? ` — ${detailCreator.handle || detailCreator.id}` : ""),
             create: "Brief Creator",

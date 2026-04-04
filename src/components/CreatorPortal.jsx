@@ -219,7 +219,7 @@ function CreatorLogin({ navigate, t }) {
                   + "Name: " + name.trim() + "\n"
                   + "Instagram: @" + igClean + igStats + "\n"
                   + (ttClean ? "TikTok: @" + ttClean + ttStats + "\n" : "")
-                  + "<https://www.intakecreators.com/ugc-army/creator?id=" + creator.id + "|View in Creator Hub>",
+                  + "<https://www.intakecreators.com/creator-hub/creator?id=" + creator.id + "|View in Creator Hub>",
               },
             }),
           });
