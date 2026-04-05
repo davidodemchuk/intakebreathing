@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { dbLoadCampaigns, dbSaveCampaign, dbLoadCampaignCreators, dbSaveCampaignCreator, dbDeleteCampaignCreator, dbGetOrCreateConversation, dbSaveMessage, dbGetSetting } from "../supabaseDb.js";
+import { dbLoadCampaigns, dbSaveCampaign, dbLoadCampaignCreators, dbSaveCampaignCreator, dbDeleteCampaignCreator, dbGetOrCreateConversation, dbSaveMessage, dbGetSetting, fetchIBSettings } from "../supabaseDb.js";
 import { notifySlack, notifyOwners } from "../utils/notifications.js";
 
 function CampaignsPage({ t, S, teamMembers, creators, navigate, briefs = [] }) {
@@ -47,13 +47,19 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate, briefs = [] }) {
     setGenerating(true);
     const apiKey = await dbGetSetting("anthropic-api-key");
     if (!apiKey) { alert("No API key."); setGenerating(false); return; }
+    let ibSettings = {};
+    try { ibSettings = await fetchIBSettings() || {}; } catch (e) { console.warn("[campaigns] Could not load IB settings:", e.message); }
+    const bc = ibSettings.ai_brand_context || {};
+    const th = ibSettings.ai_tone_hooks || {};
+    const brandBlock = bc.positioning ? "BRAND: " + (bc.positioning || "") + ". " + (bc.mission || "") + ". Product: " + (bc.product_description || "") : "BRAND: Intake Breathing — magnetic external nasal dilator for better breathing, sleep, and athletic performance.";
+    const toneBlock = th.primary_tones ? "\nTONE: " + (Array.isArray(th.primary_tones) ? th.primary_tones.join(", ") : "") + ". " + (Array.isArray(th.voice_dont) ? "AVOID: " + th.voice_dont.join(", ") : "") : "";
     setGenProgress({ current: 0, total: campaignCreators.length });
     for (let i = 0; i < campaignCreators.length; i++) {
       const cc = campaignCreators[i]; const cr = creators.find(c => c.id === cc.creator_id); if (!cr) continue;
       setGenProgress({ current: i + 1, total: campaignCreators.length });
       const cn = cr.tiktokData?.displayName || cr.instagramData?.fullName || cr.handle || ""; const ch = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 300, messages: [{ role: "user", content: "You are a creator partnerships manager at Intake Breathing. Write a personalized campaign invite to @" + ch + ".\n\nCAMPAIGN: " + selectedCampaign.name + "\nDESCRIPTION: " + (selectedCampaign.description || "") + "\nPRODUCT: " + (selectedCampaign.product || "Intake Breathing Starter Kit") + "\n\nCREATOR: " + cn + " (@" + ch + "), " + (Number(cr.tiktokData?.followers) || Number(cr.instagramData?.followers) || 0).toLocaleString() + " followers, IB Score " + (cr.ibScore?.overall || "N/A") + "\n\nWrite a short authentic invite under 120 words. Reference their content. Sound human, not corporate. Write ONLY the message body." }] }) });
+        const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 300, messages: [{ role: "user", content: "You are a creator partnerships manager at Intake Breathing.\n\n" + brandBlock + toneBlock + "\n\nWrite a personalized campaign invite to @" + ch + ".\n\nCAMPAIGN: " + selectedCampaign.name + "\nDESCRIPTION: " + (selectedCampaign.description || "") + "\nPRODUCT: " + (selectedCampaign.product || "Intake Breathing Starter Kit") + "\n\nCREATOR: " + cn + " (@" + ch + "), " + (Number(cr.tiktokData?.followers) || Number(cr.instagramData?.followers) || 0).toLocaleString() + " followers, IB Score " + (cr.ibScore?.overall || "N/A") + "\n\nWrite a short authentic invite under 120 words. Reference their content. Sound human, not corporate. Write ONLY the message body." }] }) });
         if (res.ok) { const data = await res.json(); const body = data.content?.[0]?.text || ""; if (body) { const conv = await dbGetOrCreateConversation(cr.id); if (conv) await dbSaveMessage({ conversation_id: conv.id, creator_id: cr.id, direction: "outbound", channel: "email", subject: "You're invited: " + selectedCampaign.name, body, status: "draft", ai_generated: true, campaign_id: selectedCampaign.id }); notifyOwners(cr.id, ch, "campaign_invite", { campaignName: selectedCampaign.name }); } }
       } catch (e) { console.error("[campaigns] Generate failed for", ch, e.message); }
     }
