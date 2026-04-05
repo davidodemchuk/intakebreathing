@@ -5719,7 +5719,7 @@ function CreatorHubHero({ stats, onOpen, onNav }) {
 
 function ChannelPipelineFeature({ onOpen, onTabOpen }) {
   const channels = [
-    { name: "TTS Native", star: true, sub: "First native build", tab: "tts" },
+    { name: "TTS Native", star: true, sub: "First native build", tab: "tts-native" },
     { name: "Overview", star: false, sub: "All channels", tab: "overview" },
     { name: "Spend", star: false, sub: "Budget & ROAS", tab: "spend" },
     { name: "Instagram", star: false, sub: "IG performance", tab: "instagram" },
