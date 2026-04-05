@@ -5790,6 +5790,8 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
   const [editDraft, setEditDraft] = useState("");
   const [editingDraft, setEditingDraft] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
+  const [revisionFor, setRevisionFor] = useState(null);
+  const [revisionText, setRevisionText] = useState("");
 
   const generateInviteDraft = async (cc, cr) => {
     setDraftingFor(cc.id);
@@ -6078,8 +6080,6 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
         const waiting = campCreators.filter(cc => ["accepted", "briefed", "revision"].includes(cc.status));
         const invited = campCreators.filter(cc => cc.status === "invited");
         const declined = campCreators.filter(cc => cc.status === "declined");
-        const [revisionFor, setRevisionFor] = useState(null);
-        const [revisionText, setRevisionText] = useState("");
         return (
         <div>
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
