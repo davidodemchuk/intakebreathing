@@ -42,6 +42,9 @@ import {
   dbLoadCampaignCreators,
   dbSaveCampaignCreator,
   dbDeleteCampaignCreator,
+  dbLoadCampaignOwners,
+  dbAddCampaignOwner,
+  dbRemoveCampaignOwner,
   fetchIBSettings,
 } from "./supabaseDb.js";
 import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
@@ -53,6 +56,7 @@ import ChannelPipeline from "./components/ChannelPipeline.jsx";
 import CampaignsPage from "./components/Campaigns.jsx";
 import MessagingHub from "./components/MessagingHub.jsx";
 import { ChangeRequestsPage, ChangeRequestWidget } from "./components/ChangeRequests.jsx";
+import TeamOwnerPicker from "./components/TeamOwnerPicker.jsx";
 import { notifySlack, notifyOwners } from "./utils/notifications.js";
 import { supabase } from "./supabase.js";
 
@@ -4440,7 +4444,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
   );
 }
 
-const BriefForm = memo(function BriefForm({ prefill, onGenerate, aiKnowledge }) {
+const BriefForm = memo(function BriefForm({ prefill, onGenerate, aiKnowledge, teamMembers = [] }) {
   const { t, S } = useContext(ThemeContext);
   const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : null;
   const approvedSource = ak?.approvedClaims?.length ? ak.approvedClaims : APPROVED_CLAIMS;
@@ -4661,9 +4665,11 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                 setShowCustomManager(v === "Other");
               }}
             >
-              {MANAGERS.map((m) => (
+              {(teamMembers.filter(m => ["owner", "manager", "team"].includes(m.role)).length > 0 ? teamMembers.filter(m => ["owner", "manager", "team"].includes(m.role)).map(m => (
+                <option key={m.id} value={m.name}>{m.name}{m.title ? " \u2014 " + m.title : ""}</option>
+              )) : MANAGERS.map((m) => (
                 <option key={m} value={m}>{m}</option>
-              ))}
+              )))}
             </select>
           </div>
           <div style={S.fg}>
@@ -5766,9 +5772,10 @@ function SiteFooter({ isDark = true }) {
 // CAMPAIGN DETAIL VIEW
 // ═══════════════════════════════════════════════════════════
 
-function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbSaveCampaign, dbLoadCampaignCreators, dbSaveCampaignCreator, dbDeleteCampaignCreator, BriefForm, BriefDisplay, handleGenerate, aiKnowledge, saveBrief, formKey, briefPrefill, setBriefPrefill, setFormKey, currentBrief, currentFormData, aiLoading }) {
+function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbSaveCampaign, dbLoadCampaignCreators, dbSaveCampaignCreator, dbDeleteCampaignCreator, BriefForm, BriefDisplay, handleGenerate, aiKnowledge, saveBrief, formKey, briefPrefill, setBriefPrefill, setFormKey, currentBrief, currentFormData, aiLoading, teamMembers = [] }) {
   const [campaign, setCampaign] = useState(null);
   const [campCreators, setCampCreators] = useState([]);
+  const [campaignOwners, setCampaignOwners] = useState([]);
   const [activeTab, setActiveTab] = useState("brief");
   const [loading, setLoading] = useState(true);
   const [creatorSearch, setCreatorSearch] = useState("");
@@ -5781,6 +5788,7 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
       if (data) setCampaign(data);
       const cc = await dbLoadCampaignCreators(campaignId);
       setCampCreators(cc || []);
+      try { const ow = await dbLoadCampaignOwners(campaignId); setCampaignOwners((ow || []).map(r => r.team_members).filter(Boolean)); } catch {}
       setLoading(false);
     })();
   }, [campaignId]);
@@ -5838,6 +5846,11 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
         <button onClick={() => navigate("campaigns")} style={{ ...S.btnS, fontSize: 12, padding: "8px 16px" }}>&larr; All Campaigns</button>
       </div>
 
+      {/* Campaign Owners */}
+      <div style={{ marginBottom: 20 }}>
+        <TeamOwnerPicker owners={campaignOwners} onAdd={async (memberId) => { await dbAddCampaignOwner(campaign.id, memberId); const updated = await dbLoadCampaignOwners(campaign.id); setCampaignOwners((updated || []).map(r => r.team_members).filter(Boolean)); }} onRemove={async (memberId) => { await dbRemoveCampaignOwner(campaign.id, memberId); setCampaignOwners(prev => prev.filter(m => m.id !== memberId)); }} teamMembers={teamMembers} label="Campaign owners" t={t} />
+      </div>
+
       {/* Tabs */}
       <div style={{ display: "flex", gap: 2, marginBottom: 24, borderBottom: "1px solid " + t.border }}>
         {tabs.map(tab => (
@@ -5868,7 +5881,7 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
           <div>
             <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 12 }}>{brief ? "Edit Campaign Brief" : "Create Campaign Brief"}</div>
             <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 20 }}>Use IB-Ai to generate a brief or start from a template. The brief will be linked to this campaign.</div>
-            <BriefForm key={"camp-bf-" + formKey} prefill={briefPrefill || (brief?.formData || brief?.form_data) || undefined} onGenerate={async (fd) => {
+            <BriefForm key={"camp-bf-" + formKey} prefill={briefPrefill || (brief?.formData || brief?.form_data) || undefined} teamMembers={teamMembers} onGenerate={async (fd) => {
               await handleGenerate(fd);
               // After generation, link the newest brief to this campaign
               setTimeout(async () => {
@@ -10461,7 +10474,7 @@ export default function App() {
         )}
         {!aiLoading && isCreatorViewAllowed && view === "campaignDetail" && (() => {
           const campaignId = new URLSearchParams(window.location.search).get("id");
-          return <CampaignDetailView campaignId={campaignId} navigate={navigate} t={t} S={S} creators={creators} library={library} dbSaveCampaign={dbSaveCampaign} dbLoadCampaignCreators={dbLoadCampaignCreators} dbSaveCampaignCreator={dbSaveCampaignCreator} dbDeleteCampaignCreator={dbDeleteCampaignCreator} BriefForm={BriefForm} BriefDisplay={BriefDisplay} handleGenerate={handleGenerate} aiKnowledge={aiKnowledge} saveBrief={saveBrief} formKey={formKey} briefPrefill={briefPrefill} setBriefPrefill={setBriefPrefill} setFormKey={setFormKey} currentBrief={currentBrief} currentFormData={currentFormData} aiLoading={aiLoading} />;
+          return <CampaignDetailView campaignId={campaignId} navigate={navigate} t={t} S={S} creators={creators} library={library} dbSaveCampaign={dbSaveCampaign} dbLoadCampaignCreators={dbLoadCampaignCreators} dbSaveCampaignCreator={dbSaveCampaignCreator} dbDeleteCampaignCreator={dbDeleteCampaignCreator} BriefForm={BriefForm} BriefDisplay={BriefDisplay} handleGenerate={handleGenerate} aiKnowledge={aiKnowledge} saveBrief={saveBrief} formKey={formKey} briefPrefill={briefPrefill} setBriefPrefill={setBriefPrefill} setFormKey={setFormKey} currentBrief={currentBrief} currentFormData={currentFormData} aiLoading={aiLoading} teamMembers={teamMembers} />;
         })()}
 
         {/* MESSAGING */}
@@ -10534,7 +10547,7 @@ export default function App() {
                 t={t}
               />
             </div>
-            <BriefForm key={`b-${formKey}`} prefill={briefPrefill || undefined} onGenerate={handleGenerate} aiKnowledge={aiKnowledge} />
+            <BriefForm key={`b-${formKey}`} prefill={briefPrefill || undefined} onGenerate={handleGenerate} aiKnowledge={aiKnowledge} teamMembers={teamMembers} />
             <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} />
           </div>
         )}

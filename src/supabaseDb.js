@@ -521,6 +521,24 @@ export async function dbSaveCampaignCreator(row) {
 }
 export async function dbDeleteCampaignCreator(id) { return await supabase.from("campaign_creators").delete().eq("id", id); }
 
+export async function dbLoadCampaignOwners(campaignId) {
+  const { data, error } = await supabase.from("campaign_owners").select("*, team_members(*)").eq("campaign_id", campaignId);
+  if (error) { console.error("[db] Load campaign owners error:", error); return []; }
+  return data || [];
+}
+
+export async function dbAddCampaignOwner(campaignId, teamMemberId) {
+  const { data, error } = await supabase.from("campaign_owners").upsert({ campaign_id: campaignId, team_member_id: teamMemberId, assigned_at: new Date().toISOString() }, { onConflict: "campaign_id,team_member_id" }).select("*, team_members(*)").single();
+  if (error) console.error("[db] Add campaign owner error:", error);
+  return { data, error };
+}
+
+export async function dbRemoveCampaignOwner(campaignId, teamMemberId) {
+  const { error } = await supabase.from("campaign_owners").delete().match({ campaign_id: campaignId, team_member_id: teamMemberId });
+  if (error) console.error("[db] Remove campaign owner error:", error);
+  return { error };
+}
+
 export async function dbSetSetting(key, value) {
   const { error } = await supabase
     .from("app_settings")
