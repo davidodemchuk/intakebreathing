@@ -5,9 +5,6 @@ import { notifySlack, notifyOwners } from "../utils/notifications.js";
 function CampaignsPage({ t, S, teamMembers, creators, navigate, briefs = [] }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({});
-  const [editingId, setEditingId] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [campaignCreators, setCampaignCreators] = useState([]);
   const [generating, setGenerating] = useState(false);
@@ -76,45 +73,8 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate, briefs = [] }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div><div style={{ fontSize: 24, fontWeight: 500, color: t.text }}>Campaigns</div><div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>{campaigns.length} campaigns · {campaigns.filter(c => c.status === "active").length} active</div></div>
-        <button onClick={() => { setFormData({ name: "", description: "", product: "Intake Breathing Starter Kit", start_date: new Date().toISOString().split("T")[0], end_date: "", target_creators: 50, budget: 0, criteria: { min_followers: 1000, platforms: ["tiktok"] }, status: "draft" }); setEditingId(null); setShowForm(true); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New campaign</button>
+        <button onClick={async () => { const result = await dbSaveCampaign({ name: "Untitled Campaign", status: "draft" }); if (result.data?.id) navigate("campaignDetail", { campaignId: result.data.id }); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New campaign</button>
       </div>
-
-      {showForm ? (
-        <div style={{ background: t.card, border: "2px solid " + t.green + "40", borderRadius: 14, padding: 24, marginBottom: 20, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><div style={{ fontSize: 16, fontWeight: 500, color: t.text }}>{editingId ? "Edit campaign" : "New campaign"}</div><button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 18, color: t.textFaint, cursor: "pointer" }}>x</button></div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Campaign name</div><input value={formData.name || ""} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Summer Fitness Push" style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }} /></div>
-            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Start date</div><input type="date" value={formData.start_date || ""} onChange={(e) => setFormData(p => ({ ...p, start_date: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
-            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>End date</div><input type="date" value={formData.end_date || ""} onChange={(e) => setFormData(p => ({ ...p, end_date: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
-          </div>
-          <div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Description</div><textarea value={formData.description || ""} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))} placeholder="What should creators do?" style={{ width: "100%", minHeight: 60, padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} /></div>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Attach a brief</div>
-            <select value={formData.brief_id || ""} onChange={(e) => setFormData(p => ({ ...p, brief_id: e.target.value || null }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }}>
-              <option value="">No brief attached</option>
-              {briefs.map(b => <option key={b.id} value={b.id}>{b.name || "Untitled brief"} — {b.formData?.manager || b.form_data?.manager || ""}</option>)}
-            </select>
-            <div style={{ fontSize: 9, color: t.textFaint, marginTop: 4 }}>Creators will see this brief when invited to the campaign</div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Product</div><input value={formData.product || ""} onChange={(e) => setFormData(p => ({ ...p, product: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
-            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Target creators</div><input type="number" value={formData.target_creators || ""} onChange={(e) => setFormData(p => ({ ...p, target_creators: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
-            <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Budget ($)</div><input type="number" value={formData.budget || ""} onChange={(e) => setFormData(p => ({ ...p, budget: Number(e.target.value) || 0 }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
-          </div>
-          <div style={{ marginBottom: 12, padding: 12, background: t.cardAlt, borderRadius: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 6 }}>Creator criteria</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Min followers</div><input type="number" value={formData.criteria?.min_followers || ""} onChange={(e) => setFormData(p => ({ ...p, criteria: { ...p.criteria, min_followers: Number(e.target.value) || 0 } }))} style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} /></div>
-              <div><div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Platforms</div><div style={{ display: "flex", gap: 6 }}>{["tiktok", "instagram", "youtube"].map(p => <label key={p} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: t.text, cursor: "pointer" }}><input type="checkbox" checked={(formData.criteria?.platforms || []).includes(p)} onChange={(e) => { const cur = formData.criteria?.platforms || []; setFormData(prev => ({ ...prev, criteria: { ...prev.criteria, platforms: e.target.checked ? [...cur, p] : cur.filter(x => x !== p) } })); }} />{p}</label>)}</div></div>
-            </div>
-            <div style={{ marginTop: 8, fontSize: 11, color: t.green, fontWeight: 600 }}>{matchCreators(formData.criteria).length} creators match</div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button onClick={() => setShowForm(false)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>Cancel</button>
-            <button onClick={saveCampaign} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save campaign</button>
-          </div>
-        </div>
-      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: selectedCampaign ? "1fr 2fr" : "1fr", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

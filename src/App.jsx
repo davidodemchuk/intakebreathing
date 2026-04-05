@@ -1174,6 +1174,7 @@ const PRODUCTS = [
 
 /** Brief form / stored briefs use the short name (before " — "). */
 function productOptionName(p) {
+  if (p && typeof p === "object") return String(p.name || "").trim();
   const s = String(p ?? "").trim();
   const i = s.indexOf(" — ");
   return i === -1 ? s : s.slice(0, i).trim();
