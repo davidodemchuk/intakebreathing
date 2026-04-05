@@ -579,11 +579,11 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
                       <ResizableTh colKey="org_gmv" style={{ ...hs, textAlign: "right" }}>Org GMV</ResizableTh>
                       <ResizableTh colKey="paid_gmv" style={{ ...hs, textAlign: "right" }}>Paid GMV</ResizableTh>
                       <ResizableTh colKey="ad_spend" style={{ ...hs, textAlign: "right" }}>Ad Spend</ResizableTh>
-                      <ResizableTh colKey="sv" style={{ ...hs, textAlign: "right" }}>S/V</ResizableTh>
-                      <ResizableTh colKey="roas" style={{ ...hs, textAlign: "right" }}>ROAS</ResizableTh>
-                      <ResizableTh colKey="cpm" style={{ ...hs, textAlign: "right" }}>CPM</ResizableTh>
-                      <ResizableTh colKey="net_video" style={{ ...hs, textAlign: "right" }}>Net/video</ResizableTh>
-                      <ResizableTh colKey="net_rev" style={{ ...hs, textAlign: "right" }}>Net Rev</ResizableTh>
+                      <ResizableTh colKey="sv" style={{ ...hs, textAlign: "right" }}>S/V<span style={{ display: "inline-block", marginLeft: 4, fontSize: 9, fontWeight: 500, color: "#737373", background: "#1a1a1a", border: "1px solid #333", borderRadius: 3, padding: "0px 3px", letterSpacing: "0.02em", verticalAlign: "middle", lineHeight: "14px" }}>{"\u0192"}</span></ResizableTh>
+                      <ResizableTh colKey="roas" style={{ ...hs, textAlign: "right" }}>ROAS<span style={{ display: "inline-block", marginLeft: 4, fontSize: 9, fontWeight: 500, color: "#737373", background: "#1a1a1a", border: "1px solid #333", borderRadius: 3, padding: "0px 3px", letterSpacing: "0.02em", verticalAlign: "middle", lineHeight: "14px" }}>{"\u0192"}</span></ResizableTh>
+                      <ResizableTh colKey="cpm" style={{ ...hs, textAlign: "right" }}>CPM<span style={{ display: "inline-block", marginLeft: 4, fontSize: 9, fontWeight: 500, color: "#737373", background: "#1a1a1a", border: "1px solid #333", borderRadius: 3, padding: "0px 3px", letterSpacing: "0.02em", verticalAlign: "middle", lineHeight: "14px" }}>{"\u0192"}</span></ResizableTh>
+                      <ResizableTh colKey="net_video" style={{ ...hs, textAlign: "right" }}>Net/video<span style={{ display: "inline-block", marginLeft: 4, fontSize: 9, fontWeight: 500, color: "#737373", background: "#1a1a1a", border: "1px solid #333", borderRadius: 3, padding: "0px 3px", letterSpacing: "0.02em", verticalAlign: "middle", lineHeight: "14px" }}>{"\u0192"}</span></ResizableTh>
+                      <ResizableTh colKey="net_rev" style={{ ...hs, textAlign: "right" }}>Net Rev<span style={{ display: "inline-block", marginLeft: 4, fontSize: 9, fontWeight: 500, color: "#737373", background: "#1a1a1a", border: "1px solid #333", borderRadius: 3, padding: "0px 3px", letterSpacing: "0.02em", verticalAlign: "middle", lineHeight: "14px" }}>{"\u0192"}</span></ResizableTh>
                       <ResizableTh colKey="entered_by" style={{ ...hs, textAlign: "left" }}>By</ResizableTh>
                       <th style={{ ...hs, width: colWidths.actions || 100 }}></th>
                     </>; })()}
@@ -730,6 +730,14 @@ function TtsNativeTab({ t, S, teamMembers, creators = [] }) {
               </table>
             </div>
           )}
+        </div>
+      ) : null}
+      {viewMode === "table" ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0 4px", borderTop: "1px solid #1a1a1a", marginTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", background: "#1a1a1a", border: "1px solid #333", borderRadius: 3, padding: "0px 3px", lineHeight: "14px" }}>{"\u0192"}</span>
+            <span style={{ fontSize: 11, color: "#737373" }}>Calculated from your inputs</span>
+          </div>
         </div>
       ) : null}
 
