@@ -1225,6 +1225,14 @@ const DEFAULT_REJECTIONS = [
   "Applicator tool visible in the video — the applicator is for personal use only, not on camera",
 ];
 
+const DEFAULT_NON_NEGOTIABLES = [
+  "Tabs must be fully adhered to the nose — no peeling or lifting visible",
+  "Band cannot be upside down",
+  "No applicator visible in the final video",
+  "Product must be clearly visible and identifiable as Intake Breathing",
+  "Must include required FTC disclosure for sponsored content",
+];
+
 function parseCustomRejections(text) {
   if (!text || typeof text !== "string") return [];
   return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -3385,7 +3393,7 @@ const VIDEO_REFORMAT_GROUPS = [
 
 // durationToSeconds, gcd, aspectRatioLabel moved to utils/helpers.js
 
-const LENGTHS = ["15-30s", "30-60s", "60-90s", "90s+"];
+const LENGTHS = ["N/A", "15-30s", "30-60s", "60-90s", "90s+"];
 const TONES = ["Real & relatable", "Funny & casual", "Aspirational", "Educational", "Dramatic/storytelling", "ASMR/satisfying", "Other"];
 
 const SUPERVISION_LEVELS = [
@@ -3423,7 +3431,7 @@ Intake Breathing makes nasal breathing strips for athletes and sleep. Return ONL
   "customTone": "<if tone is Other, describe; else empty string>",
   "notes": "<extra instructions, talking points, or requirements that do not fit other fields>",
   "contentQuantity": "<number of videos as string, default '1'>",
-  "budgetPerVideo": "<digits only, no $; default '100' if unknown>",
+  "totalBudget": "<digits only, no $; default '100' if unknown>",
   "manager": "<one of: ${MANAGERS.join("', '")} — if a specific person is named who is not listed, use Other and put their name in customManager>",
   "customManager": "<if manager is Other, the person's name; else empty string>"
 }
@@ -3439,10 +3447,10 @@ Rules:
 
 const DEFAULTS = {
   manager: "Summer", customManager: "", contentQuantity: "1",
-  budgetPerVideo: "100",
+  totalBudget: "",
   supervisionLevel: "full",
   productName: "Starter Kit Black", customProductName: "", campaignName: "", vibe: "Fun & Entertaining", customVibe: "", mission: "",
-  ageRange: "25-34", gender: "Men & Women", problem: "",
+  ageRange: "N/A", gender: "N/A", problem: "",
   platforms: ["TikTok"], customPlatform: "", videoLength: "15-30s", tone: "Real & relatable", customTone: "", notes: "",
   customRejections: "",
   approvedClaims: [...APPROVED_CLAIMS.slice(0, 5)],
@@ -3590,7 +3598,7 @@ function buildAIPrompt(d, knowledge, ibSettings) {
   const prob = (d.problem ?? d._problem ?? d.customProblem ?? "").trim();
   const mgrName = managerDisplayName(d);
   const qtyVideos = String(d.contentQuantity ?? "1").trim() || "1";
-  const rawBudget = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const rawBudget = String(d.totalBudget ?? "").trim().replace(/^\$/, "");
   const budgetStr = rawBudget ? "$" + rawBudget : "TBD";
   const supVal = d.supervisionLevel || "full";
   const supEntry = SUPERVISION_LEVELS.find(sv => sv.value === supVal) || SUPERVISION_LEVELS[0];
@@ -3640,7 +3648,7 @@ function buildAIPrompt(d, knowledge, ibSettings) {
     + "MISSION: " + (d.mission || "N/A") + "\n"
     + "SUBMITTED BY: " + mgrName + "\n"
     + "CONTENT QUANTITY: " + qtyVideos + " videos needed\n"
-    + "BUDGET: " + budgetStr + " per video\n"
+    + "TOTAL CAMPAIGN BUDGET: $" + budgetStr + "\n"
     + "SUPERVISION LEVEL: " + supEntry.label + " — " + supEntry.desc + "\n"
     + "TARGET AUDIENCE: " + gen + " " + ageR + "\n"
     + "CORE PROBLEM: " + prob + "\n"
@@ -3651,6 +3659,7 @@ function buildAIPrompt(d, knowledge, ibSettings) {
     + "VIDEO LENGTH: " + (d.videoLength || "") + "\n"
     + "TONE: " + toneResolved + "\n"
     + "CREATIVE NOTES: " + (d.notes || "None") + "\n\n"
+    + "NON-NEGOTIABLES (content WILL be rejected if these appear):\n" + DEFAULT_NON_NEGOTIABLES.concat((d.customNonNegotiables || "").split("\n").filter(Boolean)).map(n => "- " + n).join("\n") + "\n\n"
     + "TONE DIRECTION: The creative tone for this brief is \"" + toneResolved + "\". Match this voice consistently in hooks, delivery, pacing, overlay text, and every line of copy.\n\n"
     + "Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — not generic. Write hooks that stop mid-scroll. Write riff lines that sound like a real person. Overlay ideas should be specific visual directions.\n\n"
     + "Return ONLY this JSON (no other text):\n"
@@ -3742,7 +3751,7 @@ function generateBrief(d, knowledge) {
   };
   const mgr = managerDisplayName(d);
   const qty = String(d.contentQuantity ?? "1").trim() || "1";
-  const rawBudget = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const rawBudget = String(d.totalBudget ?? "").trim().replace(/^\$/, "");
   const budgetStr = rawBudget ? `$${rawBudget}/video` : "TBD";
   const supVal = d.supervisionLevel || "full";
   const supervisionLabel = SUPERVISION_LEVELS.find((s) => s.value === supVal)?.label || "Full Review";
@@ -3847,8 +3856,8 @@ function mergeExtractedBriefToPrefill(extracted, knowledge) {
     const q = String(extracted.contentQuantity).replace(/\D/g, "") || "1";
     out.contentQuantity = String(Math.max(1, parseInt(q, 10) || 1));
   }
-  if (extracted.budgetPerVideo != null) {
-    out.budgetPerVideo = String(extracted.budgetPerVideo).replace(/^\$/, "").replace(/[^\d.]/g, "") || DEFAULTS.budgetPerVideo;
+  if (extracted.totalBudget != null) {
+    out.totalBudget = String(extracted.totalBudget).replace(/^\$/, "").replace(/[^\d.]/g, "") || DEFAULTS.totalBudget;
   }
 
   const mgr = extracted.manager;
@@ -4502,7 +4511,7 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate, aiKnowledge, te
     customTone: pf.customTone ?? DEFAULTS.customTone,
     notes: pf.notes || "",
     customRejections: pf.customRejections ?? DEFAULTS.customRejections,
-    budgetPerVideo: pf.budgetPerVideo ?? DEFAULTS.budgetPerVideo,
+    totalBudget: pf.totalBudget ?? DEFAULTS.totalBudget,
     supervisionLevel: pf.supervisionLevel ?? DEFAULTS.supervisionLevel,
   });
 
@@ -4620,15 +4629,15 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
     if (selectedPlatforms.length === 0) { alert("Please select at least one platform."); return; }
     const problemTrim = v.problem.trim();
     const qtyStr = String(Math.max(1, parseInt(String(contentQty || "1"), 10) || 1));
-    const budgetRaw = (v.budgetPerVideo ?? "").trim().replace(/^\$/, "") || DEFAULTS.budgetPerVideo;
-    v.budgetPerVideo = budgetRaw;
+    const budgetRaw = (v.totalBudget ?? "").trim().replace(/^\$/, "") || DEFAULTS.totalBudget;
+    v.totalBudget = budgetRaw;
     v.supervisionLevel = supervisionLevel;
     onGenerate({
       mode,
       manager: managerSel,
       customManager: (v.customManager || "").trim(),
       contentQuantity: qtyStr,
-      budgetPerVideo: budgetRaw,
+      totalBudget: budgetRaw,
       supervisionLevel,
       productName: v.productName, customProductName: v.customProductName.trim(), campaignName: v.campaignName, vibe: v.vibe, customVibe: v.customVibe.trim(), mission: v.mission,
       ageRange, gender, problem: problemTrim,
@@ -4857,7 +4866,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
         <div style={S.r2}>
           <div style={S.fg}>
-            <label style={S.label}>Budget per Video</label>
+            <label style={S.label}>Total Campaign Budget</label>
             <div style={{ display: "flex", alignItems: "stretch" }}>
               <span
                 style={{
@@ -4886,9 +4895,9 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                   flex: 1,
                   minWidth: 0,
                 }}
-                defaultValue={vals.current.budgetPerVideo}
+                defaultValue={vals.current.totalBudget}
                 placeholder="100"
-                onChange={(e) => { vals.current.budgetPerVideo = e.target.value; }}
+                onChange={(e) => { vals.current.totalBudget = e.target.value; }}
                 onFocus={(e) => { e.target.style.borderColor = t.green; }}
                 onBlur={(e) => { e.target.style.borderColor = t.border; }}
               />
@@ -4963,17 +4972,20 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         <div style={S.r2}>
           <div style={S.fg}><label style={S.label}>Age Range</label>
             <select style={S.select} value={ageRange} onChange={e=>{ const v = e.target.value; vals.current.ageRange = v; setAgeRange(v); fireFormSuggest(); }}>
+              <option value="N/A">N/A — not targeted</option>
               {AGE_RANGES.map((a)=><option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div style={S.fg}><label style={S.label}>Gender</label>
             <select style={S.select} value={gender} onChange={e=>{ const v = e.target.value; vals.current.gender = v; setGender(v); fireFormSuggest(); }}>
+              <option value="N/A">N/A — not targeted</option>
               {GENDERS.map((g)=><option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>
-        <div style={S.fg}><label style={S.label}>Core Problem *</label>
-          <textarea style={S.textarea} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value; fireFormSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="What misconception, frustration, or emotional block are we solving? Write it like you'd explain it to a creator." rows={4} />
+        <div style={S.fg}><label style={{ ...S.label, color: t.green }}>{"\u2726"} Tell IB-Ai about this campaign</label>
+          <textarea style={{ ...S.textarea, minHeight: 140 }} defaultValue={vals.current.problem} onChange={e=>{vals.current.problem=e.target.value; fireFormSuggest();}} onFocus={e=>{e.target.style.borderColor=t.green}} onBlur={e=>{e.target.style.borderColor=t.border}} placeholder="This is the big one — write what you would've typed into ChatGPT to get this brief started. The more detail you give here, the better IB-Ai's output. Example: 'We want creators to show their morning routine using Intake, focusing on how it helps them breathe better during workouts. Target audience is gym-goers and runners, 25-35. Vibe is authentic, not salesy.'" rows={6} />
+          <div style={{ fontSize: 11, color: t.green, marginTop: 4, fontStyle: "italic" }}>This is where IB-Ai gets its creative direction. More context = better brief.</div>
         </div>
       </div>
       <div style={S.section}>
@@ -5209,7 +5221,7 @@ function buildBriefPrintHtml(b, fd, esc) {
   const deliverablesHtml = escSafe(b.deliverables || "").replace(/\n/g, "<br>");
   const mgrLine = escSafe(managerDisplayName(fd));
   const qtyLine = escSafe(String(fd.contentQuantity ?? "—"));
-  const rawBudgetPdf = String(fd.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const rawBudgetPdf = String(fd.totalBudget ?? "").trim().replace(/^\$/, "");
   const budgetStrPdf = rawBudgetPdf ? escSafe(`$${rawBudgetPdf}/video`) : "TBD";
   const supervisionLabelPdf = escSafe(SUPERVISION_LEVELS.find((s) => s.value === (fd.supervisionLevel || "full"))?.label || "Full Review");
   const genDate = escSafe(new Date().toLocaleDateString());
@@ -5563,7 +5575,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, marginTop: 14, lineHeight: 1.65 }}>
           {(() => {
-            const rawB = String(fd.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+            const rawB = String(fd.totalBudget ?? "").trim().replace(/^\$/, "");
             const budgetLine = rawB ? `$${rawB}/video` : "TBD";
             const supL = SUPERVISION_LEVELS.find((s) => s.value === (fd.supervisionLevel || "full"))?.label || "Full Review";
             return (
@@ -5623,6 +5635,17 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
         </div>
       </div>
       <RejectionSection brief={b} formData={fd} t={t} S={S} editable={isManager} />
+      <div style={S.bSec}>
+        <div style={S.bSecTitle}><span>{"\u26A0\uFE0F"} Non-Negotiables — Content will be rejected if:</span></div>
+        <div style={{ background: (t.red || "#ef4444") + "08", border: "1px solid " + (t.red || "#ef4444") + "20", borderRadius: 10, padding: 16 }}>
+          {(b.nonNegotiables || DEFAULT_NON_NEGOTIABLES).map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: i < (b.nonNegotiables || DEFAULT_NON_NEGOTIABLES).length - 1 ? 8 : 0 }}>
+              <span style={{ color: t.red || "#ef4444", fontSize: 13, flexShrink: 0 }}>{"\u2717"}</span>
+              <span style={{ fontSize: 13, color: t.text, lineHeight: 1.5 }}>{typeof item === "string" ? item : String(item)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
       <div style={S.bSec}>
         <div style={S.bSecTitle}><Icon name="smartphone" size={16} color={t.textFaint} /><span>Platform Notes</span></div>
         <div style={S.card}><EditableField editable={isManager} value={b.platNotes} style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.6, whiteSpace: "pre-wrap" }} t={t} /></div>
