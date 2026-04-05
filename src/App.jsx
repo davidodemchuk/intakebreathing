@@ -42,6 +42,8 @@ import {
   dbLoadCampaignCreators,
   dbSaveCampaignCreator,
   dbDeleteCampaignCreator,
+  dbUpdateCampaignCreator,
+  dbUpdateCampaignBudget,
   dbLoadCampaignOwners,
   dbAddCampaignOwner,
   dbRemoveCampaignOwner,
@@ -5899,46 +5901,82 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
       ) : null}
 
       {/* CREATORS TAB */}
-      {activeTab === "creators" ? (
+      {activeTab === "creators" ? (() => {
+        const allocated = campCreators.reduce((s, cc) => s + (Number(cc.estimated_rate) || 0), 0);
+        const budget = Number(campaign.total_budget) || 0;
+        const remaining = budget - allocated;
+        const statusOrder = ["invited", "accepted", "briefed", "submitted", "approved"];
+        const statusColors = { invited: t.orange || "#d4890a", accepted: t.blue, briefed: t.purple || "#8b6cc4", submitted: t.green + "90", approved: t.green, declined: t.red || "#ef4444", revision: t.orange || "#d4890a" };
+        const advanceStatus = async (cc) => {
+          const idx = statusOrder.indexOf(cc.status || "invited");
+          if (idx < statusOrder.length - 1) {
+            const next = statusOrder[idx + 1];
+            const ts = { accepted: { accepted_at: new Date().toISOString() }, briefed: { briefed_at: new Date().toISOString() }, submitted: { submitted_at: new Date().toISOString() }, approved: { approved_at: new Date().toISOString() } }[next] || {};
+            await dbUpdateCampaignCreator(cc.id, { status: next, ...ts });
+            setCampCreators(prev => prev.map(x => x.id === cc.id ? { ...x, status: next, ...ts } : x));
+          }
+        };
+        const getEstRate = (cr) => { try { const cpm = calculateCreatorCPM(cr, aiKnowledge); return cpm ? Math.round(((cpm.rateLow || 0) + (cpm.rateHigh || 0)) / 2) : null; } catch { return null; } };
+        const available = creators.filter(cr => !campCreators.find(cc => cc.creator_id === cr.id) && ((cr.handle || "").toLowerCase().includes(creatorSearch.toLowerCase()) || (cr.name || "").toLowerCase().includes(creatorSearch.toLowerCase()) || (cr.niche || "").toLowerCase().includes(creatorSearch.toLowerCase())));
+        return (
         <div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Add Creators</div>
-            <input type="text" value={creatorSearch} onChange={(e) => setCreatorSearch(e.target.value)} placeholder="Search creators by handle or name..." style={{ width: "100%", maxWidth: 400, padding: "10px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-            {creatorSearch.trim() && (
-              <div style={{ marginTop: 8, maxHeight: 200, overflowY: "auto", border: "1px solid " + t.border, borderRadius: 8, background: t.card }}>
-                {creators.filter(cr => !campCreators.find(cc => cc.creator_id === cr.id) && ((cr.handle || "").toLowerCase().includes(creatorSearch.toLowerCase()) || (cr.name || "").toLowerCase().includes(creatorSearch.toLowerCase()))).slice(0, 10).map(cr => (
-                  <div key={cr.id} onClick={() => { assignCreator(cr.id); setCreatorSearch(""); }} style={{ padding: "8px 14px", cursor: "pointer", fontSize: 13, color: t.text, borderBottom: "1px solid " + t.border + "40", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                    <span>@{cr.handle || cr.instagramHandle || cr.name}</span>
-                    <span style={{ fontSize: 11, color: t.green }}>+ Add</span>
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* Budget bar */}
+          <div style={{ display: "flex", gap: 16, alignItems: "center", padding: "12px 16px", background: t.card, border: "1px solid " + t.border, borderRadius: 10, marginBottom: 20, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, color: t.textFaint }}>Budget: <span contentEditable suppressContentEditableWarning onBlur={async (e) => { const v = parseInt(e.currentTarget.textContent.replace(/[^0-9]/g, "")) || 0; await dbUpdateCampaignBudget(campaign.id, v); setCampaign(prev => prev ? { ...prev, total_budget: v } : prev); }} style={{ color: t.text, fontWeight: 500, outline: "none", minWidth: 40, display: "inline-block" }}>${budget || "0"}</span></div>
+            <div style={{ width: 1, height: 16, background: t.border }} />
+            <div style={{ fontSize: 12, color: t.textFaint }}>Allocated: <span style={{ color: t.text, fontWeight: 500 }}>${allocated.toLocaleString()}</span></div>
+            <div style={{ fontSize: 12, color: t.textFaint }}>Remaining: <span style={{ color: remaining < 0 ? (t.red || "#ef4444") : t.green, fontWeight: 500 }}>${remaining.toLocaleString()}</span></div>
+            <div style={{ fontSize: 12, color: t.textFaint }}>{campCreators.length} creator{campCreators.length !== 1 ? "s" : ""} assigned</div>
           </div>
 
+          {/* Assigned creators */}
           <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Assigned ({campCreators.length})</div>
           {campCreators.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: t.textFaint, background: t.card, borderRadius: 12, border: "1px solid " + t.border }}>No creators assigned yet. Search above to add.</div>
-          ) : campCreators.map(cc => {
-            const cr = creators.find(c => c.id === cc.creator_id);
-            if (!cr) return null;
+            <div style={{ padding: 32, textAlign: "center", color: t.textFaint, background: t.card, borderRadius: 12, border: "1px solid " + t.border, marginBottom: 20 }}>No creators assigned yet. Search your roster below to add creators.</div>
+          ) : <div style={{ marginBottom: 20 }}>{campCreators.map(cc => {
+            const cr = creators.find(c => c.id === cc.creator_id); if (!cr) return null;
             const av = cr.tiktokData?.avatarUrl || cr.instagramData?.avatarUrl || "";
             const h = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
-            const sc = { invited: t.blue, briefed: t.orange || "#d4890a", submitted: t.purple || "#8b6cc4", approved: t.green }[cc.status] || t.textFaint;
+            const sc = statusColors[cc.status] || t.textFaint;
+            const rate = cc.estimated_rate || getEstRate(cr);
             return (
-              <div key={cc.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid " + t.border + "40" }}>
+              <div key={cc.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid " + t.border + "30" }}>
                 {av ? <img src={av} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: t.green }}>{(h || "?")[0].toUpperCase()}</div>}
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{h}</div>
-                  {cr.ibScore != null ? <div style={{ fontSize: 10, color: t.textFaint }}>IB Score: {cr.ibScore}</div> : null}
+                  <div style={{ fontSize: 10, color: t.textFaint }}>{cr.ibScore != null ? "IB " + cr.ibScore + " \u00b7 " : ""}{rate ? "$" + rate + "/video" : "Rate TBD"}</div>
                 </div>
-                <button onClick={() => cycleStatus(cc)} style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, border: "none", cursor: "pointer", textTransform: "uppercase" }}>{cc.status || "invited"}</button>
-                <button onClick={() => removeCreator(cc.id)} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 14 }} title="Remove">&times;</button>
+                <button onClick={() => advanceStatus(cc)} style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, border: "none", cursor: "pointer", textTransform: "uppercase" }}>{cc.status || "invited"}</button>
+                <button onClick={() => { if (window.confirm("Remove @" + h + " from this campaign?")) removeCreator(cc.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 14 }} title="Remove">&times;</button>
               </div>
             );
-          })}
-        </div>
-      ) : null}
+          })}</div>}
+
+          {/* Add creators */}
+          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Add Creators</div>
+          <input type="text" value={creatorSearch} onChange={(e) => setCreatorSearch(e.target.value)} placeholder="Search creators by handle, name, or niche..." style={{ width: "100%", maxWidth: 500, padding: "10px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+          {creatorSearch.trim() ? (
+            <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid " + t.border, borderRadius: 8, background: t.card }}>
+              {available.length === 0 ? <div style={{ padding: 16, textAlign: "center", color: t.textFaint, fontSize: 12 }}>No matching creators found</div> : available.slice(0, 20).map(cr => {
+                const av = cr.tiktokData?.avatarUrl || cr.instagramData?.avatarUrl || "";
+                const h = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
+                const rate = getEstRate(cr);
+                return (
+                  <div key={cr.id} onClick={async () => { const estRate = rate; const result = await dbSaveCampaignCreator({ campaign_id: campaign.id, creator_id: cr.id, status: "invited", invited_at: new Date().toISOString(), estimated_rate: estRate }); if (!result.error && result.data) { setCampCreators(prev => [result.data, ...prev]); if (campaign.status === "draft") updateField("status", "active"); } setCreatorSearch(""); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", cursor: "pointer", borderBottom: "1px solid " + t.border + "20" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                    {av ? <img src={av} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 28, height: 28, borderRadius: 14, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, color: t.green }}>{(h || "?")[0].toUpperCase()}</div>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{h}</div>
+                      <div style={{ fontSize: 10, color: t.textFaint }}>{cr.niche || ""}{cr.ibScore != null ? " \u00b7 IB " + cr.ibScore : ""}{rate ? " \u00b7 ~$" + rate : ""}</div>
+                    </div>
+                    <span style={{ fontSize: 11, color: t.green, fontWeight: 500 }}>+ Add</span>
+                  </div>
+                );
+              })}
+              {available.length > 20 ? <div style={{ padding: 8, textAlign: "center", fontSize: 11, color: t.textFaint }}>{available.length - 20} more — refine your search</div> : null}
+            </div>
+          ) : <div style={{ fontSize: 12, color: t.textFaint }}>Type to search your {creators.length} creators</div>}
+        </div>);
+      })() : null}
 
       {/* TRACKING TAB */}
       {activeTab === "tracking" ? (

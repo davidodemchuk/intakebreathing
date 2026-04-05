@@ -521,6 +521,18 @@ export async function dbSaveCampaignCreator(row) {
 }
 export async function dbDeleteCampaignCreator(id) { return await supabase.from("campaign_creators").delete().eq("id", id); }
 
+export async function dbUpdateCampaignCreator(id, updates) {
+  const { error } = await supabase.from("campaign_creators").update(updates).eq("id", id);
+  if (error) console.error("[db] Update campaign creator error:", error);
+  return { error };
+}
+
+export async function dbUpdateCampaignBudget(campaignId, totalBudget) {
+  const { error } = await supabase.from("campaigns").update({ total_budget: totalBudget }).eq("id", campaignId);
+  if (error) console.error("[db] Update campaign budget error:", error);
+  return { error };
+}
+
 export async function dbLoadCampaignOwners(campaignId) {
   const { data, error } = await supabase.from("campaign_owners").select("*, team_members(*)").eq("campaign_id", campaignId);
   if (error) { console.error("[db] Load campaign owners error:", error); return []; }
