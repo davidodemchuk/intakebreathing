@@ -621,10 +621,17 @@ async function buildReformatFilter(template, w, h, srcW, srcH) {
     }
   }
 
-  // Default / blur: heavy blur + per-template darken amount
+  // Default / blur: downscale → blur → darken → upscale (9x faster, visually identical)
   const sigma = template?.blur_sigma || 50;
-  const darken = template?.darken_opacity != null ? (1 - template.darken_opacity) : 0.55; // 0.55 = 45% darker
-  const fc = `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)/2:(ih-oh)/2,gblur=sigma=${sigma},colorchannelmixer=rr=${darken}:gg=${darken}:bb=${darken},setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
+  const darken = template?.darken_opacity != null ? (1 - template.darken_opacity).toFixed(2) : "0.55";
+  const blurW = Math.round(w / 3);
+  const blurH = Math.round(h / 3);
+  const blurSigmaScaled = Math.round(sigma / 3); // sigma scales with resolution
+  const fc = [
+    `[0:v]scale=${blurW}:${blurH}:force_original_aspect_ratio=increase,crop=${blurW}:${blurH}:(iw-ow)/2:(ih-oh)/2,gblur=sigma=${blurSigmaScaled},scale=${w}:${h},colorchannelmixer=rr=${darken}:gg=${darken}:bb=${darken},setsar=1[bg]`,
+    `[0:v]scale='min(${w}\\,iw)':'min(${h}\\,ih)':force_original_aspect_ratio=decrease[fg]`,
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2`,
+  ].join(";");
   return { extraInputs: [], filterArgs: ["-filter_complex", fc], cleanup: [] };
 }
 
@@ -957,6 +964,171 @@ app.delete("/api/reformat-templates/:id", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Background Reformat Jobs ──
+
+async function processReformatJob(jobId) {
+  const { data: job, error: jobErr } = await supabaseServer.from("reformat_jobs").select("*").eq("id", jobId).single();
+  if (!job || jobErr) throw new Error("Job not found: " + jobId);
+
+  await supabaseServer.from("reformat_jobs").update({ status: "processing", started_at: new Date().toISOString() }).eq("id", jobId);
+
+  const config = job.template_config || {};
+  const cacheId = config.cacheId || null;
+  const videoUrls = config.videoUrls || (job.video_url ? [job.video_url] : []);
+
+  // Locate or download the video
+  let inp;
+  let needsCleanupInp = false;
+  if (cacheId && videoCache.has(cacheId)) {
+    inp = videoCache.get(cacheId).filePath;
+    console.log(`[job:${jobId}] Using cached video ${cacheId}`);
+  } else if (videoUrls.length) {
+    inp = path.join(os.tmpdir(), `job-in-${jobId}.mp4`);
+    needsCleanupInp = true;
+    console.log(`[job:${jobId}] Downloading video from ${videoUrls.length} URL(s)...`);
+    await downloadWithRetry(videoUrls, inp);
+    const sz = fs.statSync(inp).size;
+    if (sz < 5000) throw new Error("Download too small — video URL may have expired.");
+    console.log(`[job:${jobId}] Downloaded ${(sz / 1048576).toFixed(1)}MB`);
+  } else {
+    throw new Error("No video source available. Re-fetch the video.");
+  }
+
+  // Probe source dimensions
+  let srcW = 1080, srcH = 1920;
+  try {
+    const probe = await new Promise((ok, no) => execFile(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_streams", inp], { timeout: 15000, maxBuffer: 2097152 }, (e, o) => e ? no(e) : ok(JSON.parse(o))));
+    const vs = probe.streams?.find(s => s.codec_type === "video");
+    if (vs) { srcW = vs.width || 1080; srcH = vs.height || 1920; }
+  } catch (e) { console.log(`[job:${jobId}] Probe fallback:`, e.message); }
+
+  const formats = [
+    { name: "16x9_Landscape", width: 1920, height: 1080, ratio: "16:9" },
+    { name: "1x1_Square", width: 1080, height: 1080, ratio: "1:1" },
+    { name: "4x5_Feed", width: 1080, height: 1350, ratio: "4:5" },
+    { name: "9x16_Story", width: 1080, height: 1920, ratio: "9:16" },
+  ];
+
+  const outputDir = path.join(os.tmpdir(), `reformat-${jobId}`);
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  const completedFiles = [];
+
+  // Load default template once
+  let defaultTemplate = null;
+  const defaultTemplateId = config.default || null;
+  if (defaultTemplateId) {
+    const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", defaultTemplateId).single();
+    defaultTemplate = data;
+  }
+  if (!defaultTemplate) {
+    const { data } = await supabaseServer.from("reformat_templates").select("*").eq("is_default", true).single().catch(() => ({ data: null }));
+    defaultTemplate = data;
+  }
+
+  for (let i = 0; i < formats.length; i++) {
+    const fmt = formats[i];
+    await supabaseServer.from("reformat_jobs").update({
+      progress: { formats_total: 4, formats_done: i, current_format: fmt.name },
+    }).eq("id", jobId);
+
+    const templateId = config[fmt.ratio] || null;
+    let template = defaultTemplate;
+    if (templateId && templateId !== defaultTemplateId) {
+      const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", templateId).single().catch(() => ({ data: null }));
+      if (data) template = data;
+    }
+
+    const { extraInputs, filterArgs, cleanup: filterCleanup } = await buildReformatFilter(template, fmt.width, fmt.height, srcW, srcH);
+    const extraInputArgs = extraInputs.flatMap(p => ["-i", p]);
+    const outFile = path.join(outputDir, `${job.video_filename}_${fmt.name}.mp4`);
+
+    console.log(`[job:${jobId}] ${fmt.name} (${fmt.width}x${fmt.height})...`);
+    await new Promise((ok, no) => {
+      execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...filterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outFile],
+        { timeout: 300000, maxBuffer: 10485760 },
+        (e, _, stderr) => e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok());
+    });
+    filterCleanup.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+    console.log(`[job:${jobId}] ${fmt.name} done.`);
+    completedFiles.push(outFile);
+  }
+
+  // ZIP all formats
+  await supabaseServer.from("reformat_jobs").update({
+    status: "zipping",
+    progress: { formats_total: 4, formats_done: 4, current_format: "zipping" },
+  }).eq("id", jobId);
+
+  const zipFilename = `${job.video_filename}_all_formats.zip`;
+  const zipPath = path.join(outputDir, zipFilename);
+  const folderName = job.video_filename + "_reformats";
+
+  await new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver("zip", { zlib: { level: 1 } });
+    output.on("close", resolve);
+    archive.on("error", reject);
+    archive.pipe(output);
+    completedFiles.forEach(fp => archive.file(fp, { name: `${folderName}/${path.basename(fp)}` }));
+    archive.finalize();
+  });
+
+  const zipStats = fs.statSync(zipPath);
+  if (needsCleanupInp) try { fs.unlinkSync(inp); } catch {}
+
+  await supabaseServer.from("reformat_jobs").update({
+    status: "complete",
+    completed_at: new Date().toISOString(),
+    zip_path: zipPath,
+    zip_size_bytes: zipStats.size,
+    progress: { formats_total: 4, formats_done: 4, current_format: null },
+  }).eq("id", jobId);
+
+  console.log(`[job:${jobId}] Complete — ZIP ${(zipStats.size / 1048576).toFixed(1)}MB`);
+}
+
+app.post("/api/reformat-job", async (req, res) => {
+  const { videoFilename, templateConfig, estimatedSeconds } = req.body;
+  const videoUrl = templateConfig?.videoUrls?.[0] || null;
+  try {
+    const { data: job, error } = await supabaseServer.from("reformat_jobs").insert({
+      video_url: videoUrl,
+      video_filename: (videoFilename || "video").replace(/[^a-zA-Z0-9_-]/g, "_"),
+      status: "queued",
+      template_config: templateConfig || {},
+      estimated_seconds: estimatedSeconds || 60,
+      progress: { formats_total: 4, formats_done: 0, current_format: null },
+    }).select().single();
+    if (error) throw error;
+
+    res.json({ jobId: job.id });
+
+    setImmediate(() => processReformatJob(job.id).catch(err => {
+      console.error(`[reformat-job] Job ${job.id} failed:`, err.message);
+      supabaseServer.from("reformat_jobs").update({ status: "failed", error_message: err.message }).eq("id", job.id).catch(() => {});
+    }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/reformat-job/:id", async (req, res) => {
+  const { data: job, error } = await supabaseServer.from("reformat_jobs").select("*").eq("id", req.params.id).single();
+  if (!job || error) return res.status(404).json({ error: "Job not found" });
+  res.json(job);
+});
+
+app.get("/api/reformat-job/:id/download", async (req, res) => {
+  const { data: job, error } = await supabaseServer.from("reformat_jobs").select("*").eq("id", req.params.id).single();
+  if (!job || error || job.status !== "complete") return res.status(404).json({ error: "Job not ready" });
+  if (!job.zip_path || !fs.existsSync(job.zip_path)) return res.status(404).json({ error: "ZIP file not found on server. The server may have restarted — re-run the reformat." });
+  const filename = path.basename(job.zip_path);
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Length", job.zip_size_bytes);
+  fs.createReadStream(job.zip_path).pipe(res);
 });
 
 // ── Avatar image proxy (bypasses some CDN hotlink / referrer blocks) ──

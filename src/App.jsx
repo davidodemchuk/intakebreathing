@@ -6220,20 +6220,95 @@ function ToolsPage({ onBack, onOpenVideo }) {
   );
 }
 
-function VideoReformatter({ onBack }) {
+function ReformatNotificationBar({ job, setJob, t }) {
+  const [jobData, setJobData] = useState(job);
+
+  useEffect(() => {
+    setJobData(job);
+  }, [job?.id]);
+
+  useEffect(() => {
+    if (!job?.id || jobData?.status === "complete" || jobData?.status === "failed") return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/reformat-job/" + job.id);
+        const data = await res.json();
+        setJobData(data);
+        if (data.status === "complete" || data.status === "failed") clearInterval(interval);
+      } catch (e) { console.warn("[reformat-poll] failed:", e.message); }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [job?.id]);
+
+  if (!jobData) return null;
+  const progress = jobData.progress || {};
+  const pct = progress.formats_total ? Math.round((progress.formats_done / progress.formats_total) * 100) : 0;
+  const isComplete = jobData.status === "complete";
+  const isFailed = jobData.status === "failed";
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
+      background: isComplete ? t.green + "18" : isFailed ? (t.red || "#ef4444") + "18" : t.card,
+      borderTop: "1px solid " + (isComplete ? t.green + "50" : isFailed ? (t.red || "#ef4444") + "50" : t.border),
+      padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between",
+      backdropFilter: "blur(12px)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+        {!isComplete && !isFailed && (
+          <div style={{ width: 16, height: 16, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+        )}
+        {isComplete && <span style={{ fontSize: 18, color: t.green, flexShrink: 0 }}>✓</span>}
+        {isFailed && <span style={{ fontSize: 18, color: t.red || "#ef4444", flexShrink: 0 }}>✗</span>}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>
+            {isComplete ? "All 4 formats ready — download the ZIP"
+              : isFailed ? "Reformat failed: " + (jobData.error_message || "unknown error")
+              : jobData.status === "zipping" ? "Zipping formats..."
+              : `Reformatting video… ${progress.formats_done || 0} of ${progress.formats_total || 4} formats done`}
+          </div>
+          {!isComplete && !isFailed && progress.current_format && progress.current_format !== "zipping" && (
+            <div style={{ fontSize: 11, color: t.textFaint }}>
+              Processing: {progress.current_format.replace(/_/g, " ")}
+              {jobData.estimated_seconds ? ` · ~${jobData.estimated_seconds}s total` : ""}
+            </div>
+          )}
+        </div>
+        {!isComplete && !isFailed && (
+          <div style={{ flex: "0 0 160px", height: 4, background: t.border, borderRadius: 2, marginLeft: 12 }}>
+            <div style={{ width: pct + "%", height: "100%", background: t.green, borderRadius: 2, transition: "width 0.5s ease" }} />
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: 16, flexShrink: 0 }}>
+        {isComplete && (
+          <a href={"/api/reformat-job/" + jobData.id + "/download"} download
+            style={{ background: t.green, color: t.isLight ? "#fff" : "#000", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+            Download ZIP
+          </a>
+        )}
+        <button onClick={() => setJob(null)}
+          style={{ background: "transparent", border: "none", color: t.textFaint, fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VideoReformatter({ onBack, setActiveReformatJob }) {
   const { t, S } = useContext(ThemeContext);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [video, setVideo] = useState(null); // fetched video data
-  const [downloading, setDownloading] = useState({}); // {formatId: true}
+  const [video, setVideo] = useState(null);
+  const [downloading, setDownloading] = useState({});
   const [downloadError, setDownloadError] = useState(null);
-  const [batchDownloading, setBatchDownloading] = useState(false);
-  const batchAbortRef = useRef(null);
   const [customRatio, setCustomRatio] = useState("");
   const [customWidth, setCustomWidth] = useState("1080");
   const [templates, setTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [jobSubmitting, setJobSubmitting] = useState(false);
 
   useEffect(() => {
     fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
@@ -6452,62 +6527,49 @@ function VideoReformatter({ onBack }) {
     }
   };
 
-  const downloadAll = async () => {
-    if (!video?.cacheId) {
-      setDownloadError("Video not cached yet. Wait for caching to finish.");
-      return;
-    }
-    setBatchDownloading(true);
+  // Submit background reformat job → notification bar tracks it
+  const handleReformatJob = async () => {
+    if (!video?.cacheId) return;
+    setJobSubmitting(true);
     setDownloadError(null);
-    batchAbortRef.current = new AbortController();
-    const controller = batchAbortRef.current;
-    const timeout = setTimeout(() => controller.abort(), 480000);
     try {
-      const res = await fetch("/api/reformat-all", {
+      const res = await fetch("/api/reformat-job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cacheId: video.cacheId,
-          videoUrl: null,
-          authorHandle: video.authorHandle || "video",
+          videoFilename: video.authorHandle || "video",
+          templateConfig: {
+            default: selectedTemplateId || null,
+            cacheId: video.cacheId,
+            videoUrls: video.videoUrls || [video.videoUrl],
+          },
+          estimatedSeconds: Math.round((video.cachedDuration || 16) * 0.4 * 4 + 5),
         }),
-        signal: controller.signal,
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Server returned ${res.status}`);
+        throw new Error(err.error || "Server error");
       }
-
-      const blob = await res.blob();
-      if (blob.size < 1000) throw new Error("ZIP file is too small — reformatting may have failed.");
-
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${video.authorHandle || "video"}_all_formats.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
+      const { jobId } = await res.json();
+      setActiveReformatJob({
+        id: jobId,
+        status: "queued",
+        progress: { formats_total: 4, formats_done: 0, current_format: null },
+        video_filename: video.authorHandle || "video",
+        estimated_seconds: Math.round((video.cachedDuration || 16) * 0.4 * 4 + 5),
+      });
     } catch (e) {
-      if (e.name === "AbortError") {
-        setDownloadError("Processing timed out after 8 minutes. The video may be too long. Try downloading formats individually or use a shorter clip.");
-      } else {
-        setDownloadError(`Batch download failed: ${e.message}`);
-      }
+      setDownloadError("Failed to start job: " + e.message);
     } finally {
-      clearTimeout(timeout);
-      setBatchDownloading(false);
-      batchAbortRef.current = null;
+      setJobSubmitting(false);
     }
   };
 
-  // Reformat via server FFmpeg
-  const reformat = async (format) => {
+  // Custom ratio — still uses sync endpoint (one-off format, not the batch)
+  const reformatCustom = async (format) => {
     if (!video || (!video.videoUrl && !video.cacheId)) return;
     const [w, h] = String(format.dimensions).split(/[×x]/i).map(Number);
     if (!w || !h) return;
-
     setDownloading((prev) => ({ ...prev, [format.id]: true }));
     setDownloadError(null);
     const controller = new AbortController();
@@ -6520,33 +6582,22 @@ function VideoReformatter({ onBack }) {
           cacheId: video.cacheId || null,
           videoUrl: video.cacheId ? null : video.videoUrl,
           videoUrls: video.cacheId ? undefined : (video.videoUrls || [video.videoUrl]),
-          width: w,
-          height: h,
+          width: w, height: h,
           name: `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
           templateId: selectedTemplateId || null,
         }),
         signal: controller.signal,
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Server returned ${res.status}`);
-      }
-
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `Server returned ${res.status}`); }
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}_${w}x${h}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.download = `${video.authorHandle || "video"}_custom_${w}x${h}.mp4`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      if (e.name === "AbortError") {
-        setDownloadError("Processing timed out. Try downloading the original and reformatting in CapCut or Premiere.");
-      } else {
-        setDownloadError(`Reformat failed: ${e.message}`);
-      }
+      if (e.name === "AbortError") { setDownloadError("Processing timed out. Try a shorter clip."); }
+      else { setDownloadError(`Custom reformat failed: ${e.message}`); }
     } finally {
       clearTimeout(timeout);
       setDownloading((prev) => ({ ...prev, [format.id]: false }));
@@ -6665,53 +6716,32 @@ function VideoReformatter({ onBack }) {
               <button
                 type="button"
                 onClick={downloadOriginal}
-                disabled={downloading.original || batchDownloading}
-                style={{ ...S.btnP, padding: "10px 20px", fontSize: 13, opacity: downloading.original || batchDownloading ? 0.6 : 1 }}
+                disabled={downloading.original}
+                style={{ ...S.btnP, padding: "10px 20px", fontSize: 13, opacity: downloading.original ? 0.6 : 1 }}
               >
                 {downloading.original ? "Downloading..." : "Download Original"}
               </button>
 
-              {batchDownloading ? (
-                <div style={{ padding: 16, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, marginTop: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    <div style={{ width: 16, height: 16, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                    <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Processing 4 formats...</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>
-                    1:1 Square · 4:5 Feed · 9:16 Story · 16:9 Landscape
-                  </div>
-                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 8 }}>This takes 1-3 minutes. Don&apos;t close this tab.</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      batchAbortRef.current?.abort();
-                      setBatchDownloading(false);
-                    }}
-                    style={{ marginTop: 10, padding: "6px 14px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}
-                  >
-                    Cancel
-                  </button>
+              {/* Reformat All — submits background job */}
+              <button
+                type="button"
+                onClick={handleReformatJob}
+                disabled={!video.cacheId || jobSubmitting}
+                style={{
+                  padding: "12px 24px", borderRadius: 8, border: "none", marginTop: 8, width: "100%",
+                  background: video.cacheId ? t.green : t.cardAlt,
+                  color: video.cacheId ? (t.isLight ? "#fff" : "#000") : t.textFaint,
+                  fontSize: 14, fontWeight: 600,
+                  cursor: video.cacheId && !jobSubmitting ? "pointer" : "not-allowed",
+                  opacity: jobSubmitting ? 0.7 : 1,
+                }}
+              >
+                {jobSubmitting ? "Starting job..." : video.cacheId ? "Reformat All (16:9 · 1:1 · 4:5 · 9:16)" : video.cacheFailed ? "Unavailable — cache failed" : "Caching video..."}
+              </button>
+              {video.cacheId && !jobSubmitting && (
+                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, textAlign: "center" }}>
+                  Processes in background — you can navigate away
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void downloadAll()}
-                  disabled={!video.cacheId}
-                  style={{
-                    padding: "12px 24px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: video.cacheId ? t.green : t.cardAlt,
-                    color: video.cacheId ? (t.isLight ? "#fff" : "#000") : t.textFaint,
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: video.cacheId ? "pointer" : "not-allowed",
-                    marginTop: 8,
-                    width: "100%",
-                  }}
-                >
-                  {video.cacheId ? "⬇ Download All Formats (ZIP)" : video.cacheFailed ? "ZIP unavailable — cache failed" : "Caching video..."}
-                </button>
               )}
 
               <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
@@ -6776,14 +6806,14 @@ function VideoReformatter({ onBack }) {
                 const h = Math.round(baseW * (rH / rW));
                 const finalW = w % 2 === 0 ? w : w + 1;
                 const finalH = h % 2 === 0 ? h : h + 1;
-                reformat({
+                reformatCustom({
                   id: `custom-${rW}x${rH}`,
                   name: `Custom_${rW}x${rH}`,
                   dimensions: `${finalW}×${finalH}`,
                   ratio: `${rW}:${rH}`,
                 });
               }}
-              disabled={!customRatio.trim() || Object.values(downloading).some(Boolean) || batchDownloading}
+              disabled={!customRatio.trim() || Object.values(downloading).some(Boolean)}
               style={{
                 padding: "10px 20px", borderRadius: 8, border: "none",
                 background: customRatio.trim() ? t.green : t.cardAlt,
@@ -6893,56 +6923,6 @@ function VideoReformatter({ onBack }) {
         </div>
       ) : null}
 
-      {/* Format cards — always show as reference, clickable when video is fetched */}
-      <div style={{ marginTop: video ? 0 : 32 }}>
-        <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>
-          {video ? "Individual Formats" : "Format Reference"}
-        </div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>
-          {video ? "Or download formats individually:" : "Fetch a video above to enable downloads. Use these specs as a reference for manual reformatting."}
-        </div>
-
-        {VIDEO_REFORMAT_GROUPS.map((group) => (
-          <div key={group.title} style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>{group.title}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-              {group.items.map((item) => {
-                const isLoading = !!downloading[item.id];
-                const canClick = !!video && !!(video.cacheId || video.videoUrl) && !isLoading && !batchDownloading;
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => canClick && reformat(item)}
-                    style={{
-                      background: t.card,
-                      border: `1px solid ${isLoading ? t.green + "50" : t.border}`,
-                      borderRadius: 10,
-                      padding: "12px 14px",
-                      cursor: canClick ? "pointer" : "default",
-                      opacity: video ? (isLoading ? 0.7 : 1) : 0.5,
-                      transition: "all 0.15s",
-                    }}
-                    onMouseEnter={(e) => { if (canClick) { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.background = t.green + "06"; } }}
-                    onMouseLeave={(e) => { if (canClick) { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.background = t.card; } }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{item.name}</span>
-                      {isLoading ? (
-                        <div style={{ width: 14, height: 14, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                      ) : canClick ? (
-                        <span style={{ fontSize: 10, color: t.green }}>↓</span>
-                      ) : null}
-                    </div>
-                    <div style={{ fontSize: 11, color: t.textMuted }}>{item.ratio} · {item.dimensions}</div>
-                    <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{item.placement}</div>
-                    {item.recommended ? <div style={{ fontSize: 9, fontWeight: 500, color: t.green, marginTop: 4 }}>★ RECOMMENDED</div> : null}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -9888,6 +9868,7 @@ export default function App() {
   const [apiMsg, setApiMsg] = useState("");
   const [scrapeStatus, setScrapeStatus] = useState(null);
   const [scrapeMsg, setScrapeMsg] = useState("");
+  const [activeReformatJob, setActiveReformatJob] = useState(null);
 
   const saveApiKey = (key) => {
     setApiKey(key);
@@ -10689,7 +10670,7 @@ export default function App() {
           />
         )}
         {!aiLoading && isCreatorViewAllowed && view === "tools" && <ToolsPage onBack={() => navigate("home")} onOpenVideo={() => navigate("videotool")} />}
-        {!aiLoading && isCreatorViewAllowed && view === "videotool" && <VideoReformatter onBack={() => navigate("tools")} />}
+        {!aiLoading && isCreatorViewAllowed && view === "videotool" && <VideoReformatter onBack={() => navigate("tools")} setActiveReformatJob={setActiveReformatJob} />}
 
         {/* SOURCE OF TRUTH */}
         {!aiLoading && isCreatorViewAllowed && view === "sourceOfTruth" && (
@@ -12122,6 +12103,7 @@ export default function App() {
           return <ChangeRequestWidget currentPage={currentPage} t={t} navigate={navigate} refreshOpenCount={() => { supabase.from("change_requests").select("id").eq("status", "open").then(({ data }) => setOpenChangeRequests((data || []).length)); }} />;
         })()}
         <SiteFooter isDark={isDark} />
+        {activeReformatJob && <ReformatNotificationBar job={activeReformatJob} setJob={setActiveReformatJob} t={t} />}
       </div>
     </ThemeContext.Provider>
   );
