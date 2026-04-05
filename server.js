@@ -1114,12 +1114,14 @@ async function processReformatJob(jobId) {
     if (vs) { srcW = vs.width || 1080; srcH = vs.height || 1920; srcDuration = parseFloat(vs.duration) || 16; }
   } catch (e) { console.log(`[job:${jobId}] Probe fallback:`, e.message); }
 
-  const formats = [
+  const allFormats = [
     { name: "16x9_Landscape", width: 1920, height: 1080, ratio: "16:9" },
     { name: "1x1_Square", width: 1080, height: 1080, ratio: "1:1" },
     { name: "4x5_Feed", width: 1080, height: 1350, ratio: "4:5" },
     { name: "9x16_Story", width: 1080, height: 1920, ratio: "9:16" },
   ];
+  const enabledFormats = config.enabledFormats || { "16:9": true, "1:1": true, "4:5": true, "9:16": true };
+  const formats = allFormats.filter(f => enabledFormats[f.ratio] !== false);
 
   const outputDir = path.join(os.tmpdir(), `reformat-${jobId}`);
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -1149,7 +1151,7 @@ async function processReformatJob(jobId) {
   for (let i = 0; i < formats.length; i++) {
     const fmt = formats[i];
     await supabaseServer.from("reformat_jobs").update({
-      progress: { formats_total: 4, formats_done: i, current_format: fmt.name },
+      progress: { formats_total: formats.length, formats_done: i, current_format: fmt.name },
     }).eq("id", jobId);
 
     const templateId = config[fmt.ratio] || null;
@@ -1196,7 +1198,7 @@ async function processReformatJob(jobId) {
   // ZIP all formats
   await supabaseServer.from("reformat_jobs").update({
     status: "zipping",
-    progress: { formats_total: 4, formats_done: 4, current_format: "zipping" },
+    progress: { formats_total: formats.length, formats_done: formats.length, current_format: "zipping" },
   }).eq("id", jobId);
 
   const zipFilename = `${job.video_filename}_all_formats.zip`;
@@ -1221,7 +1223,7 @@ async function processReformatJob(jobId) {
     completed_at: new Date().toISOString(),
     zip_path: zipPath,
     zip_size_bytes: zipStats.size,
-    progress: { formats_total: 4, formats_done: 4, current_format: null },
+    progress: { formats_total: formats.length, formats_done: formats.length, current_format: null },
   }).eq("id", jobId);
 
   console.log(`[job:${jobId}] Complete — ZIP ${(zipStats.size / 1048576).toFixed(1)}MB`);
@@ -1243,7 +1245,7 @@ app.post("/api/reformat-job", async (req, res) => {
       status: "queued",
       template_config: fullConfig,
       estimated_seconds: estimatedSeconds || 60,
-      progress: { formats_total: 4, formats_done: 0, current_format: null },
+      progress: { formats_total: Object.values(templateConfig?.enabledFormats || {}).filter(Boolean).length || 4, formats_done: 0, current_format: null },
     }).select().single();
     if (error) throw error;
 

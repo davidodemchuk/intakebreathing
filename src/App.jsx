@@ -6488,6 +6488,16 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [textOverlays, setTextOverlays] = useState([]);
   const [savingOverlays, setSavingOverlays] = useState(false);
   const [previewFrame, setPreviewFrame] = useState(null);
+  const [enabledFormats, setEnabledFormats] = useState({ "16:9": true, "1:1": true, "4:5": true, "9:16": true });
+
+  const toggleFormat = (ratio) => {
+    setEnabledFormats(prev => {
+      const next = { ...prev, [ratio]: !prev[ratio] };
+      if (!Object.values(next).some(Boolean)) return prev; // prevent all off
+      return next;
+    });
+  };
+  const enabledCount = Object.values(enabledFormats).filter(Boolean).length;
 
   useEffect(() => {
     fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
@@ -6803,6 +6813,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             ...selectedTemplates,
             cacheId: video.cacheId,
             videoUrls: video.videoUrls || [video.videoUrl],
+            enabledFormats,
           },
           textOverlays: textOverlays.filter(o => o.content.trim()),
           variables: {
@@ -7136,20 +7147,30 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
               ].map(fmt => {
                 const templateId = selectedTemplates[fmt.ratio];
                 const tmpl = templateId ? templates.find(x => x.id === templateId) : templates.find(x => x.is_default);
+                const enabled = enabledFormats[fmt.ratio];
                 return (
-                  <FormatPreview
-                    key={fmt.ratio}
-                    format={fmt}
-                    previewFrame={previewFrame}
-                    template={tmpl || null}
-                    textOverlays={textOverlays}
-                    t={t}
-                    videoInfo={video}
-                    onTextDrag={handleTextDrag}
-                    onTemplateChange={handleTemplateChange}
-                    templates={templates}
-                    selectedTemplateId={templateId}
-                  />
+                  <div key={fmt.ratio} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    {/* Format toggle — always clickable */}
+                    <div onClick={() => toggleFormat(fmt.ratio)} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", marginBottom: 5 }}>
+                      <div style={{ width: 15, height: 15, borderRadius: 3, border: "2px solid " + (enabled ? t.green : t.border), background: enabled ? t.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 700, transition: "all 0.15s", flexShrink: 0 }}>{enabled ? "✓" : ""}</div>
+                      <span style={{ fontSize: 10, color: enabled ? t.text : t.textFaint }}>{enabled ? "Included" : "Skipped"}</span>
+                    </div>
+                    {/* Panel — dimmed when disabled */}
+                    <div style={{ opacity: enabled ? 1 : 0.3, pointerEvents: enabled ? "auto" : "none", transition: "opacity 0.2s" }}>
+                      <FormatPreview
+                        format={fmt}
+                        previewFrame={previewFrame}
+                        template={tmpl || null}
+                        textOverlays={textOverlays}
+                        t={t}
+                        videoInfo={video}
+                        onTextDrag={handleTextDrag}
+                        onTemplateChange={handleTemplateChange}
+                        templates={templates}
+                        selectedTemplateId={templateId}
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -7297,9 +7318,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             const isBlur = !tmpl || tmpl.type === "blur";
             const seconds = (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
             const method = isBlur ? "blur" : tmpl.type;
-            return { ...f, seconds, method };
+            return { ...f, seconds, method, enabled: enabledFormats[f.ratio] };
           });
-          const total = fmtEstimates.reduce((s, e) => s + e.seconds, 0) + 3;
+          const total = fmtEstimates.filter(e => e.enabled).reduce((s, e) => s + e.seconds, 0) + 3;
           const totalLabel = total < 60 ? total + "s" : Math.floor(total / 60) + "m " + (total % 60) + "s";
           return (
             <div style={{ padding: "14px 18px", borderRadius: 10, background: t.cardAlt, border: "1px solid " + t.border, marginBottom: 16 }}>
@@ -7308,9 +7329,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 <span style={{ fontSize: 15, fontWeight: 500, color: t.green }}>{totalLabel}</span>
               </div>
               {fmtEstimates.map(e => (
-                <div key={e.ratio} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.textFaint, padding: "2px 0" }}>
+                <div key={e.ratio} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: e.enabled ? t.textFaint : t.border, padding: "2px 0", textDecoration: e.enabled ? "none" : "line-through" }}>
                   <span>{e.label} ({e.method})</span>
-                  <span>~{e.seconds}s</span>
+                  <span>{e.enabled ? `~${e.seconds}s` : "skipped"}</span>
                 </div>
               ))}
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.textFaint, padding: "2px 0", borderTop: "1px solid " + t.border + "40", marginTop: 4 }}>
@@ -7329,17 +7350,19 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           const fmtEstimates = [
             { ratio: "16:9" }, { ratio: "1:1" }, { ratio: "4:5" }, { ratio: "9:16" },
           ].map(f => {
+            if (!enabledFormats[f.ratio]) return 0;
             const tid = selectedTemplates[f.ratio];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
             return (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
           });
           const totalEst = fmtEstimates.reduce((s, n) => s + n, 0) + 3;
+          const fmtLabels = ["16:9", "1:1", "4:5", "9:16"].filter(r => enabledFormats[r]).join(" · ");
           return (
             <>
               <button type="button" onClick={() => handleReformatJob(totalEst)} disabled={jobSubmitting}
                 style={{ width: "100%", padding: "12px 24px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 600, cursor: jobSubmitting ? "not-allowed" : "pointer", opacity: jobSubmitting ? 0.7 : 1, marginBottom: 6 }}>
-                {jobSubmitting ? "Starting job..." : "Reformat All (16:9 · 1:1 · 4:5 · 9:16)"}
+                {jobSubmitting ? "Starting job..." : `Reformat ${enabledCount} format${enabledCount !== 1 ? "s" : ""} (${fmtLabels})`}
               </button>
               <div style={{ fontSize: 11, color: t.textFaint, textAlign: "center" }}>Processes in background — you can navigate away</div>
             </>
