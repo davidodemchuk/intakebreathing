@@ -5723,7 +5723,7 @@ function BrandBookBlock() {
       </div>
 
       <div style={{ fontSize: 20, fontWeight: 500, color: "#FFFFFF", marginBottom: 16 }}>
-        {brandBook?.positioning || "Life Changing Breathing."}
+        {typeof brandBook?.positioning === "string" ? brandBook.positioning : "Life Changing Breathing."}
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
@@ -5737,12 +5737,12 @@ function BrandBookBlock() {
 
       <div style={{ marginBottom: 8 }}>
         <div style={{ fontSize: 10, color: "#737373", letterSpacing: "0.08em", marginBottom: 2 }}>TYPOGRAPHY</div>
-        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{brandBook?.typography || "Inter — Regular & Medium"}</div>
+        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{typeof brandBook?.typography === "string" ? brandBook.typography : brandBook?.typography?.font_family ? brandBook.typography.font_family + " — " + (Array.isArray(brandBook.typography.weights_used) ? brandBook.typography.weights_used.join(" & ") : "Regular & Medium") : "Inter — Regular & Medium"}</div>
       </div>
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 10, color: "#737373", letterSpacing: "0.08em", marginBottom: 2 }}>ARCHETYPE</div>
-        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{brandBook?.archetype || "Hero"}</div>
+        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{typeof brandBook?.archetype === "string" ? brandBook.archetype : brandBook?.archetype?.name || "Hero"}</div>
       </div>
 
       <div style={{ fontSize: 12, color: "#737373" }}>Source of truth: Supabase app_settings &rarr; brand_book</div>
