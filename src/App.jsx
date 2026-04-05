@@ -6067,53 +6067,59 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
       })() : null}
 
       {/* TRACKING TAB */}
-      {activeTab === "tracking" ? (
+      {activeTab === "tracking" ? (() => {
+        const nonDeclined = campCreators.filter(cc => cc.status !== "declined");
+        const approvedCount = campCreators.filter(cc => cc.status === "approved").length;
+        const pct = nonDeclined.length > 0 ? Math.round((approvedCount / nonDeclined.length) * 100) : 0;
+        const allApproved = nonDeclined.length > 0 && approvedCount === nonDeclined.length;
+        const submitted = campCreators.filter(cc => cc.status === "submitted");
+        const approved = campCreators.filter(cc => cc.status === "approved");
+        const waiting = campCreators.filter(cc => ["accepted", "briefed", "revision"].includes(cc.status));
+        const invited = campCreators.filter(cc => cc.status === "invited");
+        const declined = campCreators.filter(cc => cc.status === "declined");
+        const [revisionFor, setRevisionFor] = useState(null);
+        const [revisionText, setRevisionText] = useState("");
+        return (
         <div>
-          <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-            {[
-              { label: "Total Creators", value: campCreators.length, color: t.text },
-              { label: "Content Submitted", value: campCreators.filter(cc => cc.status === "submitted" || cc.status === "approved").length, color: t.purple || "#8b6cc4" },
-              { label: "Approved", value: campCreators.filter(cc => cc.status === "approved").length, color: t.green },
-            ].map((s, i) => (
-              <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-                <div style={{ fontSize: 24, fontWeight: 500, color: s.color }}>{s.value}</div>
-                <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 2 }}>{s.label}</div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+            {[{ l: "Total", v: campCreators.length, c: t.text }, { l: "Invited", v: invited.length, c: t.orange || "#d4890a" }, { l: "Accepted", v: waiting.length, c: t.blue }, { l: "Submitted", v: submitted.length, c: t.purple || "#8b6cc4" }, { l: "Approved", v: approvedCount, c: t.green }, { l: "Declined", v: declined.length, c: t.red || "#ef4444" }].map((s, i) => (
+              <div key={i} style={{ flex: 1, minWidth: 70, background: t.card, border: "1px solid " + t.border, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 500, color: s.c }}>{s.v}</div>
+                <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.l}</div>
               </div>
             ))}
           </div>
+          {nonDeclined.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontSize: 12, color: t.textMuted }}>Completion</span><span style={{ fontSize: 12, color: t.green, fontWeight: 500 }}>{pct}%</span></div><div style={{ height: 6, borderRadius: 3, background: t.border }}><div style={{ height: 6, borderRadius: 3, background: t.green, width: pct + "%", transition: "width 0.3s" }} /></div></div> : null}
 
-          {/* Progress bar */}
-          {campCreators.length > 0 ? (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: t.textMuted }}>Completion</span>
-                <span style={{ fontSize: 12, color: t.green, fontWeight: 500 }}>{Math.round((campCreators.filter(cc => cc.status === "approved").length / campCreators.length) * 100)}%</span>
-              </div>
-              <div style={{ height: 6, borderRadius: 3, background: t.border }}>
-                <div style={{ height: 6, borderRadius: 3, background: t.green, width: Math.round((campCreators.filter(cc => cc.status === "approved").length / campCreators.length) * 100) + "%", transition: "width 0.3s" }} />
-              </div>
+          {/* Submitted — needs review */}
+          {submitted.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.purple || "#8b6cc4", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Needs Review ({submitted.length})</div>{submitted.map(cc => { const cr = creators.find(c => c.id === cc.creator_id); const h = cr?.tiktokHandle || cr?.instagramHandle || cr?.handle || "?"; const av = cr?.tiktokData?.avatarUrl || cr?.instagramData?.avatarUrl || ""; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: 14, marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              {av ? <img src={av} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
+              <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{h}</div><div style={{ fontSize: 10, color: t.textFaint }}>Submitted {cc.submitted_at ? new Date(cc.submitted_at).toLocaleDateString() : ""}</div></div>
             </div>
-          ) : null}
+            {cc.submission_url ? <a href={cc.submission_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.blue, textDecoration: "none", display: "block", marginBottom: 4 }}>{cc.submission_url.substring(0, 60)}{cc.submission_url.length > 60 ? "..." : ""} {"\u2197"}</a> : null}
+            {cc.submission_notes ? <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Notes: {cc.submission_notes}</div> : null}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={async () => { await dbUpdateCampaignCreator(cc.id, { status: "approved", approved_at: new Date().toISOString() }); setCampCreators(prev => prev.map(x => x.id === cc.id ? { ...x, status: "approved", approved_at: new Date().toISOString() } : x)); }} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer", fontWeight: 500 }}>Approve {"\u2713"}</button>
+              <button onClick={() => { setRevisionFor(cc.id); setRevisionText(""); }} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>Request Revision {"\u21BB"}</button>
+            </div>
+            {revisionFor === cc.id ? <div style={{ marginTop: 8 }}><textarea value={revisionText} onChange={(e) => setRevisionText(e.target.value)} placeholder="What needs to change?" style={{ width: "100%", minHeight: 60, padding: 10, borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} /><div style={{ display: "flex", gap: 6, marginTop: 6 }}><button onClick={async () => { await dbUpdateCampaignCreator(cc.id, { status: "revision", revision_notes: revisionText, submitted_at: null, submission_url: null }); setCampCreators(prev => prev.map(x => x.id === cc.id ? { ...x, status: "revision", revision_notes: revisionText } : x)); setRevisionFor(null); }} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: "none", background: t.orange || "#d4890a", color: "#fff", cursor: "pointer" }}>Send revision request</button><button onClick={() => setRevisionFor(null)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, cursor: "pointer" }}>Cancel</button></div></div> : null}
+          </div>; })}</div> : null}
 
-          {/* Per-creator rows */}
-          {campCreators.map(cc => {
-            const cr = creators.find(c => c.id === cc.creator_id);
-            const h = cr?.tiktokHandle || cr?.instagramHandle || cr?.handle || "Unknown";
-            const sc = { invited: t.blue, briefed: t.orange || "#d4890a", submitted: t.purple || "#8b6cc4", approved: t.green }[cc.status] || t.textFaint;
-            return (
-              <div key={cc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid " + t.border + "30" }}>
-                <span style={{ fontSize: 13, color: t.text }}>@{h}</span>
-                <span style={{ fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 6, background: sc + "15", color: sc, textTransform: "uppercase" }}>{cc.status || "invited"}</span>
-              </div>
-            );
-          })}
+          {/* Approved */}
+          {approved.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Approved ({approved.length})</div>{approved.map(cc => { const cr = creators.find(c => c.id === cc.creator_id); const h = cr?.tiktokHandle || cr?.instagramHandle || cr?.handle || "?"; return <div key={cc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid " + t.border + "20" }}><span style={{ fontSize: 13, color: t.text }}>@{h} {"\u2713"}</span>{cc.submission_url ? <a href={cc.submission_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.blue, textDecoration: "none" }}>View {"\u2197"}</a> : null}</div>; })}</div> : null}
 
-          {/* Mark complete */}
-          {campaign.status !== "complete" && campCreators.length > 0 ? (
-            <button onClick={() => updateField("status", "complete")} style={{ ...S.btnP, marginTop: 24, fontSize: 13, padding: "12px 24px" }}>Mark Campaign Complete</button>
-          ) : null}
-        </div>
-      ) : null}
+          {/* Waiting */}
+          {waiting.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.blue, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Awaiting Content ({waiting.length})</div>{waiting.map(cc => { const cr = creators.find(c => c.id === cc.creator_id); const h = cr?.tiktokHandle || cr?.instagramHandle || cr?.handle || "?"; return <div key={cc.id} style={{ padding: "6px 0", borderBottom: "1px solid " + t.border + "15", fontSize: 12, color: t.textMuted }}>@{h} — {cc.status}{cc.status === "revision" ? " (revision requested)" : ""}</div>; })}</div> : null}
+
+          {/* Invited / Declined */}
+          {invited.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>{invited.length} invited — no response yet</div></div> : null}
+          {declined.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>{declined.length} declined</div></div> : null}
+
+          {/* Complete */}
+          {allApproved && campaign.status !== "complete" ? <button onClick={() => updateField("status", "complete")} style={{ background: t.green, color: t.isLight ? "#fff" : "#000", height: 48, borderRadius: 24, padding: "0 32px", fontSize: 15, fontWeight: 500, border: "none", cursor: "pointer", marginTop: 16 }}>Mark Campaign Complete {"\u2713"}</button> : campaign.status === "active" && campCreators.length > 0 ? <button onClick={() => updateField("status", "complete")} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer", marginTop: 12 }}>Force complete campaign</button> : null}
+        </div>);
+      })() : null}
     </div>
   );
 }

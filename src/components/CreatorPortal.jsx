@@ -734,6 +734,9 @@ function CreatorCampaignView({ creatorProfile: cp, navigate, t, BriefDisplay }) 
   const [loading, setLoading] = useState(true);
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [submissionUrl, setSubmissionUrl] = useState("");
+  const [submissionNotes, setSubmissionNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const campaignId = new URLSearchParams(window.location.search).get("id");
@@ -817,11 +820,46 @@ function CreatorCampaignView({ creatorProfile: cp, navigate, t, BriefDisplay }) 
               </div>
             ) : null}
           </div>
-        ) : assignment.status === "accepted" ? (
-          <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, padding: 24 }}>
-            <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 4 }}>{"\u2713"} You accepted this campaign{assignment.accepted_at ? " on " + new Date(assignment.accepted_at).toLocaleDateString() : ""}</div>
-            <div style={{ fontSize: 13, color: t.textMuted }}>Next step: Create your content following the brief above, then submit it here.</div>
-            <div style={{ marginTop: 12, fontSize: 12, color: t.textFaint }}>Content submission coming in next update.</div>
+        ) : (assignment.status === "accepted" || assignment.status === "briefed" || assignment.status === "revision") ? (
+          <div>
+            <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{"\u2713"} You accepted this campaign{assignment.accepted_at ? " on " + new Date(assignment.accepted_at).toLocaleDateString() : ""}</div>
+            </div>
+            {assignment.status === "revision" && assignment.revision_notes ? (
+              <div style={{ background: (t.orange || "#d4890a") + "10", border: "1px solid " + (t.orange || "#d4890a") + "25", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: t.orange || "#d4890a", marginBottom: 4 }}>Revision requested</div>
+                <div style={{ fontSize: 13, color: t.text, lineHeight: 1.5 }}>{assignment.revision_notes}</div>
+              </div>
+            ) : null}
+            <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24 }}>
+              <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>Submit your content</div>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Paste the link to your video (TikTok, Google Drive, Dropbox, or any URL). Add any notes for the team.</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginBottom: 4 }}>Content link *</div>
+              <input type="url" value={submissionUrl} onChange={(e) => setSubmissionUrl(e.target.value)} placeholder="https://www.tiktok.com/@handle/video/... or Google Drive link" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 14, marginBottom: 16, boxSizing: "border-box" }} />
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.textMuted, marginBottom: 4 }}>Notes (optional)</div>
+              <textarea value={submissionNotes} onChange={(e) => setSubmissionNotes(e.target.value)} placeholder="Anything the team should know — multiple takes, specific timestamps, etc." style={{ width: "100%", minHeight: 80, padding: "12px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, lineHeight: 1.5, resize: "vertical", boxSizing: "border-box", marginBottom: 16, fontFamily: "inherit" }} />
+              <button onClick={async () => {
+                if (!submissionUrl.trim()) return;
+                setSubmitting(true);
+                try {
+                  await supabase.from("campaign_creators").update({ status: "submitted", submitted_at: new Date().toISOString(), submission_url: submissionUrl.trim(), submission_notes: submissionNotes.trim() || null }).eq("id", assignment.id);
+                  setAssignment(prev => ({ ...prev, status: "submitted", submitted_at: new Date().toISOString(), submission_url: submissionUrl.trim() }));
+                } catch (e) { alert("Submission failed: " + e.message); }
+                setSubmitting(false);
+              }} disabled={!submissionUrl.trim() || submitting} style={{ background: !submissionUrl.trim() ? t.border : t.green, color: !submissionUrl.trim() ? t.textFaint : (t.isLight ? "#fff" : "#000"), height: 44, borderRadius: 22, padding: "0 28px", fontSize: 14, fontWeight: 500, border: "none", cursor: !submissionUrl.trim() ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1 }}>{submitting ? "Submitting..." : "Submit content \u2192"}</button>
+            </div>
+          </div>
+        ) : assignment.status === "submitted" ? (
+          <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>Content submitted {"\u2713"}</div>
+            <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 8 }}>Submitted on {assignment.submitted_at ? new Date(assignment.submitted_at).toLocaleDateString() : ""}</div>
+            {assignment.submission_url ? <a href={assignment.submission_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: t.blue, textDecoration: "none" }}>View your submission {"\u2197"}</a> : null}
+            <div style={{ fontSize: 12, color: t.textFaint, marginTop: 12 }}>The team will review and get back to you.</div>
+          </div>
+        ) : assignment.status === "approved" ? (
+          <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 20, fontWeight: 500, color: t.green, marginBottom: 4 }}>Content approved {"\u2713"}</div>
+            <div style={{ fontSize: 13, color: t.textMuted }}>Approved{assignment.approved_at ? " on " + new Date(assignment.approved_at).toLocaleDateString() : ""}. Thank you!</div>
           </div>
         ) : assignment.status === "declined" ? (
           <div style={{ background: (t.red || "#ef4444") + "08", border: "1px solid " + (t.red || "#ef4444") + "25", borderRadius: 12, padding: 24 }}>
