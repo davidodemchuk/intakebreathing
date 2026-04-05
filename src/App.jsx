@@ -5676,19 +5676,79 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 // ═══ Creator Portal components moved to ./components/CreatorPortal.jsx ═══
 
 // ═══════════════════════════════════════════════════════════
-// HOMEPAGE HERO — full-width brand header
+// HOMEPAGE SECTIONS — Creator Hub hero, Channel Pipeline, Brand Book footer
 // ═══════════════════════════════════════════════════════════
 
-function HomepageHero({ navigate }) {
+function CreatorHubHero({ stats, onOpen }) {
   return (
-    <div style={{ width: "100%", background: "#000000", padding: "72px 48px 64px", borderBottom: "1px solid #1a1a1a", boxSizing: "border-box" }}>
-      <div style={{ color: "#00FEA9", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 20 }}>Intake Creators — Internal Dashboard</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 64, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.05, letterSpacing: "-0.02em", maxWidth: 700, marginBottom: 20 }}>Life Changing<br />Breathing.</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#737373", maxWidth: 480, lineHeight: 1.6, marginBottom: 36 }}>Manage your creator partnerships, campaigns, and UGC pipeline — all in one place.</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <button onClick={() => navigate("creatorHub")} style={{ background: "#00FEA9", color: "#000000", height: 50, borderRadius: 25, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 15, padding: "0 32px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease" }} onMouseEnter={(e) => { e.target.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.target.style.opacity = "1"; }}>Open Creator Hub</button>
-        <div style={{ color: "#737373", fontSize: 13, fontWeight: 400 }}>{"\u2B21"} Intake Creators v{APP_VERSION}</div>
+    <div style={{ width: "100%", background: "#000000", padding: "56px 48px 48px", borderBottom: "1px solid #1a1a1a", boxSizing: "border-box", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: -60, right: -60, width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,254,169,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ color: "#00FEA9", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16 }}>Creator Hub</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
+        <div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 52, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.08, letterSpacing: "-0.02em", marginBottom: 16 }}>Creator<br />Partnerships.</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 400, color: "#737373", lineHeight: 1.6, marginBottom: 32, maxWidth: 380 }}>Manage all creators, programs, briefs, and campaigns across every program in one place.</div>
+          <button onClick={onOpen} style={{ background: "#00FEA9", color: "#000000", height: 50, borderRadius: 25, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 15, padding: "0 32px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          {[
+            { label: "Active Creators", value: stats.creators },
+            { label: "Programs", value: stats.programs },
+            { label: "Briefs", value: stats.briefs },
+            { label: "IB Scored", value: stats.scored },
+            { label: "Videos Tracked", value: stats.videos },
+            { label: "Campaigns", value: stats.campaigns },
+          ].map((s, i) => (
+            <div key={i} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 10, padding: "18px 20px" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 28, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 6 }}>{s.value ?? "\u2014"}</div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#737373", letterSpacing: "0.04em" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function ChannelPipelineFeature({ onOpen }) {
+  return (
+    <div style={{ width: "100%", background: "#050505", padding: "48px 48px", borderBottom: "1px solid #1a1a1a", boxSizing: "border-box", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", bottom: -40, left: -40, width: 250, height: 250, borderRadius: "50%", background: "radial-gradient(circle, rgba(99,183,186,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 32 }}>
+        <div style={{ flex: "1 1 400px" }}>
+          <div style={{ color: "#63B7BA", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>Channel Pipeline</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 40, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 14 }}>TTS, Instagram,<br />UGC & beyond.</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 400, color: "#737373", lineHeight: 1.6, maxWidth: 420, marginBottom: 28 }}>Weekly data entry, calculated metrics, sparklines, and monthly rollups across all active channels.</div>
+          <button onClick={onOpen} style={{ background: "transparent", color: "#63B7BA", height: 46, borderRadius: 23, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 14, padding: "0 28px", border: "1px solid rgba(99,183,186,0.4)", cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,183,186,0.08)"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(99,183,186,0.4)"; }}>Open Pipeline &rarr;</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "0 0 auto" }}>
+          {[{ name: "TTS Native", status: "Live", color: "#00FEA9" }, { name: "Instagram", status: "Live", color: "#00FEA9" }, { name: "UGC Weekly", status: "Live", color: "#00FEA9" }, { name: "YouTube", status: "Coming soon", color: "#737373" }].map((ch, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 40, background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 8, padding: "12px 18px", minWidth: 240 }}>
+              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#FFFFFF" }}>{ch.name}</span>
+              <span style={{ fontSize: 11, fontWeight: 500, color: ch.color, letterSpacing: "0.06em" }}>{ch.status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandBookFooter() {
+  return (
+    <div style={{ width: "100%", background: "#080808", borderTop: "1px solid #1a1a1a", padding: "20px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ color: "#00FEA9", fontSize: 10, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase" }}>Brand Book</div>
+        <div style={{ color: "#333", fontSize: 12 }}>&mdash;</div>
+        <div style={{ color: "#737373", fontSize: 12, fontWeight: 400 }}>Life Changing Breathing.</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (
+          <div key={i} style={{ width: 16, height: 16, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none" }} />
+        ))}
+        <div style={{ color: "#737373", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>Inter — Regular & Medium</div>
+      </div>
+      <div style={{ color: "#333333", fontSize: 11, fontWeight: 400 }}>v1.0 — Oct 2024</div>
     </div>
   );
 }
@@ -10181,132 +10241,56 @@ export default function App() {
 
         {/* HOME — hero + secondary cards */}
         {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
+          const homeStats = {
+            creators: creators.filter(c => c.status === "Active").length,
+            programs: [...new Set(creators.flatMap(c => c.programs || []))].length,
+            briefs: library.length,
+            scored: creators.filter(c => c.ibScore != null).length,
+            videos: creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0),
+            campaigns: "\u2014",
+          };
           return (
             <div style={{ animation: "fadeIn 0.3s ease" }}>
-              <HomepageHero navigate={navigate} />
-              <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 60px" }}>
-              {/* Header */}
-              <div style={{ marginBottom: 32 }}>
+              {/* SECTION 1 — Creator Hub Hero */}
+              <CreatorHubHero stats={homeStats} onOpen={() => navigate("creatorHub")} />
 
-                {/* Creator Hub — hero card */}
-                <div onClick={() => navigate("creatorHub")}
-                  style={{
-                    background: t.card, border: "2px solid " + t.green + "50", borderRadius: 16,
-                    padding: "28px 32px", cursor: "pointer", position: "relative", overflow: "hidden",
-                    transition: "border-color 0.2s, box-shadow 0.2s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.boxShadow = "0 8px 32px " + t.green + "12"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.boxShadow = "none"; }}
-                >
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, " + t.green + ", " + t.blue + ")" }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.12em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Hub</div>
-                      <div style={{ fontSize: 22, fontWeight: 500, color: t.text, marginBottom: 4 }}>Creator Hub</div>
-                      <div style={{ fontSize: 13, color: t.textMuted }}>Manage all creators, programs, campaigns, and briefs</div>
-                    </div>
-                    <div style={{ fontSize: 12, color: t.green, fontWeight: 500, padding: "6px 14px", borderRadius: 8, background: t.green + "10", border: "1px solid " + t.green + "25" }}>Open &rarr;</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 24, marginTop: 20, paddingTop: 16, borderTop: "1px solid " + t.border }}>
-                    {[
-                      { v: creators.filter(c => c.status === "Active").length, l: "Active creators", c: t.green },
-                      { v: [...new Set(creators.flatMap(c => c.programs || []))].length, l: "Programs", c: t.blue },
-                      { v: library.length, l: "Briefs", c: t.orange },
-                      { v: creators.filter(c => c.ibScore != null).length, l: "Scored", c: t.purple || "#8b6cc4" },
-                      { v: creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0), l: "Videos tracked", c: t.text },
-                    ].map((s, i) => (
-                      <div key={i}>
-                        <div style={{ fontSize: 22, fontWeight: 500, color: s.c }}>{s.v}</div>
-                        <div style={{ fontSize: 10, color: t.textFaint, marginTop: 1 }}>{s.l}</div>
-                      </div>
-                    ))}
-                  </div>
+              {/* SECTION 2 — Channel Pipeline Feature */}
+              <ChannelPipelineFeature onOpen={() => navigate("pipeline")} />
+
+              {/* SECTION 3 — Utility Grid */}
+              <div style={{ padding: "32px 48px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#000000", borderBottom: "1px solid #1a1a1a" }}>
+                <div onClick={() => navigate("tools")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>Tools</div>
+                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Video reformatter and team utilities</div>
                 </div>
-              </div>
-
-              {/* Secondary cards — 2 column */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-                <div onClick={() => navigate("pipeline")}
-                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Channel Pipeline</div>
-                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Performance and operations across all channels</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: t.orange, fontWeight: 600 }}>8 tabs</div>
-                  </div>
+                <div onClick={() => navigate("sourceOfTruth")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>IB-Ai Source of Truth</div>
+                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Products, claims, scoring, outreach rules</div>
                 </div>
-
-                <div onClick={() => navigate("tools")}
-                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Tools</div>
-                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Video reformatter and team utilities</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: t.blue, fontWeight: 600 }}>1 tool</div>
-                  </div>
+                <div onClick={() => navigate("settings")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#737373"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>Settings</div>
+                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>API keys, team access, integrations</div>
                 </div>
-
-                <div onClick={() => navigate("sourceOfTruth")}
-                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.purple || "#8b6cc4"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>IB-Ai Source of Truth</div>
-                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Products, claims, scoring, outreach rules</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: t.purple || "#8b6cc4", fontWeight: 600 }}>Editable</div>
-                  </div>
-                </div>
-
-                <div onClick={() => navigate("settings")}
-                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.textMuted; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Settings</div>
-                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>API keys, team access, integrations</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 600 }}>v{APP_VERSION}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tertiary — flow chart + canva as small links */}
-              <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-                <button onClick={() => setFlowChartFullscreen(true)} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.card, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Creator Flow Chart</div>
-                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Interactive Lucidchart diagram</div>
+                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>Creator Flow Chart</div>
+                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Interactive Lucidchart diagram</div>
                 </button>
-                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.card, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>2025 In Review</div>
-                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Opens in Canva</div>
+                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>2025 In Review</div>
+                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Opens in Canva</div>
                 </button>
               </div>
 
-              {/* Brand Book */}
-              {(() => { try { return <BrandBookBlock />; } catch { return null; } })()}
+              {/* FOOTER — Brand Book strip */}
+              <BrandBookFooter />
 
+              {/* Fullscreen flow chart modal */}
               {flowChartFullscreen ? (
-                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: t.bg }}>
-                  <button onClick={() => setFlowChartFullscreen(false)} style={{ position: "fixed", top: 16, right: 16, zIndex: 10000, fontSize: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer", fontWeight: 500, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>Exit fullscreen</button>
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: "#000" }}>
+                  <button onClick={() => setFlowChartFullscreen(false)} style={{ position: "fixed", top: 16, right: 16, zIndex: 10000, fontSize: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid #333", background: "#111", color: "#fff", cursor: "pointer", fontWeight: 500, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>Exit fullscreen</button>
                   <iframe style={{ width: "100%", height: "100%", border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
                 </div>
               ) : null}
-
-              <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60", marginTop: 16 }}>v{APP_VERSION}</div>
-            </div>
             </div>
           );
         })()}
