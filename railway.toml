@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm start"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
