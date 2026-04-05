@@ -596,16 +596,10 @@ async function buildReformatFilter(template, w, h, srcW, srcH) {
     return { extraInputs: [], filterArgs: ["-filter_complex", template.custom_ffmpeg_filter.replace(/{W}/g, w).replace(/{H}/g, h)], cleanup: [] };
   }
 
-  if (type === "solid") {
+  if (type === "solid" || type === "gradient") {
+    // gradient type falls back to primary color — real gradients should be uploaded as PNG templates
     const color = (template?.color_primary || "#000000").replace(/^#/, "");
     const fc = `color=c=0x${color}:size=${w}x${h}:rate=30,setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
-    return { extraInputs: [], filterArgs: ["-filter_complex", fc], cleanup: [] };
-  }
-
-  if (type === "gradient") {
-    const c1 = (template?.color_primary || "#0d0d1a").replace(/^#/, "");
-    const c2 = (template?.color_secondary || "#1a1a2e").replace(/^#/, "");
-    const fc = `color=c=0x${c1}:size=${w}x${h}:rate=30[top];color=c=0x${c2}:size=${w}x${h}:rate=30[bot];[top][bot]blend=all_expr='A*(1-Y/H)+B*(Y/H)',setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
     return { extraInputs: [], filterArgs: ["-filter_complex", fc], cleanup: [] };
   }
 
@@ -1159,7 +1153,7 @@ async function processReformatJob(jobId) {
     console.log(`[job:${jobId}] ${fmt.name} (${fmt.width}x${fmt.height})${textFilters ? " +text" : ""}...`);
     await new Promise((ok, no) => {
       execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...finalFilterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outFile],
-        { timeout: 300000, maxBuffer: 10485760 },
+        { timeout: 120000, maxBuffer: 10485760 },
         (e, _, stderr) => e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok());
     });
     filterCleanup.forEach(f => { try { fs.unlinkSync(f); } catch {} });
