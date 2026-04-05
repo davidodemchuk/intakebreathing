@@ -5684,13 +5684,13 @@ function CreatorHubHero({ stats, onOpen, onNav }) {
   const cIn = (e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = "#2a2a2a"; };
   const cOut = (e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = "#1c1c1c"; };
   return (
-    <div style={{ background: "#000000", padding: "64px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 40 }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>Creator Hub</div>
+    <div style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
         <button onClick={onOpen} style={{ background: "#00FEA9", color: "#000000", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub &rarr;</button>
       </div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 16, maxWidth: 560 }}>Creator<br />Partnerships.</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 48, maxWidth: 400 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Creator Hub</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#00FEA9", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
         <div onClick={() => onNav("creators")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.creators ?? "\u2014"}</div>
@@ -5726,13 +5726,13 @@ function ChannelPipelineFeature({ onOpen, onTabOpen }) {
     { name: "SOPs", star: false, sub: "Processes & docs", tab: "sops" },
   ];
   return (
-    <div style={{ background: "#000000", padding: "64px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 40 }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: "#63B7BA", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>Channel Pipeline</div>
+    <div style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
         <button onClick={onOpen} style={{ background: "transparent", color: "#63B7BA", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "1px solid rgba(99,183,186,0.35)", cursor: "pointer", transition: "all 0.18s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,183,186,0.08)"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(99,183,186,0.35)"; }}>Open Pipeline &rarr;</button>
       </div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 16, maxWidth: 560 }}>Performance<br />& Data.</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 48, maxWidth: 400 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Channel Pipeline</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#63B7BA", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Performance & Data.</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
         {channels.map((ch, i) => (
           <div key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: "#0a0a0a", border: ch.star ? "1px solid rgba(99,183,186,0.25)" : "1px solid #1c1c1c", borderRadius: 12, padding: "28px 24px 24px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = ch.star ? "#63B7BA" : "#2a2a2a"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = ch.star ? "rgba(99,183,186,0.25)" : "#1c1c1c"; }}>
@@ -10213,26 +10213,35 @@ export default function App() {
               <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} />
 
               {/* SECTION 3 — Utility Grid */}
-              <div style={{ padding: "32px 48px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
-                <div onClick={() => navigate("tools")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+              <div style={{ padding: "32px 56px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
+                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e0e0dc" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: "#0a0a0a", letterSpacing: "-0.02em" }}>Tools & Settings</div>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#999999" }}>5 items</div>
+                </div>
+                <div onClick={() => navigate("tools")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Tools</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Video reformatter and team utilities</div>
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </div>
-                <div onClick={() => navigate("sourceOfTruth")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                <div onClick={() => navigate("sourceOfTruth")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>IB-Ai Source of Truth</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Products, claims, scoring, outreach rules</div>
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </div>
-                <div onClick={() => navigate("settings")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                <div onClick={() => navigate("settings")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Settings</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>API keys, team access, integrations</div>
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </div>
-                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Creator Flow Chart</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Interactive Lucidchart diagram</div>
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </button>
-                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>2025 In Review</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Opens in Canva</div>
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </button>
               </div>
 
