@@ -50,7 +50,7 @@ import {
   fetchIBSettings,
 } from "./supabaseDb.js";
 import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
-import { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView } from "./components/CreatorPortal.jsx";
+import { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView, CreatorCampaignView } from "./components/CreatorPortal.jsx";
 import SettingsPanel, { HomepageSettingsBlock } from "./components/Settings.jsx";
 import { ManagerLogin, CreatorHubLanding } from "./components/UGCDashboard.jsx";
 import TtsNativeTab from "./components/TtsNative.jsx";
@@ -772,6 +772,7 @@ const ROUTES = {
   "/creator/profile": "creatorProfile",
   "/creator/brief": "creatorBriefView",
   "/creator/messages": "creatorMessages",
+  "/creator/campaign": "creatorCampaignView",
   "/brief": "publicBrief",
 };
 
@@ -800,10 +801,11 @@ const VIEW_TO_PATH = {
   creatorProfile: "/creator/profile",
   creatorBriefView: "/creator/brief",
   creatorMessages: "/creator/messages",
+  creatorCampaignView: "/creator/campaign",
   publicBrief: "/brief",
 };
 
-const CREATOR_PORTAL_VIEWS = ["creatorLogin", "creatorOnboard", "creatorDashboard", "creatorProfile", "creatorBriefView", "creatorMessages"];
+const CREATOR_PORTAL_VIEWS = ["creatorLogin", "creatorOnboard", "creatorDashboard", "creatorProfile", "creatorBriefView", "creatorMessages", "creatorCampaignView"];
 
 function getViewFromPath() {
   if (typeof window === "undefined") return "home";
@@ -815,6 +817,7 @@ function getViewFromPath() {
   if (path === "/creator/profile") return "creatorProfile";
   if (path === "/creator/brief") return "creatorBriefView";
   if (path === "/creator/messages") return "creatorMessages";
+  if (path === "/creator/campaign") return "creatorCampaignView";
   if (path === "/brief") return "publicBrief";
   // Redirect old /ugc-army URLs to /creator-hub
   if (path === "/ugc-army") { window.history.replaceState(null, "", "/creator-hub"); return "creatorHub"; }
@@ -8804,6 +8807,9 @@ export default function App() {
     if (newView === "creatorDetail" && o.creatorId) {
       path = `/creator-hub/creator?id=${encodeURIComponent(String(o.creatorId))}`;
     }
+    if (newView === "creatorCampaignView" && o.campaignId) {
+      path = `/creator/campaign?id=${encodeURIComponent(String(o.campaignId))}`;
+    }
     if (newView === "campaignDetail" && o.campaignId) {
       path = `/creator-hub/campaign?id=${encodeURIComponent(String(o.campaignId))}`;
     }
@@ -10345,6 +10351,7 @@ export default function App() {
             )}
             {view === "creatorBriefView" && <CreatorBriefView navigate={navigate} t={t} BriefDisplay={BriefDisplay} />}
             {view === "creatorMessages" && creatorProfile && <CreatorMessages creatorProfile={creatorProfile} navigate={navigate} t={t} />}
+            {view === "creatorCampaignView" && creatorProfile && <CreatorCampaignView creatorProfile={creatorProfile} navigate={navigate} t={t} BriefDisplay={BriefDisplay} />}
           </>
         )}
         {!hideManagerShell && <>

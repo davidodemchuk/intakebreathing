@@ -497,7 +497,7 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
           <>{assignments.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>No briefs yet</div><div style={{ fontSize: 12 }}>Your manager will assign briefs when campaigns are ready.</div></div> : assignments.map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</>
         ) : null}
         {activeTab === "campaigns" ? (
-          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div>{camp?.brief_id ? <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: t.blue + "08", border: "1px solid " + t.blue + "20" }}><div style={{ fontSize: 10, fontWeight: 500, color: t.blue, textTransform: "uppercase" }}>Brief included</div><div style={{ fontSize: 12, color: t.text, marginTop: 2 }}>Accept to view the full brief and content requirements</div></div> : null}<div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); if (camp?.brief_id) { await supabase.from("brief_assignments").insert({ creator_id: cp.id, brief_id: camp.brief_id, campaign_id: camp.id, status: "assigned", assigned_at: new Date().toISOString() }); const { data: ra } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false }); if (ra) setAssignments(ra); } }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div></div>; })}</div> : null}</>}</>
+          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div>{camp?.brief_id ? <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: t.blue + "08", border: "1px solid " + t.blue + "20" }}><div style={{ fontSize: 10, fontWeight: 500, color: t.blue, textTransform: "uppercase" }}>Brief included</div><div style={{ fontSize: 12, color: t.text, marginTop: 2 }}>Accept to view the full brief and content requirements</div></div> : null}<div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); if (camp?.brief_id) { await supabase.from("brief_assignments").insert({ creator_id: cp.id, brief_id: camp.brief_id, campaign_id: camp.id, status: "assigned", assigned_at: new Date().toISOString() }); const { data: ra } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false }); if (ra) setAssignments(ra); } }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} onClick={() => navigate("creatorCampaignView", { campaignId: camp?.id })} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6, cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.green + "30"; }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div><div style={{ fontSize: 11, color: t.green, marginTop: 4 }}>View Campaign &rarr;</div></div>; })}</div> : null}</>}</>
         ) : null}
       </div>
     </div>
@@ -727,4 +727,115 @@ function PublicBriefView({ t, BriefDisplay }) {
   );
 }
 
-export { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView };
+function CreatorCampaignView({ creatorProfile: cp, navigate, t, BriefDisplay }) {
+  const [campaign, setCampaign] = useState(null);
+  const [assignment, setAssignment] = useState(null);
+  const [brief, setBrief] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showDecline, setShowDecline] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
+
+  useEffect(() => {
+    const campaignId = new URLSearchParams(window.location.search).get("id");
+    if (!campaignId || !cp?.id) { setLoading(false); return; }
+    (async () => {
+      const { data: camp } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
+      if (camp) setCampaign(camp);
+      const { data: asgn } = await supabase.from("campaign_creators").select("*").eq("campaign_id", campaignId).eq("creator_id", cp.id).maybeSingle();
+      if (asgn) setAssignment(asgn);
+      if (camp?.brief_id) {
+        const { data: br } = await supabase.from("briefs").select("*").eq("id", camp.brief_id).maybeSingle();
+        if (br) setBrief(br.brief_data || br);
+      }
+      setLoading(false);
+    })();
+  }, [cp?.id]);
+
+  const handleAccept = async () => {
+    if (!assignment) return;
+    await supabase.from("campaign_creators").update({ status: "accepted", accepted_at: new Date().toISOString() }).eq("id", assignment.id);
+    setAssignment(prev => ({ ...prev, status: "accepted", accepted_at: new Date().toISOString() }));
+  };
+
+  const handleDecline = async () => {
+    if (!assignment) return;
+    await supabase.from("campaign_creators").update({ status: "declined", declined_at: new Date().toISOString(), decline_reason: declineReason || null }).eq("id", assignment.id);
+    setAssignment(prev => ({ ...prev, status: "declined", declined_at: new Date().toISOString() }));
+    setShowDecline(false);
+  };
+
+  if (loading) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading campaign...</div>;
+  if (!campaign || !assignment) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textFaint, padding: 24 }}>You don't have access to this campaign. If you received an invite link, contact the team.</div>;
+
+  const statusC = { invited: t.orange || "#d4890a", accepted: t.green, briefed: t.purple || "#8b6cc4", submitted: t.green, approved: t.green, declined: t.red || "#ef4444" }[assignment.status] || t.textFaint;
+
+  return (
+    <div style={{ minHeight: "100vh", background: t.bg }}>
+      <div style={{ padding: "12px 24px", borderBottom: "1px solid " + t.border, display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>&larr; Back to Dashboard</button>
+      </div>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 20px 60px" }}>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 22, fontWeight: 500, color: t.text, marginBottom: 6 }}>{campaign.name || "Campaign"}</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 10, background: statusC + "18", color: statusC }}>{(assignment.status || "invited").charAt(0).toUpperCase() + (assignment.status || "invited").slice(1)}</span>
+            {assignment.invited_at ? <span style={{ fontSize: 12, color: t.textFaint }}>Invited {new Date(assignment.invited_at).toLocaleDateString()}</span> : null}
+          </div>
+        </div>
+
+        {/* Brief */}
+        {brief ? (
+          <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: t.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Campaign Brief</div>
+            <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>{brief.campaignName || brief.mission ? "" : campaign.name}</div>
+            {brief.mission ? <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 16 }}>{brief.mission}</div> : null}
+            {Array.isArray(brief.hooks) && brief.hooks.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 6 }}>Hook Options</div>{brief.hooks.map((h, i) => <div key={i} style={{ fontSize: 13, color: t.textSecondary || t.textMuted, lineHeight: 1.6, marginBottom: 4 }}>{"\u2022"} {h}</div>)}</div> : null}
+            {Array.isArray(brief.sayThis) && brief.sayThis.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 6 }}>Do Say</div>{brief.sayThis.map((d, i) => <div key={i} style={{ fontSize: 13, color: t.green, marginBottom: 2 }}>{"\u2713"} {d}</div>)}</div> : null}
+            {Array.isArray(brief.notThis) && brief.notThis.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 6 }}>Don't Say</div>{brief.notThis.map((d, i) => <div key={i} style={{ fontSize: 13, color: t.red || "#ef4444", marginBottom: 2 }}>{"\u2717"} {d}</div>)}</div> : null}
+            {brief.deliverables ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 6 }}>Deliverables</div><div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6 }}>{brief.deliverables}</div></div> : null}
+            {brief.platNotes ? <div><div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 6 }}>Platform Notes</div><div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.6 }}>{brief.platNotes}</div></div> : null}
+          </div>
+        ) : <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24, marginBottom: 24, textAlign: "center", color: t.textFaint }}>Brief will be shared when ready.</div>}
+
+        {/* Response section */}
+        {assignment.status === "invited" ? (
+          <div style={{ background: t.cardAlt, borderRadius: 12, padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 8 }}>Interested in this campaign?</div>
+            <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Accept to confirm your participation. You can discuss details with the team afterward.</div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <button onClick={handleAccept} style={{ background: t.green, color: t.isLight ? "#fff" : "#000", height: 44, borderRadius: 22, padding: "0 32px", fontSize: 14, fontWeight: 500, border: "none", cursor: "pointer" }}>Accept Campaign</button>
+              <button onClick={() => setShowDecline(true)} style={{ background: "transparent", color: t.textMuted, height: 44, borderRadius: 22, padding: "0 24px", fontSize: 13, border: "1px solid " + t.border, cursor: "pointer" }}>Decline</button>
+            </div>
+            {showDecline ? (
+              <div style={{ marginTop: 16, padding: 16, background: t.card, border: "1px solid " + t.border, borderRadius: 10, textAlign: "left" }}>
+                <div style={{ fontSize: 13, color: t.text, marginBottom: 8 }}>Reason for declining (optional):</div>
+                <textarea value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} placeholder="Schedule conflict, not a fit, etc." style={{ width: "100%", minHeight: 60, padding: 10, borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button onClick={handleDecline} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, background: t.red || "#ef4444", color: "#fff", border: "none", cursor: "pointer" }}>Confirm Decline</button>
+                  <button onClick={() => setShowDecline(false)} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>Cancel</button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : assignment.status === "accepted" ? (
+          <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 4 }}>{"\u2713"} You accepted this campaign{assignment.accepted_at ? " on " + new Date(assignment.accepted_at).toLocaleDateString() : ""}</div>
+            <div style={{ fontSize: 13, color: t.textMuted }}>Next step: Create your content following the brief above, then submit it here.</div>
+            <div style={{ marginTop: 12, fontSize: 12, color: t.textFaint }}>Content submission coming in next update.</div>
+          </div>
+        ) : assignment.status === "declined" ? (
+          <div style={{ background: (t.red || "#ef4444") + "08", border: "1px solid " + (t.red || "#ef4444") + "25", borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 14, color: t.text }}>You declined this campaign{assignment.declined_at ? " on " + new Date(assignment.declined_at).toLocaleDateString() : ""}.</div>
+            {assignment.decline_reason ? <div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>Reason: {assignment.decline_reason}</div> : null}
+          </div>
+        ) : (
+          <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 14, color: t.text }}>Status: <span style={{ fontWeight: 500, color: statusC }}>{assignment.status}</span></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView, CreatorCampaignView };
