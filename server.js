@@ -224,6 +224,33 @@ app.get("/api/cache-thumbnail/:cacheId", async (req, res) => {
 
 
 
+app.get("/api/extract-frame", async (req, res) => {
+  const { cacheId } = req.query;
+  if (!cacheId) return res.status(400).json({ error: "cacheId required" });
+  const entry = videoCache.get(cacheId);
+  if (!entry) return res.status(404).json({ error: "Cached video not found" });
+  const framePath = entry.filePath + ".preview.jpg";
+  try {
+    if (!fs.existsSync(framePath)) {
+      const seekTime = parseFloat(req.query.time) || 2;
+      const tryExtract = (extraArgs) => new Promise((resolve, reject) => {
+        execFile(FFMPEG, [...extraArgs, "-i", entry.filePath, "-frames:v", "1", "-q:v", "2", "-y", framePath],
+          { timeout: 10000 }, (err) => err ? reject(err) : resolve());
+      });
+      try {
+        await tryExtract(["-ss", String(seekTime)]);
+      } catch {
+        await tryExtract([]); // fallback: grab first frame
+      }
+    }
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    fs.createReadStream(framePath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: "Frame extraction failed: " + err.message });
+  }
+});
+
 // ── Store thumbnails permanently in Supabase Storage ──
 app.post("/api/store-thumbnails", async (req, res) => {
   const { creatorHandle, videos } = req.body;
@@ -993,19 +1020,24 @@ function buildTextOverlayFilters(overlays, targetW, targetH, videoDuration, form
     .map(overlay => {
       // Escape single quotes and colons for FFmpeg drawtext
       const text = overlay.content.replace(/\\/g, "\\\\").replace(/'/g, "\u2019").replace(/:/g, "\\:");
-      const fontSize = overlay.font_size || 36;
+      const fontSize = overlay.fontSizeOverrides?.[formatRatio] || overlay.font_size || 36;
       const fontColor = (overlay.font_color || "white").replace(/#/g, "0x");
 
-      // Position mapping
+      // Position mapping — use custom drag position if set, else preset
       let x, y;
-      switch (overlay.position_preset) {
-        case "top-left":     x = "20";             y = "20";             break;
-        case "top-center":   x = "(w-text_w)/2";   y = "20";             break;
-        case "top-right":    x = "w-text_w-20";    y = "20";             break;
-        case "center":       x = "(w-text_w)/2";   y = "(h-text_h)/2";   break;
-        case "bottom-left":  x = "20";             y = "h-text_h-20";    break;
-        case "bottom-right": x = "w-text_w-20";    y = "h-text_h-20";    break;
-        default:             x = "(w-text_w)/2";   y = "h-text_h-20";    break; // bottom-center
+      if (overlay.customPosition?.[formatRatio]) {
+        x = String(Math.round(overlay.customPosition[formatRatio].x));
+        y = String(Math.round(overlay.customPosition[formatRatio].y));
+      } else {
+        switch (overlay.position_preset) {
+          case "top-left":     x = "20";             y = "20";             break;
+          case "top-center":   x = "(w-text_w)/2";   y = "20";             break;
+          case "top-right":    x = "w-text_w-20";    y = "20";             break;
+          case "center":       x = "(w-text_w)/2";   y = "(h-text_h)/2";   break;
+          case "bottom-left":  x = "20";             y = "h-text_h-20";    break;
+          case "bottom-right": x = "w-text_w-20";    y = "h-text_h-20";    break;
+          default:             x = "(w-text_w)/2";   y = "h-text_h-20";    break;
+        }
       }
 
       // Background box — parse rgba string to FFmpeg boxcolor format

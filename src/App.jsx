@@ -6342,6 +6342,136 @@ function ReformatNotificationBar({ job, setJob, t }) {
   );
 }
 
+const FORMAT_PREVIEW_DIMS = {
+  "16:9": { w: 1920, h: 1080, displayW: 300, displayH: 169 },
+  "1:1":  { w: 1080, h: 1080, displayW: 200, displayH: 200 },
+  "4:5":  { w: 1080, h: 1350, displayW: 176, displayH: 220 },
+  "9:16": { w: 1080, h: 1920, displayW: 135, displayH: 240 },
+};
+
+function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onTextDrag, onTemplateChange, templates, selectedTemplateId }) {
+  const containerRef = useRef(null);
+  const [dragging, setDragging] = useState(null);
+
+  const dims = FORMAT_PREVIEW_DIMS[format.ratio];
+  const scale = dims.displayW / dims.w;
+
+  // Video frame display size (letterboxed/pillarboxed into panel)
+  const vidAspect = (videoInfo?.width || 540) / (videoInfo?.height || 960);
+  const fmtAspect = dims.w / dims.h;
+  let vidDisplayW, vidDisplayH;
+  if (vidAspect < fmtAspect) { vidDisplayH = dims.displayH; vidDisplayW = vidDisplayH * vidAspect; }
+  else { vidDisplayW = dims.displayW; vidDisplayH = vidDisplayW / vidAspect; }
+  const vidLeft = (dims.displayW - vidDisplayW) / 2;
+  const vidTop = (dims.displayH - vidDisplayH) / 2;
+
+  // CSS position style for preset text positions
+  const getPresetStyle = (preset) => {
+    const pad = Math.max(2, Math.round(20 * scale));
+    switch (preset) {
+      case "top-left":     return { top: pad, left: pad };
+      case "top-center":   return { top: pad, left: "50%", transform: "translateX(-50%)" };
+      case "top-right":    return { top: pad, right: pad };
+      case "center":       return { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
+      case "bottom-left":  return { bottom: pad, left: pad };
+      case "bottom-right": return { bottom: pad, right: pad };
+      default:             return { bottom: pad, left: "50%", transform: "translateX(-50%)" };
+    }
+  };
+
+  const handleMouseDown = (e, origIdx) => {
+    e.preventDefault();
+    const overlay = textOverlays[origIdx];
+    let baseX, baseY;
+    if (overlay.customPosition?.[format.ratio]) {
+      baseX = overlay.customPosition[format.ratio].x;
+      baseY = overlay.customPosition[format.ratio].y;
+    } else if (containerRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cRect = containerRef.current.getBoundingClientRect();
+      baseX = (rect.left - cRect.left) / scale;
+      baseY = (rect.top - cRect.top) / scale;
+    } else { baseX = 0; baseY = 0; }
+    setDragging({ index: origIdx, startX: e.clientX, startY: e.clientY, baseX, baseY });
+  };
+
+  useEffect(() => {
+    if (dragging === null) return;
+    const onMove = (e) => {
+      const newX = dragging.baseX + (e.clientX - dragging.startX) / scale;
+      const newY = dragging.baseY + (e.clientY - dragging.startY) / scale;
+      onTextDrag(format.ratio, dragging.index, newX, newY);
+    };
+    const onUp = () => setDragging(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [dragging]);
+
+  const isBlur = !template || template.type === "blur";
+  const blurSigma = Math.round((template?.blur_sigma || 50) / 3);
+  const brightness = template?.darken_opacity != null ? (1 - parseFloat(template.darken_opacity)).toFixed(2) : "0.55";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+      <div style={{ fontSize: 11, fontWeight: 500, color: t.text }}>{format.label}</div>
+      <div style={{ fontSize: 9, color: t.textFaint }}>{format.dims}</div>
+
+      <div ref={containerRef} style={{ position: "relative", width: dims.displayW, height: dims.displayH, borderRadius: 6, overflow: "hidden", border: "1px solid " + t.border, background: "#000", cursor: dragging !== null ? "grabbing" : "default", flexShrink: 0 }}>
+        {/* Background */}
+        {isBlur && previewFrame && <img src={previewFrame} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: `blur(${blurSigma}px) brightness(${brightness})` }} />}
+        {isBlur && !previewFrame && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg,#1a1a2e,#444)" }} />}
+        {(template?.type === "solid" || template?.type === "gradient") && <div style={{ position: "absolute", inset: 0, background: template.color_primary || "#000" }} />}
+        {template?.type === "image" && template.image_url && <img src={template.image_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+
+        {/* Video frame */}
+        {previewFrame && <img src={previewFrame} alt="" style={{ position: "absolute", left: vidLeft, top: vidTop, width: vidDisplayW, height: vidDisplayH, objectFit: "contain" }} />}
+
+        {/* Text overlays */}
+        {textOverlays.map((overlay, origIdx) => {
+          if (!overlay.content?.trim()) return null;
+          if (overlay.applyTo !== "all" && overlay.applyTo !== format.ratio) return null;
+          const baseFontSize = overlay.fontSizeOverrides?.[format.ratio] || overlay.font_size || 36;
+          const scaledFont = Math.max(7, Math.round(baseFontSize * scale));
+          const customPos = overlay.customPosition?.[format.ratio];
+          const bgPad = overlay.background_color ? Math.max(1, Math.round((overlay.background_padding || 10) * scale)) : 0;
+          const posStyle = customPos
+            ? { left: Math.round(customPos.x * scale), top: Math.round(customPos.y * scale) }
+            : getPresetStyle(overlay.position_preset);
+          return (
+            <div key={origIdx} onMouseDown={(e) => handleMouseDown(e, origIdx)} style={{
+              position: "absolute", ...posStyle,
+              fontSize: scaledFont, fontWeight: overlay.font_weight || "bold",
+              color: overlay.font_color || "#fff",
+              background: overlay.background_color || "transparent",
+              padding: bgPad ? `${bgPad}px` : 0,
+              borderRadius: bgPad ? 2 : 0,
+              cursor: "grab", userSelect: "none", whiteSpace: "nowrap", lineHeight: 1.2,
+              textShadow: !overlay.background_color ? "0 1px 2px rgba(0,0,0,0.9)" : "none",
+              maxWidth: dims.displayW - 8, overflow: "hidden", textOverflow: "ellipsis",
+            }}>
+              {(overlay.content || "")
+                .replace(/\{creator_handle\}/g, videoInfo?.authorHandle || "@creator")
+                .replace(/\{campaign_name\}/g, "Campaign")
+                .replace(/\{product\}/g, "Intake Breathing")
+                .replace(/\{date\}/g, new Date().toLocaleDateString())}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Per-panel template dropdown */}
+      <select value={selectedTemplateId || ""} onChange={(e) => onTemplateChange(format.ratio, e.target.value || null)}
+        style={{ width: dims.displayW, fontSize: 10, padding: "3px 6px", borderRadius: 5, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText }}>
+        <option value="">Blur (default)</option>
+        {templates.filter(tmpl => tmpl.format === "all" || tmpl.format === format.ratio).map(tmpl => (
+          <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function VideoReformatter({ onBack, setActiveReformatJob }) {
   const { t, S } = useContext(ThemeContext);
   const [url, setUrl] = useState("");
@@ -6357,6 +6487,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [jobSubmitting, setJobSubmitting] = useState(false);
   const [textOverlays, setTextOverlays] = useState([]);
   const [savingOverlays, setSavingOverlays] = useState(false);
+  const [previewFrame, setPreviewFrame] = useState(null);
 
   useEffect(() => {
     fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
@@ -6430,6 +6561,17 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
     } finally {
       setSavingOverlays(false);
     }
+  };
+
+  const handleTextDrag = (formatRatio, overlayIndex, x, y) => {
+    setTextOverlays(prev => prev.map((overlay, i) => {
+      if (i !== overlayIndex) return overlay;
+      return { ...overlay, customPosition: { ...(overlay.customPosition || {}), [formatRatio]: { x, y } } };
+    }));
+  };
+
+  const handleTemplateChange = (formatRatio, templateId) => {
+    setSelectedTemplates(prev => ({ ...prev, [formatRatio]: templateId || null }));
   };
 
   // Fetch video from ScrapeCreators
@@ -6591,6 +6733,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 : prev,
             );
             console.log("[VideoReformatter] Video cached:", cacheData.cacheId, `${(cacheData.size / 1048576).toFixed(1)}MB`);
+            setPreviewFrame("/api/extract-frame?cacheId=" + cacheData.cacheId + "&time=2");
           } else {
             const errData = await cacheRes.json().catch(() => ({}));
             console.error("[VideoReformatter] Cache FAILED:", errData.error);
@@ -6978,50 +7121,39 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
       {/* Per-format template picker + estimate + Reformat button */}
       {video?.cacheId && (
         <div>
+          {/* 4-panel live preview */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 12 }}>Choose a background for each format</div>
-          {[
-            { ratio: "16:9", label: "16:9 Landscape", dims: "1920×1080" },
-            { ratio: "1:1", label: "1:1 Square", dims: "1080×1080" },
-            { ratio: "4:5", label: "4:5 Feed", dims: "1080×1350" },
-            { ratio: "9:16", label: "9:16 Story", dims: "1080×1920" },
-          ].map(fmt => {
-            const available = templates.filter(tmpl => tmpl.format === fmt.ratio || tmpl.format === "all");
-            const defaultId = available.find(tmpl => tmpl.is_default)?.id || null;
-            const selected = selectedTemplates[fmt.ratio] !== null ? selectedTemplates[fmt.ratio] : defaultId;
-            return (
-              <div key={fmt.ratio} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, padding: "10px 14px", borderRadius: 10, border: "1px solid " + t.border, background: t.cardAlt }}>
-                <div style={{ minWidth: 96, flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: t.text }}>{fmt.label}</div>
-                  <div style={{ fontSize: 10, color: t.textFaint }}>{fmt.dims}</div>
-                </div>
-                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, flex: 1 }}>
-                  {available.map(tmpl => {
-                    const isSel = selected === tmpl.id;
-                    const previewBg = tmpl.type === "image" && tmpl.image_url
-                      ? `url(${tmpl.image_url}) center/cover`
-                      : tmpl.type === "gradient" && tmpl.color_primary && tmpl.color_secondary
-                        ? `linear-gradient(to bottom, ${tmpl.color_primary}, ${tmpl.color_secondary})`
-                        : tmpl.color_primary || "#222";
-                    return (
-                      <div key={tmpl.id} onClick={() => setSelectedTemplates(prev => ({ ...prev, [fmt.ratio]: tmpl.id }))}
-                        style={{ minWidth: 72, padding: "4px 4px 6px", borderRadius: 8, cursor: "pointer", textAlign: "center", border: `2px solid ${isSel ? t.green : "transparent"}`, background: isSel ? t.green + "08" : "transparent" }}>
-                        {tmpl.type === "blur" ? (
-                          <div style={{ width: "100%", height: 38, borderRadius: 4, background: "linear-gradient(135deg,#1a1a2e,#444)", marginBottom: 4 }} />
-                        ) : tmpl.type === "image" && tmpl.image_url ? (
-                          <img src={tmpl.image_url} style={{ width: "100%", height: 38, objectFit: "cover", borderRadius: 4, display: "block", marginBottom: 4 }} />
-                        ) : (
-                          <div style={{ width: "100%", height: 38, borderRadius: 4, background: previewBg, marginBottom: 4 }} />
-                        )}
-                        <div style={{ fontSize: 9, color: isSel ? t.green : t.textFaint, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tmpl.name}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Preview — what you'll get</div>
+              {previewFrame && <div style={{ fontSize: 10, color: t.textFaint }}>Drag text to reposition</div>}
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
+              {[
+                { ratio: "16:9", label: "16:9 Landscape", dims: "1920×1080" },
+                { ratio: "1:1", label: "1:1 Square", dims: "1080×1080" },
+                { ratio: "4:5", label: "4:5 Feed", dims: "1080×1350" },
+                { ratio: "9:16", label: "9:16 Story", dims: "1080×1920" },
+              ].map(fmt => {
+                const templateId = selectedTemplates[fmt.ratio];
+                const tmpl = templateId ? templates.find(x => x.id === templateId) : templates.find(x => x.is_default);
+                return (
+                  <FormatPreview
+                    key={fmt.ratio}
+                    format={fmt}
+                    previewFrame={previewFrame}
+                    template={tmpl || null}
+                    textOverlays={textOverlays}
+                    t={t}
+                    videoInfo={video}
+                    onTextDrag={handleTextDrag}
+                    onTemplateChange={handleTemplateChange}
+                    templates={templates}
+                    selectedTemplateId={templateId}
+                  />
+                );
+              })}
+            </div>
+          </div>
 
         {/* Text overlays */}
         <div style={{ marginBottom: 20 }}>
@@ -7116,6 +7248,28 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                   </select>
                 </div>
               </div>
+
+              {/* Per-format size overrides */}
+              <details style={{ marginTop: 6 }}>
+                <summary style={{ fontSize: 10, color: t.textFaint, cursor: "pointer", userSelect: "none" }}>Per-format size overrides</summary>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  {["16:9", "1:1", "4:5", "9:16"].map(ratio => (
+                    <div key={ratio} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>{ratio}</div>
+                      <input type="number" value={overlay.fontSizeOverrides?.[ratio] || ""}
+                        placeholder={String(overlay.font_size || 36)}
+                        onChange={(e) => {
+                          const overrides = { ...(overlay.fontSizeOverrides || {}) };
+                          if (e.target.value) overrides[ratio] = Number(e.target.value);
+                          else delete overrides[ratio];
+                          updateOverlay(i, "fontSizeOverrides", overrides);
+                        }}
+                        style={{ width: 45, padding: "3px 4px", fontSize: 10, borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, textAlign: "center" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           ))}
 
