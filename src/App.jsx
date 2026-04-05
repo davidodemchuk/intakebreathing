@@ -5685,33 +5685,37 @@ function CreatorHubHero({ stats, onOpen, onNav, isDark = true }) {
   const cIn = (e) => { e.currentTarget.style.background = c.hBg; e.currentTarget.style.borderColor = c.hBorder; };
   const cOut = (e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); };
   return (
-    <div className="homepage-section" style={{ background: c.sectionBg, padding: "40px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
-      <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+    <div className="homepage-section" style={{ background: c.sectionBg, padding: "28px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
+      <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
         <button className="open-hub-btn" onClick={onOpen} style={{ background: c.btnBg, color: c.btnColor, height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub &rarr;</button>
       </div>
-      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Creator Hub</div>
-      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
-      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
-      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        <div className="stat-card" onClick={() => onNav("creators")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: c.cardNum, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.creators ?? "\u2014"}</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>Active Creators</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>View all &rarr;</div>
+      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 44, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 4 }}>Creator Hub</div>
+      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 4, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
+      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 16, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
+      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+        <div className="stat-card" onClick={() => onNav("creators")} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={cIn} onMouseLeave={cOut}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>Active Creators</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.cardNum, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{stats.creators ?? "\u2014"}</div>
+          </div>
         </div>
-        <div className="stat-card" onClick={onOpen} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: c.cardNum, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.programs ?? "\u2014"}</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>Programs</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>Open Hub &rarr;</div>
+        <div className="stat-card" onClick={onOpen} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={cIn} onMouseLeave={cOut}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>Programs</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.cardNum, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{stats.programs ?? "\u2014"}</div>
+          </div>
         </div>
-        <div className="stat-card" onClick={() => onNav("create")} style={{ ...cd }} onMouseEnter={(e) => { e.currentTarget.style.background = c.briefHoverBg; e.currentTarget.style.borderColor = c.briefHoverBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); }}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 400, color: c.subtitle, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>+</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>New Brief</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>Create &rarr;</div>
+        <div className="stat-card" onClick={() => onNav("create")} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.briefHoverBg; e.currentTarget.style.borderColor = c.briefHoverBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>New Brief</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.subtitle, letterSpacing: "-0.02em", lineHeight: 1.1 }}>+</div>
+          </div>
         </div>
-        <div className="stat-card" onClick={() => onNav("campaigns")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: c.cardNum, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.campaigns ?? "\u2014"}</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>Campaigns</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+        <div className="stat-card" onClick={() => onNav("campaigns")} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={cIn} onMouseLeave={cOut}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>Campaigns</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.cardNum, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{stats.campaigns ?? "\u2014"}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -5728,22 +5732,22 @@ function ChannelPipelineFeature({ onOpen, onTabOpen, isDark = true }) {
     { name: "SOPs", star: false, sub: "Processes & docs", tab: "sops" },
   ];
   return (
-    <div className="homepage-section" style={{ background: c.sectionBg, padding: "40px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
-      <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+    <div className="homepage-section" style={{ background: c.sectionBg, padding: "28px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
+      <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
         <button onClick={onOpen} style={{ background: "transparent", color: c.btnColor, height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "1px solid " + c.btnBorder, cursor: "pointer", transition: "all 0.18s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.btnHoverBg; e.currentTarget.style.borderColor = c.btnColor; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = c.btnBorder; }}>Open Pipeline &rarr;</button>
       </div>
-      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Channel Pipeline</div>
-      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Performance & Data.</div>
-      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
-      <div className="channel-pipeline-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 44, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 4 }}>Channel Pipeline</div>
+      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 4, letterSpacing: "-0.01em" }}>Performance & Data.</div>
+      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 16, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
+      <div className="channel-pipeline-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
         {channels.map((ch, i) => (
-          <div className="stat-card" key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: c.cardBg, border: ch.star ? "1px solid " + c.ttsBorder : c.cardBorder, borderRadius: 12, padding: "28px 24px 24px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.hBg; e.currentTarget.style.borderColor = ch.star ? c.ttsHBorder : c.hBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = ch.star ? c.ttsBorder : c.cardBorder.split(" ").pop(); }}>
-            {ch.star ? <div style={{ position: "absolute", top: 16, right: 16, background: c.ttsBadgeBg, border: "1px solid " + c.ttsBadgeBorder, borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 500, color: c.ttsBadgeColor, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>{"\u2B50"} v2</div> : null}
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 500, color: c.cardName, marginBottom: 8, letterSpacing: "-0.01em" }}>{ch.name}</div>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardSub, marginBottom: 24 }}>{ch.sub}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: c.live, boxShadow: "0 0 6px " + c.live + "80" }} />
-              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.live }}>Live &rarr;</span>
+          <div className="stat-card" key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: c.cardBg, border: ch.star ? "1px solid " + c.ttsBorder : c.cardBorder, borderRadius: 12, padding: "16px 18px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.hBg; e.currentTarget.style.borderColor = ch.star ? c.ttsHBorder : c.hBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = ch.star ? c.ttsBorder : c.cardBorder.split(" ").pop(); }}>
+            {ch.star ? <div style={{ position: "absolute", top: 12, right: 12, background: c.ttsBadgeBg, border: "1px solid " + c.ttsBadgeBorder, borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 500, color: c.ttsBadgeColor, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>{"\u2B50"} v2</div> : null}
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 500, color: c.cardName, marginBottom: 4, letterSpacing: "-0.01em" }}>{ch.name}</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardSub, marginBottom: 8 }}>{ch.sub}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8 }}>
+              <div style={{ width: 4, height: 4, borderRadius: "50%", background: c.live }} />
+              <span style={{ fontSize: 10, color: c.live, fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Live</span>
             </div>
           </div>
         ))}
@@ -10257,15 +10261,19 @@ export default function App() {
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>API keys, team access, integrations</div>
                   <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </div>
+                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 12, margin: "8px 0 4px" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 500, color: isDark ? "#333333" : "#AAAAAA", letterSpacing: "0.08em", textTransform: "uppercase" }}>Resources</div>
+                  <div style={{ flex: 1, height: 1, background: isDark ? "#1a1a1a" : "#E8E8E2" }} />
+                </div>
                 <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Creator Flow Chart</div>
-                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Interactive Lucidchart diagram</div>
-                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>Creator Flow Chart</div>
+                  <div style={{ fontSize: 11, color: "#737373", marginTop: 4 }}>Interactive Lucidchart diagram</div>
+                  <div style={{ marginTop: 10, fontSize: 10, color: "#bbbbbb", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </button>
                 <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>2025 In Review</div>
-                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Opens in Canva</div>
-                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>2025 In Review</div>
+                  <div style={{ fontSize: 11, color: "#737373", marginTop: 4 }}>Opens in Canva</div>
+                  <div style={{ marginTop: 10, fontSize: 10, color: "#bbbbbb", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </button>
               </div>
 
