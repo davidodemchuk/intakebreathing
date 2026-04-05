@@ -47,7 +47,7 @@ import {
 import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
 import { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView } from "./components/CreatorPortal.jsx";
 import SettingsPanel, { HomepageSettingsBlock } from "./components/Settings.jsx";
-import { UGCDashboard, ManagerLogin, CreatorHubLanding } from "./components/UGCDashboard.jsx";
+import { ManagerLogin, CreatorHubLanding } from "./components/UGCDashboard.jsx";
 import TtsNativeTab from "./components/TtsNative.jsx";
 import ChannelPipeline from "./components/ChannelPipeline.jsx";
 import CampaignsPage from "./components/Campaigns.jsx";
@@ -8974,7 +8974,7 @@ export default function App() {
   useEffect(() => {
     if (view === "publicBrief" || CREATOR_PORTAL_VIEWS.includes(view)) return;
     if (currentRole === ROLES.CREATOR && !CREATOR_ALLOWED_VIEWS.includes(view)) {
-      navigate("library");
+      navigate("campaigns");
     }
   }, [currentRole, view, navigate]);
 
@@ -10518,7 +10518,7 @@ export default function App() {
             <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} />
           </div>
         )}
-        {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} creators={creators} onBack={() => navigate("library")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
+        {!aiLoading && isCreatorViewAllowed && view === "display" && currentBrief && <div style={{ animation: "fadeIn 0.3s ease" }}><BriefDisplay brief={currentBrief} formData={currentFormData} currentRole={currentRole} creators={creators} onBack={() => navigate("campaigns")} onRegenerate={handleRegenTemplate} onRegenerateAI={handleRegenAI} /></div>}
 
         {creatorImportToast && (
           <div className="no-print" style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 300, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: "12px 20px", fontSize: 13, color: t.textSecondary, boxShadow: t.shadow, maxWidth: 520, whiteSpace: "pre-line" }}>
@@ -11406,7 +11406,7 @@ export default function App() {
 
                 {/* Quick actions */}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => navigate("create")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "none", background: _activeMeta.color, color: "#fff", cursor: "pointer" }}>+ New Brief</button>
+                  <button onClick={() => navigate("campaigns")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "none", background: _activeMeta.color, color: "#fff", cursor: "pointer" }}>+ New Campaign</button>
                   <button onClick={() => navigate("campaigns")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>Launch Campaign</button>
                 </div>
               </div>
@@ -11798,7 +11798,7 @@ export default function App() {
                 <div style={{ fontSize: 13, marginBottom: currentRole === ROLES.CREATOR ? 0 : 24 }}>
                   {currentRole === ROLES.CREATOR ? "Briefs shared with you will appear here." : "Generated briefs will appear here."}
                 </div>
-                {currentRole !== ROLES.CREATOR && <button style={S.btnP} onClick={() => { setBriefPrefill(null); navigate("create"); setFormKey((k) => k + 1); }}>Create Your First Brief</button>}
+                {currentRole !== ROLES.CREATOR && <button style={S.btnP} onClick={() => navigate("campaigns")}>Create a Campaign</button>}
               </div>
             ) : library.map(item => (
               <div

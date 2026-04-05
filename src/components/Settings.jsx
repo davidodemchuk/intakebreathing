@@ -101,7 +101,7 @@ function SettingsPanel({
               <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 4 }}>Preview Mode</div>
               <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 10 }}>See what creators see — briefs only</div>
               <button type="button" onClick={() => {
-                if (currentRole === ROLES.MANAGER) { setCurrentRole(ROLES.CREATOR); navigate("library"); }
+                if (currentRole === ROLES.MANAGER) { setCurrentRole(ROLES.CREATOR); navigate("campaigns"); }
                 else { setCurrentRole(ROLES.MANAGER); navigate("home"); }
               }} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + (currentRole === ROLES.CREATOR ? t.green + "50" : t.border), background: currentRole === ROLES.CREATOR ? t.green + "15" : t.cardAlt, color: currentRole === ROLES.CREATOR ? t.green : t.text, cursor: "pointer" }}>
                 {currentRole === ROLES.CREATOR ? "Back to Manager" : "View as Creator"}
