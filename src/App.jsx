@@ -10057,9 +10057,9 @@ export default function App() {
           const section = getCurrentSection(view);
           const pageNames = { creatorHub: "Creator Hub", pipeline: "Channel Pipeline", campaigns: "Campaigns", messaging: "Messaging", settings: "Settings", creators: "Creators", create: "New Brief", library: "Brief Library", tools: "Tools" };
           return (
-            <nav className="no-print" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+            <nav className="no-print" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 56px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 28, flex: 1 }}>
-                {[{ label: "Creator Hub", v: "creatorHub" }, { label: "Pipeline", v: "pipeline" }, { label: "Campaigns", v: "campaigns" }, { label: "Messaging", v: "messaging" }].map((lk, i) => {
+                {[{ label: "Creator Hub", v: "creatorHub" }, { label: "Pipeline", v: "pipeline" }, { label: "Campaigns", v: "campaigns" }].map((lk, i) => {
                   const active = lk.v === "creatorHub" ? section === "creatorHub" : view === lk.v;
                   return <button key={i} onClick={() => navigate(lk.v)} style={navLinkStyle(active)} onMouseEnter={(e) => hIn(e, active)} onMouseLeave={(e) => hOut(e, active)}>{lk.label}</button>;
                 })}
