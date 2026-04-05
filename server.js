@@ -9,6 +9,7 @@ import { execFile } from "child_process";
 import archiver from "archiver";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
+import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const SUPABASE_URL = "https://qaokxufufwbilfultgrk.supabase.co";
@@ -568,9 +569,68 @@ app.get("/api/cache-video/:cacheId", (req, res) => {
   }
 });
 
+// ── Reformat helpers ──
+const reformatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+/**
+ * Build FFmpeg args for the background fill + foreground overlay.
+ * Returns { extraInputs: [], filterArgs: [...], cleanup: [] }
+ * extraInputs = additional -i paths (for image templates)
+ * filterArgs  = the -vf or -filter_complex args
+ * cleanup     = temp files to delete after encoding
+ */
+async function buildReformatFilter(template, w, h, srcW, srcH) {
+  const srcA = srcW / srcH;
+  const tgtA = w / h;
+  const sameRatio = Math.abs(srcA - tgtA) < 0.05;
+
+  if (sameRatio) {
+    // No pillarbox needed — just scale
+    return { extraInputs: [], filterArgs: ["-vf", `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black`], cleanup: [] };
+  }
+
+  const type = template?.type || "blur";
+
+  // Support fully custom filter string
+  if (template?.custom_ffmpeg_filter) {
+    return { extraInputs: [], filterArgs: ["-filter_complex", template.custom_ffmpeg_filter.replace(/{W}/g, w).replace(/{H}/g, h)], cleanup: [] };
+  }
+
+  if (type === "solid") {
+    const color = (template?.color_primary || "#000000").replace(/^#/, "");
+    const fc = `color=c=0x${color}:size=${w}x${h}:rate=30,setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
+    return { extraInputs: [], filterArgs: ["-filter_complex", fc], cleanup: [] };
+  }
+
+  if (type === "gradient") {
+    const c1 = (template?.color_primary || "#0d0d1a").replace(/^#/, "");
+    const c2 = (template?.color_secondary || "#1a1a2e").replace(/^#/, "");
+    const fc = `color=c=0x${c1}:size=${w}x${h}:rate=30[top];color=c=0x${c2}:size=${w}x${h}:rate=30[bot];[top][bot]blend=all_expr='A*(1-Y/H)+B*(Y/H)',setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
+    return { extraInputs: [], filterArgs: ["-filter_complex", fc], cleanup: [] };
+  }
+
+  if (type === "image" && template?.image_url) {
+    // Download image to a temp file and use as second input
+    const imgPath = path.join(os.tmpdir(), `tmpl-bg-${Date.now()}.png`);
+    try {
+      await downloadWithRetry([template.image_url], imgPath);
+      const fc = `[1:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)/2:(ih-oh)/2,setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
+      return { extraInputs: [imgPath], filterArgs: ["-filter_complex", fc], cleanup: [imgPath] };
+    } catch {
+      // Fall through to blur if image download fails
+    }
+  }
+
+  // Default / blur: heavy blur + per-template darken amount
+  const sigma = template?.blur_sigma || 50;
+  const darken = template?.darken_opacity != null ? (1 - template.darken_opacity) : 0.55; // 0.55 = 45% darker
+  const fc = `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)/2:(ih-oh)/2,gblur=sigma=${sigma},colorchannelmixer=rr=${darken}:gg=${darken}:bb=${darken},setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
+  return { extraInputs: [], filterArgs: ["-filter_complex", fc], cleanup: [] };
+}
+
 // ── Reformat ──
 app.post("/api/reformat", async (req, res) => {
-  const { videoUrl, videoUrls, cacheId, width, height, name } = req.body;
+  const { videoUrl, videoUrls, cacheId, width, height, name, templateId } = req.body;
   const urlList =
     Array.isArray(videoUrls) && videoUrls.length > 0
       ? [...new Set(videoUrls.filter(Boolean))]
@@ -624,22 +684,27 @@ app.post("/api/reformat", async (req, res) => {
       if (vs) { srcW = vs.width || 1080; srcH = vs.height || 1920; }
     } catch (e) { console.log("[reformat] probe fallback:", e.message); }
 
-    // Build filter
-    const srcA = srcW / srcH, tgtA = w / h;
-    let vf;
-    if (Math.abs(srcA - tgtA) < 0.05) {
-      vf = ["-vf", `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black`];
-    } else {
-      vf = ["-filter_complex", `[0:v]scale=80:-1,scale=${w}:${h},setsar=1[bg];[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`];
+    // Load template if provided
+    let template = null;
+    if (templateId) {
+      try {
+        const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", templateId).single();
+        template = data;
+      } catch {}
     }
+
+    // Build filter
+    const { extraInputs, filterArgs, cleanup: filterCleanup } = await buildReformatFilter(template, w, h, srcW, srcH);
+    const extraInputArgs = extraInputs.flatMap(p => ["-i", p]);
 
     // Run FFmpeg
     console.log("[reformat] Processing...");
     await new Promise((ok, no) => {
-      execFile(FFMPEG, ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", out],
+      execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...filterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", out],
         { timeout: 180000, maxBuffer: 10485760 },
         (e, _, stderr) => e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok());
     });
+    filterCleanup.forEach(f => { try { fs.unlinkSync(f); } catch {} });
 
     const outSz = fs.statSync(out).size;
     console.log(`[reformat] Done ${(outSz / 1048576).toFixed(1)}MB`);
@@ -772,17 +837,11 @@ app.post("/api/reformat-all", async (req, res) => {
       const outPath = path.join(tmp, prefix + "_" + fmt.name + "_" + ts + "_" + i + ".mp4");
       const w = fmt.width;
       const h = fmt.height;
-      const srcA = srcW / srcH;
-      const tgtA = w / h;
-      let vf;
-      if (Math.abs(srcA - tgtA) < 0.05) {
-        vf = ["-vf", "scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease,pad=" + w + ":" + h + ":(ow-iw)/2:(oh-ih)/2:black"];
-      } else {
-        vf = ["-filter_complex", "[0:v]scale=80:-1,scale=" + w + ":" + h + ",setsar=1[bg];[0:v]scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"];
-      }
+      const { extraInputs, filterArgs, cleanup: filterCleanup } = await buildReformatFilter(null, w, h, srcW, srcH);
+      const extraInputArgs = extraInputs.flatMap(p => ["-i", p]);
       console.log("[batch] " + fmt.name + " (" + w + "x" + h + ")...");
       await new Promise((ok, no) => {
-        execFile(FFMPEG, ["-i", inp, ...vf, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outPath],
+        execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...filterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outPath],
           { timeout: 180000, maxBuffer: 10485760 },
           (e, _, stderr) => {
             if (e) return no(new Error(stderr?.substring(0, 200) || e.message));
@@ -790,6 +849,7 @@ app.post("/api/reformat-all", async (req, res) => {
             ok();
           });
       });
+      filterCleanup.forEach(f => { try { fs.unlinkSync(f); } catch {} });
       outputFiles.push({ path: outPath, name: prefix + "_" + fmt.name + ".mp4" });
     }
 
@@ -838,6 +898,64 @@ app.post("/api/reformat-all", async (req, res) => {
     }
     console.error("[batch] ERROR:", e.message);
     if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Reformat Templates ──
+app.get("/api/reformat-templates", async (req, res) => {
+  try {
+    const { data, error } = await supabaseServer.from("reformat_templates").select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    res.json([]); // graceful — table may not exist yet
+  }
+});
+
+app.post("/api/reformat-templates", async (req, res) => {
+  const { name, type, color_primary, color_secondary } = req.body;
+  if (!name || !type) return res.status(400).json({ error: "name and type are required" });
+  try {
+    const { data, error } = await supabaseServer.from("reformat_templates").insert({ name, type: type || "blur", color_primary: color_primary || null, color_secondary: color_secondary || null }).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/reformat-templates/:id/upload", reformatUpload.single("image"), async (req, res) => {
+  const { id } = req.params;
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  try {
+    const ext = (req.file.originalname.split(".").pop() || "png").toLowerCase();
+    const storagePath = `templates/${id}.${ext}`;
+    // Try to create the bucket if it doesn't exist
+    await supabaseServer.storage.createBucket("reformat-templates", { public: true }).catch(() => {});
+    const { error: upErr } = await supabaseServer.storage.from("reformat-templates").upload(storagePath, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+    if (upErr) throw upErr;
+    const { data: urlData } = supabaseServer.storage.from("reformat-templates").getPublicUrl(storagePath);
+    const imageUrl = urlData.publicUrl;
+    const { data, error: dbErr } = await supabaseServer.from("reformat_templates").update({ image_url: imageUrl, image_path: storagePath, type: "image" }).eq("id", id).select().single();
+    if (dbErr) throw dbErr;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/reformat-templates/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Try to delete from storage too (non-fatal if missing)
+    for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+      await supabaseServer.storage.from("reformat-templates").remove([`templates/${id}.${ext}`]).catch(() => {});
+    }
+    const { error } = await supabaseServer.from("reformat_templates").delete().eq("id", id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

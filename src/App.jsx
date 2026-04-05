@@ -6232,6 +6232,12 @@ function VideoReformatter({ onBack }) {
   const batchAbortRef = useRef(null);
   const [customRatio, setCustomRatio] = useState("");
   const [customWidth, setCustomWidth] = useState("1080");
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
 
   // Fetch video from ScrapeCreators
   const fetchVideo = async () => {
@@ -6517,6 +6523,7 @@ function VideoReformatter({ onBack }) {
           width: w,
           height: h,
           name: `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
+          templateId: selectedTemplateId || null,
         }),
         signal: controller.signal,
       });
@@ -6831,6 +6838,58 @@ function VideoReformatter({ onBack }) {
               </div>
             );
           })()}
+        </div>
+      ) : null}
+
+      {/* Template picker */}
+      {templates.length > 0 ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Background Style</div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+            {/* Default blur card */}
+            <button
+              type="button"
+              onClick={() => setSelectedTemplateId(null)}
+              style={{
+                flexShrink: 0, width: 90, padding: "10px 8px", borderRadius: 10,
+                border: `1px solid ${selectedTemplateId === null ? t.green : t.border}`,
+                background: selectedTemplateId === null ? t.green + "12" : t.card,
+                cursor: "pointer", textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 4 }}>🌫</div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: selectedTemplateId === null ? t.green : t.text }}>Blur</div>
+              <div style={{ fontSize: 10, color: t.textFaint }}>default</div>
+            </button>
+
+            {templates.map(tmpl => {
+              const isSelected = selectedTemplateId === tmpl.id;
+              const previewBg = tmpl.type === "image" && tmpl.image_url
+                ? `url(${tmpl.image_url}) center/cover`
+                : tmpl.type === "gradient" && tmpl.color_primary && tmpl.color_secondary
+                  ? `linear-gradient(to bottom, ${tmpl.color_primary}, ${tmpl.color_secondary})`
+                  : tmpl.color_primary
+                    ? tmpl.color_primary
+                    : t.cardAlt;
+              return (
+                <button
+                  key={tmpl.id}
+                  type="button"
+                  onClick={() => setSelectedTemplateId(isSelected ? null : tmpl.id)}
+                  style={{
+                    flexShrink: 0, width: 90, padding: "0 0 8px", borderRadius: 10,
+                    border: `1px solid ${isSelected ? t.green : t.border}`,
+                    background: isSelected ? t.green + "12" : t.card,
+                    cursor: "pointer", textAlign: "center", overflow: "hidden",
+                  }}
+                >
+                  <div style={{ height: 54, background: previewBg, borderRadius: "9px 9px 0 0", marginBottom: 6 }} />
+                  <div style={{ fontSize: 11, fontWeight: 500, color: isSelected ? t.green : t.text, paddingInline: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tmpl.name}</div>
+                  <div style={{ fontSize: 10, color: t.textFaint }}>{tmpl.type}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : null}
 
