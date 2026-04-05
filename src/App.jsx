@@ -6307,7 +6307,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [customRatio, setCustomRatio] = useState("");
   const [customWidth, setCustomWidth] = useState("1080");
   const [templates, setTemplates] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [selectedTemplates, setSelectedTemplates] = useState({ "16:9": null, "1:1": null, "4:5": null, "9:16": null });
   const [jobSubmitting, setJobSubmitting] = useState(false);
 
   useEffect(() => {
@@ -6539,7 +6539,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         body: JSON.stringify({
           videoFilename: video.authorHandle || "video",
           templateConfig: {
-            default: selectedTemplateId || null,
+            ...selectedTemplates,
             cacheId: video.cacheId,
             videoUrls: video.videoUrls || [video.videoUrl],
           },
@@ -6584,7 +6584,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           videoUrls: video.cacheId ? undefined : (video.videoUrls || [video.videoUrl]),
           width: w, height: h,
           name: `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
-          templateId: selectedTemplateId || null,
+          templateId: null,
         }),
         signal: controller.signal,
       });
@@ -6871,57 +6871,53 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         </div>
       ) : null}
 
-      {/* Template picker */}
-      {templates.length > 0 ? (
+      {/* Per-format template picker */}
+      {templates.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Background Style</div>
-          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
-            {/* Default blur card */}
-            <button
-              type="button"
-              onClick={() => setSelectedTemplateId(null)}
-              style={{
-                flexShrink: 0, width: 90, padding: "10px 8px", borderRadius: 10,
-                border: `1px solid ${selectedTemplateId === null ? t.green : t.border}`,
-                background: selectedTemplateId === null ? t.green + "12" : t.card,
-                cursor: "pointer", textAlign: "center",
-              }}
-            >
-              <div style={{ fontSize: 28, marginBottom: 4 }}>🌫</div>
-              <div style={{ fontSize: 11, fontWeight: 500, color: selectedTemplateId === null ? t.green : t.text }}>Blur</div>
-              <div style={{ fontSize: 10, color: t.textFaint }}>default</div>
-            </button>
-
-            {templates.map(tmpl => {
-              const isSelected = selectedTemplateId === tmpl.id;
-              const previewBg = tmpl.type === "image" && tmpl.image_url
-                ? `url(${tmpl.image_url}) center/cover`
-                : tmpl.type === "gradient" && tmpl.color_primary && tmpl.color_secondary
-                  ? `linear-gradient(to bottom, ${tmpl.color_primary}, ${tmpl.color_secondary})`
-                  : tmpl.color_primary
-                    ? tmpl.color_primary
-                    : t.cardAlt;
-              return (
-                <button
-                  key={tmpl.id}
-                  type="button"
-                  onClick={() => setSelectedTemplateId(isSelected ? null : tmpl.id)}
-                  style={{
-                    flexShrink: 0, width: 90, padding: "0 0 8px", borderRadius: 10,
-                    border: `1px solid ${isSelected ? t.green : t.border}`,
-                    background: isSelected ? t.green + "12" : t.card,
-                    cursor: "pointer", textAlign: "center", overflow: "hidden",
-                  }}
-                >
-                  <div style={{ height: 54, background: previewBg, borderRadius: "9px 9px 0 0", marginBottom: 6 }} />
-                  <div style={{ fontSize: 11, fontWeight: 500, color: isSelected ? t.green : t.text, paddingInline: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tmpl.name}</div>
-                  <div style={{ fontSize: 10, color: t.textFaint }}>{tmpl.type}</div>
-                </button>
-              );
-            })}
-          </div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 12 }}>Choose a background for each format</div>
+          {[
+            { ratio: "16:9", label: "16:9 Landscape", dims: "1920×1080" },
+            { ratio: "1:1", label: "1:1 Square", dims: "1080×1080" },
+            { ratio: "4:5", label: "4:5 Feed", dims: "1080×1350" },
+            { ratio: "9:16", label: "9:16 Story", dims: "1080×1920" },
+          ].map(fmt => {
+            const available = templates.filter(tmpl => tmpl.format === fmt.ratio || tmpl.format === "all");
+            const defaultId = available.find(tmpl => tmpl.is_default)?.id || null;
+            const selected = selectedTemplates[fmt.ratio] !== null ? selectedTemplates[fmt.ratio] : defaultId;
+            return (
+              <div key={fmt.ratio} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, padding: "10px 14px", borderRadius: 10, border: "1px solid " + t.border, background: t.cardAlt }}>
+                <div style={{ minWidth: 96, flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: t.text }}>{fmt.label}</div>
+                  <div style={{ fontSize: 10, color: t.textFaint }}>{fmt.dims}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, flex: 1 }}>
+                  {available.map(tmpl => {
+                    const isSel = selected === tmpl.id;
+                    const previewBg = tmpl.type === "image" && tmpl.image_url
+                      ? `url(${tmpl.image_url}) center/cover`
+                      : tmpl.type === "gradient" && tmpl.color_primary && tmpl.color_secondary
+                        ? `linear-gradient(to bottom, ${tmpl.color_primary}, ${tmpl.color_secondary})`
+                        : tmpl.color_primary || "#222";
+                    return (
+                      <div key={tmpl.id} onClick={() => setSelectedTemplates(prev => ({ ...prev, [fmt.ratio]: tmpl.id }))}
+                        style={{ minWidth: 72, padding: "4px 4px 6px", borderRadius: 8, cursor: "pointer", textAlign: "center", border: `2px solid ${isSel ? t.green : "transparent"}`, background: isSel ? t.green + "08" : "transparent" }}>
+                        {tmpl.type === "blur" ? (
+                          <div style={{ width: "100%", height: 38, borderRadius: 4, background: "linear-gradient(135deg,#1a1a2e,#444)", marginBottom: 4 }} />
+                        ) : tmpl.type === "image" && tmpl.image_url ? (
+                          <img src={tmpl.image_url} style={{ width: "100%", height: 38, objectFit: "cover", borderRadius: 4, display: "block", marginBottom: 4 }} />
+                        ) : (
+                          <div style={{ width: "100%", height: 38, borderRadius: 4, background: previewBg, marginBottom: 4 }} />
+                        )}
+                        <div style={{ fontSize: 9, color: isSel ? t.green : t.textFaint, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tmpl.name}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      ) : null}
+      )}
 
     </div>
   );

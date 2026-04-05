@@ -920,10 +920,17 @@ app.get("/api/reformat-templates", async (req, res) => {
 });
 
 app.post("/api/reformat-templates", async (req, res) => {
-  const { name, type, color_primary, color_secondary } = req.body;
+  const { name, description, type, format, color_primary, color_secondary, blur_sigma, darken_opacity, safe_zone_x, safe_zone_y, safe_zone_width, safe_zone_height } = req.body;
   if (!name || !type) return res.status(400).json({ error: "name and type are required" });
   try {
-    const { data, error } = await supabaseServer.from("reformat_templates").insert({ name, type: type || "blur", color_primary: color_primary || null, color_secondary: color_secondary || null }).select().single();
+    const { data, error } = await supabaseServer.from("reformat_templates").insert({
+      name, description: description || null,
+      type: type || "image", format: format || "all",
+      color_primary: color_primary || null, color_secondary: color_secondary || null,
+      blur_sigma: blur_sigma || null, darken_opacity: darken_opacity || null,
+      safe_zone_x: safe_zone_x || null, safe_zone_y: safe_zone_y || null,
+      safe_zone_width: safe_zone_width || null, safe_zone_height: safe_zone_height || null,
+    }).select().single();
     if (error) throw error;
     res.json(data);
   } catch (e) {
@@ -936,16 +943,31 @@ app.post("/api/reformat-templates/:id/upload", reformatUpload.single("image"), a
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   try {
     const ext = (req.file.originalname.split(".").pop() || "png").toLowerCase();
-    const storagePath = `templates/${id}.${ext}`;
-    // Try to create the bucket if it doesn't exist
+    const storagePath = `templates/${id}-${Date.now()}.${ext}`;
     await supabaseServer.storage.createBucket("reformat-templates", { public: true }).catch(() => {});
     const { error: upErr } = await supabaseServer.storage.from("reformat-templates").upload(storagePath, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
     if (upErr) throw upErr;
     const { data: urlData } = supabaseServer.storage.from("reformat-templates").getPublicUrl(storagePath);
     const imageUrl = urlData.publicUrl;
-    const { data, error: dbErr } = await supabaseServer.from("reformat_templates").update({ image_url: imageUrl, image_path: storagePath, type: "image" }).eq("id", id).select().single();
+    const { data, error: dbErr } = await supabaseServer.from("reformat_templates").update({ image_url: imageUrl, image_path: storagePath, type: "image", updated_at: new Date().toISOString() }).eq("id", id).select().single();
     if (dbErr) throw dbErr;
     res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/api/reformat-templates/:id/default", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data: tmpl, error: fetchErr } = await supabaseServer.from("reformat_templates").select("format").eq("id", id).single();
+    if (!tmpl || fetchErr) return res.status(404).json({ error: "Template not found" });
+    // Unset other defaults for this format
+    await supabaseServer.from("reformat_templates").update({ is_default: false }).eq("format", tmpl.format).eq("is_default", true);
+    // Set this one
+    const { error } = await supabaseServer.from("reformat_templates").update({ is_default: true }).eq("id", id);
+    if (error) throw error;
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1015,16 +1037,22 @@ async function processReformatJob(jobId) {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
   const completedFiles = [];
 
-  // Load default template once
-  let defaultTemplate = null;
-  const defaultTemplateId = config.default || null;
-  if (defaultTemplateId) {
-    const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", defaultTemplateId).single();
-    defaultTemplate = data;
-  }
-  if (!defaultTemplate) {
-    const { data } = await supabaseServer.from("reformat_templates").select("*").eq("is_default", true).single().catch(() => ({ data: null }));
-    defaultTemplate = data;
+  // Cache of loaded templates to avoid repeat DB calls
+  const tmplCache = {};
+  const loadTemplate = async (id) => {
+    if (!id) return null;
+    if (tmplCache[id]) return tmplCache[id];
+    const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", id).single().catch(() => ({ data: null }));
+    if (data) tmplCache[id] = data;
+    return data || null;
+  };
+
+  // Load format-specific defaults from DB
+  const formatDefaults = {};
+  const { data: defaultRows } = await supabaseServer.from("reformat_templates").select("*").eq("is_default", true).catch(() => ({ data: [] }));
+  for (const row of (defaultRows || [])) {
+    formatDefaults[row.format] = row;
+    tmplCache[row.id] = row;
   }
 
   for (let i = 0; i < formats.length; i++) {
@@ -1034,11 +1062,11 @@ async function processReformatJob(jobId) {
     }).eq("id", jobId);
 
     const templateId = config[fmt.ratio] || null;
-    let template = defaultTemplate;
-    if (templateId && templateId !== defaultTemplateId) {
-      const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", templateId).single().catch(() => ({ data: null }));
-      if (data) template = data;
-    }
+    // Resolve: per-format selection > format-specific default > "all" default > null (uses blur)
+    const template = await loadTemplate(templateId)
+      || formatDefaults[fmt.ratio]
+      || formatDefaults["all"]
+      || null;
 
     const { extraInputs, filterArgs, cleanup: filterCleanup } = await buildReformatFilter(template, fmt.width, fmt.height, srcW, srcH);
     const extraInputArgs = extraInputs.flatMap(p => ["-i", p]);
