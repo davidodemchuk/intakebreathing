@@ -944,7 +944,7 @@ app.post("/api/reformat-templates/:id/upload", reformatUpload.single("image"), a
   try {
     const ext = (req.file.originalname.split(".").pop() || "png").toLowerCase();
     const storagePath = `templates/${id}-${Date.now()}.${ext}`;
-    await supabaseServer.storage.createBucket("reformat-templates", { public: true }).catch(() => {});
+    try { await supabaseServer.storage.createBucket("reformat-templates", { public: true }); } catch (_) {}
     const { error: upErr } = await supabaseServer.storage.from("reformat-templates").upload(storagePath, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
     if (upErr) throw upErr;
     const { data: urlData } = supabaseServer.storage.from("reformat-templates").getPublicUrl(storagePath);
@@ -978,7 +978,7 @@ app.delete("/api/reformat-templates/:id", async (req, res) => {
   try {
     // Try to delete from storage too (non-fatal if missing)
     for (const ext of ["png", "jpg", "jpeg", "webp"]) {
-      await supabaseServer.storage.from("reformat-templates").remove([`templates/${id}.${ext}`]).catch(() => {});
+      try { await supabaseServer.storage.from("reformat-templates").remove([`templates/${id}.${ext}`]); } catch (_) {}
     }
     const { error } = await supabaseServer.from("reformat_templates").delete().eq("id", id);
     if (error) throw error;
@@ -1104,14 +1104,17 @@ async function processReformatJob(jobId) {
   const loadTemplate = async (id) => {
     if (!id) return null;
     if (tmplCache[id]) return tmplCache[id];
-    const { data } = await supabaseServer.from("reformat_templates").select("*").eq("id", id).single().catch(() => ({ data: null }));
+    let data = null;
+    try { ({ data } = await supabaseServer.from("reformat_templates").select("*").eq("id", id).single()); } catch (_) {}
     if (data) tmplCache[id] = data;
     return data || null;
   };
 
   // Load format-specific defaults from DB
   const formatDefaults = {};
-  const { data: defaultRows } = await supabaseServer.from("reformat_templates").select("*").eq("is_default", true).catch(() => ({ data: [] }));
+  let defaultRows = [];
+  try { ({ data: defaultRows } = await supabaseServer.from("reformat_templates").select("*").eq("is_default", true)); } catch (_) {}
+  defaultRows = defaultRows || [];
   for (const row of (defaultRows || [])) {
     formatDefaults[row.format] = row;
     tmplCache[row.id] = row;
@@ -1220,10 +1223,18 @@ app.post("/api/reformat-job", async (req, res) => {
 
     res.json({ jobId: job.id });
 
-    setImmediate(() => processReformatJob(job.id).catch(err => {
-      console.error(`[reformat-job] Job ${job.id} failed:`, err.message);
-      supabaseServer.from("reformat_jobs").update({ status: "failed", error_message: err.message }).eq("id", job.id).catch(() => {});
-    }));
+    setImmediate(async () => {
+      try {
+        await processReformatJob(job.id);
+      } catch (err) {
+        console.error(`[reformat-job] Job ${job.id} failed:`, err.message);
+        try {
+          await supabaseServer.from("reformat_jobs").update({ status: "failed", error_message: err.message }).eq("id", job.id);
+        } catch (dbErr) {
+          console.error("[reformat-job] Failed to update job status:", dbErr.message);
+        }
+      }
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
