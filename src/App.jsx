@@ -8240,8 +8240,8 @@ export default function App() {
   const [library, setLibrary] = useState([]);
   const [openChangeRequests, setOpenChangeRequests] = useState(0);
   const [flowChartFullscreen, setFlowChartFullscreen] = useState(false);
-  const [flowChartLoaded, setFlowChartLoaded] = useState(false);
-  const [canvaLoaded, setCanvaLoaded] = useState(false);
+
+
   const [formKey, setFormKey] = useState(0);
   const [briefPrefill, setBriefPrefill] = useState(null);
   const [aiKnowledge, setAiKnowledge] = useState(() => getDefaultAiKnowledge());
@@ -9910,46 +9910,21 @@ export default function App() {
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>API keys, team password, database connection</div>
                   <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>v{APP_VERSION}</div>
                 </div>
-              </div>
 
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em" }}>Creator Flow Chart</div>
-                  <button onClick={() => setFlowChartFullscreen(true)} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer", fontWeight: 600 }}>Fullscreen</button>
+                <div style={homeCard(t.blue)} onClick={() => setFlowChartFullscreen(true)}
+                  onMouseEnter={(e) => homeHoverIn(e, t.blue)} onMouseLeave={(e) => homeHoverOut(e, t.blue)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="pipeline" color={t.blue} /></div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Flow Chart</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Interactive diagram of the creator partnerships pipeline</div>
+                  <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>Click to view</div>
                 </div>
-                <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, overflow: "hidden", boxShadow: t.shadow }}>
-                  <div style={{ position: "relative", overflow: "hidden", borderRadius: 14 }}>
-                    <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "75%", overflow: "hidden", filter: flowChartLoaded ? "none" : "blur(8px)", transition: "filter 0.5s", pointerEvents: flowChartLoaded ? "auto" : "none" }}>
-                      <iframe loading="lazy" style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
-                    </div>
-                    {!flowChartLoaded ? (
-                      <div onClick={() => setFlowChartLoaded(true)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2, background: "linear-gradient(180deg, " + t.card + "90, " + t.card + "60)", backdropFilter: "blur(4px)", transition: "opacity 0.3s" }}>
-                        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "20px 32px", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Partnerships Flow Chart</div>
-                          <div style={{ fontSize: 12, color: t.textMuted }}>Click to load interactive diagram</div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
 
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", marginBottom: 10 }}>2025 In Review</div>
-                <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, overflow: "hidden", boxShadow: t.shadow }}>
-                  <div style={{ position: "relative", overflow: "hidden", borderRadius: 14 }}>
-                    <div style={{ position: "relative", width: "100%", height: 0, paddingTop: "56.25%", overflow: "hidden", filter: canvaLoaded ? "none" : "blur(8px)", transition: "filter 0.5s", pointerEvents: canvaLoaded ? "auto" : "none" }}>
-                      <iframe loading="lazy" style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0, border: "none" }} src="https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view?embed" allowFullScreen allow="fullscreen" />
-                    </div>
-                    {!canvaLoaded ? (
-                      <div onClick={() => setCanvaLoaded(true)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2, background: "linear-gradient(180deg, " + t.card + "90, " + t.card + "60)", backdropFilter: "blur(4px)", transition: "opacity 0.3s" }}>
-                        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "20px 32px", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>2025 In Review</div>
-                          <div style={{ fontSize: 12, color: t.textMuted }}>Click to load presentation</div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
+                <div style={homeCard(t.orange)} onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")}
+                  onMouseEnter={(e) => homeHoverIn(e, t.orange)} onMouseLeave={(e) => homeHoverOut(e, t.orange)}>
+                  <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.orange} /></div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>2025 In Review</div>
+                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creator partnerships year in review presentation</div>
+                  <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>Opens in Canva</div>
                 </div>
               </div>
 
