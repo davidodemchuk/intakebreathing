@@ -5762,6 +5762,204 @@ function SiteFooter({ isDark = true }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// CAMPAIGN DETAIL VIEW
+// ═══════════════════════════════════════════════════════════
+
+function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbSaveCampaign, dbLoadCampaignCreators, dbSaveCampaignCreator, dbDeleteCampaignCreator, BriefForm, BriefDisplay, handleGenerate, aiKnowledge, saveBrief, formKey, briefPrefill, setBriefPrefill, setFormKey, currentBrief, currentFormData, aiLoading }) {
+  const [campaign, setCampaign] = useState(null);
+  const [campCreators, setCampCreators] = useState([]);
+  const [activeTab, setActiveTab] = useState("brief");
+  const [loading, setLoading] = useState(true);
+  const [creatorSearch, setCreatorSearch] = useState("");
+  const [editingBrief, setEditingBrief] = useState(false);
+
+  useEffect(() => {
+    if (!campaignId) { setLoading(false); return; }
+    (async () => {
+      const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
+      if (data) setCampaign(data);
+      const cc = await dbLoadCampaignCreators(campaignId);
+      setCampCreators(cc || []);
+      setLoading(false);
+    })();
+  }, [campaignId]);
+
+  const updateField = async (field, value) => {
+    if (!campaign) return;
+    const updated = { ...campaign, [field]: value };
+    setCampaign(updated);
+    await dbSaveCampaign({ id: campaign.id, [field]: value });
+  };
+
+  const assignCreator = async (creatorId) => {
+    if (!campaign || campCreators.find(cc => cc.creator_id === creatorId)) return;
+    const result = await dbSaveCampaignCreator({ campaign_id: campaign.id, creator_id: creatorId, status: "invited" });
+    if (!result.error && result.data) {
+      setCampCreators(prev => [result.data, ...prev]);
+      if (campaign.status === "draft") updateField("status", "active");
+    }
+  };
+
+  const removeCreator = async (ccId) => {
+    await dbDeleteCampaignCreator(ccId);
+    const remaining = campCreators.filter(cc => cc.id !== ccId);
+    setCampCreators(remaining);
+    if (remaining.length === 0 && campaign.status === "active") updateField("status", "draft");
+  };
+
+  const cycleStatus = async (cc) => {
+    const order = ["invited", "briefed", "submitted", "approved"];
+    const idx = order.indexOf(cc.status || "invited");
+    const next = order[(idx + 1) % order.length];
+    await dbSaveCampaignCreator({ ...cc, status: next });
+    setCampCreators(prev => prev.map(x => x.id === cc.id ? { ...x, status: next } : x));
+  };
+
+  const brief = campaign?.brief_id ? library.find(b => b.id === campaign.brief_id) : null;
+  const statusColors = { draft: { bg: (t.orange || "#d4890a") + "18", text: t.orange || "#d4890a" }, active: { bg: t.green + "18", text: t.green }, complete: { bg: t.blue + "18", text: t.blue } };
+  const statusC = statusColors[campaign?.status] || statusColors.draft;
+  const tabs = [{ id: "brief", label: "Brief" }, { id: "creators", label: "Creators (" + campCreators.length + ")" }, { id: "tracking", label: "Tracking" }];
+
+  if (loading) return <div style={{ maxWidth: 1000, margin: "0 auto", padding: "60px 24px", textAlign: "center", color: t.textMuted }}>Loading campaign...</div>;
+  if (!campaign) return <div style={{ maxWidth: 1000, margin: "0 auto", padding: "60px 24px", textAlign: "center", color: t.textFaint }}>Campaign not found.</div>;
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <div contentEditable suppressContentEditableWarning onBlur={(e) => updateField("name", e.currentTarget.textContent)} style={{ fontSize: 24, fontWeight: 500, color: t.text, outline: "none", letterSpacing: "-0.02em" }}>{campaign.name || "Untitled Campaign"}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 10, background: statusC.bg, color: statusC.text }}>{(campaign.status || "draft").charAt(0).toUpperCase() + (campaign.status || "draft").slice(1)}</span>
+            <span style={{ fontSize: 12, color: t.textFaint }}>Created {campaign.created_at ? new Date(campaign.created_at).toLocaleDateString() : ""}</span>
+          </div>
+        </div>
+        <button onClick={() => navigate("campaigns")} style={{ ...S.btnS, fontSize: 12, padding: "8px 16px" }}>&larr; All Campaigns</button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 2, marginBottom: 24, borderBottom: "1px solid " + t.border }}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "10px 18px", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent", marginBottom: -1 }}>{tab.label}</button>
+        ))}
+      </div>
+
+      {/* BRIEF TAB */}
+      {activeTab === "brief" ? (
+        brief && !editingBrief ? (
+          <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setEditingBrief(true)} style={{ ...S.btnS, fontSize: 12, padding: "8px 16px" }}>Edit Brief</button>
+            </div>
+            <BriefDisplay brief={brief.brief || brief.brief_data} formData={brief.formData || brief.form_data || {}} currentRole="manager" creators={creators} onBack={() => {}} onRegenerate={() => setEditingBrief(true)} onRegenerateAI={() => setEditingBrief(true)} />
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 12 }}>{brief ? "Edit Campaign Brief" : "Create Campaign Brief"}</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 20 }}>Use IB-Ai to generate a brief or start from a template. The brief will be linked to this campaign.</div>
+            <BriefForm key={"camp-bf-" + formKey} prefill={briefPrefill || (brief?.formData || brief?.form_data) || undefined} onGenerate={async (fd) => {
+              await handleGenerate(fd);
+            }} aiKnowledge={aiKnowledge} />
+            {!brief ? <button onClick={() => setActiveTab("creators")} style={{ marginTop: 12, background: "none", border: "none", color: t.textFaint, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>Skip brief for now &rarr;</button> : <button onClick={() => setEditingBrief(false)} style={{ marginTop: 12, background: "none", border: "none", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>&larr; Back to brief</button>}
+          </div>
+        )
+      ) : null}
+
+      {/* CREATORS TAB */}
+      {activeTab === "creators" ? (
+        <div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Add Creators</div>
+            <input type="text" value={creatorSearch} onChange={(e) => setCreatorSearch(e.target.value)} placeholder="Search creators by handle or name..." style={{ width: "100%", maxWidth: 400, padding: "10px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            {creatorSearch.trim() && (
+              <div style={{ marginTop: 8, maxHeight: 200, overflowY: "auto", border: "1px solid " + t.border, borderRadius: 8, background: t.card }}>
+                {creators.filter(cr => !campCreators.find(cc => cc.creator_id === cr.id) && ((cr.handle || "").toLowerCase().includes(creatorSearch.toLowerCase()) || (cr.name || "").toLowerCase().includes(creatorSearch.toLowerCase()))).slice(0, 10).map(cr => (
+                  <div key={cr.id} onClick={() => { assignCreator(cr.id); setCreatorSearch(""); }} style={{ padding: "8px 14px", cursor: "pointer", fontSize: 13, color: t.text, borderBottom: "1px solid " + t.border + "40", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                    <span>@{cr.handle || cr.instagramHandle || cr.name}</span>
+                    <span style={{ fontSize: 11, color: t.green }}>+ Add</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Assigned ({campCreators.length})</div>
+          {campCreators.length === 0 ? (
+            <div style={{ padding: 32, textAlign: "center", color: t.textFaint, background: t.card, borderRadius: 12, border: "1px solid " + t.border }}>No creators assigned yet. Search above to add.</div>
+          ) : campCreators.map(cc => {
+            const cr = creators.find(c => c.id === cc.creator_id);
+            if (!cr) return null;
+            const av = cr.tiktokData?.avatarUrl || cr.instagramData?.avatarUrl || "";
+            const h = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
+            const sc = { invited: t.blue, briefed: t.orange || "#d4890a", submitted: t.purple || "#8b6cc4", approved: t.green }[cc.status] || t.textFaint;
+            return (
+              <div key={cc.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid " + t.border + "40" }}>
+                {av ? <img src={av} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: t.green }}>{(h || "?")[0].toUpperCase()}</div>}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{h}</div>
+                  {cr.ibScore != null ? <div style={{ fontSize: 10, color: t.textFaint }}>IB Score: {cr.ibScore}</div> : null}
+                </div>
+                <button onClick={() => cycleStatus(cc)} style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, border: "none", cursor: "pointer", textTransform: "uppercase" }}>{cc.status || "invited"}</button>
+                <button onClick={() => removeCreator(cc.id)} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 14 }} title="Remove">&times;</button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* TRACKING TAB */}
+      {activeTab === "tracking" ? (
+        <div>
+          <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+            {[
+              { label: "Total Creators", value: campCreators.length, color: t.text },
+              { label: "Content Submitted", value: campCreators.filter(cc => cc.status === "submitted" || cc.status === "approved").length, color: t.purple || "#8b6cc4" },
+              { label: "Approved", value: campCreators.filter(cc => cc.status === "approved").length, color: t.green },
+            ].map((s, i) => (
+              <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <div style={{ fontSize: 24, fontWeight: 500, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          {campCreators.length > 0 ? (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: t.textMuted }}>Completion</span>
+                <span style={{ fontSize: 12, color: t.green, fontWeight: 500 }}>{Math.round((campCreators.filter(cc => cc.status === "approved").length / campCreators.length) * 100)}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: t.border }}>
+                <div style={{ height: 6, borderRadius: 3, background: t.green, width: Math.round((campCreators.filter(cc => cc.status === "approved").length / campCreators.length) * 100) + "%", transition: "width 0.3s" }} />
+              </div>
+            </div>
+          ) : null}
+
+          {/* Per-creator rows */}
+          {campCreators.map(cc => {
+            const cr = creators.find(c => c.id === cc.creator_id);
+            const h = cr?.tiktokHandle || cr?.instagramHandle || cr?.handle || "Unknown";
+            const sc = { invited: t.blue, briefed: t.orange || "#d4890a", submitted: t.purple || "#8b6cc4", approved: t.green }[cc.status] || t.textFaint;
+            return (
+              <div key={cc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid " + t.border + "30" }}>
+                <span style={{ fontSize: 13, color: t.text }}>@{h}</span>
+                <span style={{ fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 6, background: sc + "15", color: sc, textTransform: "uppercase" }}>{cc.status || "invited"}</span>
+              </div>
+            );
+          })}
+
+          {/* Mark complete */}
+          {campaign.status !== "complete" && campCreators.length > 0 ? (
+            <button onClick={() => updateField("status", "complete")} style={{ ...S.btnP, marginTop: 24, fontSize: 13, padding: "12px 24px" }}>Mark Campaign Complete</button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // DASHBOARD / TOOLS — Video Reformatter
 // ═══════════════════════════════════════════════════════════
 
@@ -10241,13 +10439,10 @@ export default function App() {
             <CampaignsPage t={t} S={S} teamMembers={teamMembers} creators={creators} navigate={navigate} briefs={library} />
           </div>
         )}
-        {!aiLoading && isCreatorViewAllowed && view === "campaignDetail" && (
-          <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-            <button type="button" onClick={() => navigate("campaigns")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>&larr; Back to Campaigns</button>
-            <div style={{ fontSize: 24, fontWeight: 500, color: t.text, marginBottom: 8 }}>Campaign Detail</div>
-            <div style={{ fontSize: 13, color: t.textMuted }}>Phase 2 will build this view with Brief, Creators, and Tracking sections.</div>
-          </div>
-        )}
+        {!aiLoading && isCreatorViewAllowed && view === "campaignDetail" && (() => {
+          const campaignId = new URLSearchParams(window.location.search).get("id");
+          return <CampaignDetailView campaignId={campaignId} navigate={navigate} t={t} S={S} creators={creators} library={library} dbSaveCampaign={dbSaveCampaign} dbLoadCampaignCreators={dbLoadCampaignCreators} dbSaveCampaignCreator={dbSaveCampaignCreator} dbDeleteCampaignCreator={dbDeleteCampaignCreator} BriefForm={BriefForm} BriefDisplay={BriefDisplay} handleGenerate={handleGenerate} aiKnowledge={aiKnowledge} saveBrief={saveBrief} formKey={formKey} briefPrefill={briefPrefill} setBriefPrefill={setBriefPrefill} setFormKey={setFormKey} currentBrief={currentBrief} currentFormData={currentFormData} aiLoading={aiLoading} />;
+        })()}
 
         {/* MESSAGING */}
         {!aiLoading && isCreatorViewAllowed && view === "messaging" && (
