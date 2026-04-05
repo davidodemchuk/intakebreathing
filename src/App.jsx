@@ -10371,12 +10371,7 @@ export default function App() {
           const pageNames = { creatorHub: "Creator Hub", pipeline: "Channel Pipeline", campaigns: "Campaigns", messaging: "Messaging", settings: "Settings", creators: "Creators", create: "New Brief", library: "Brief Library", tools: "Tools" };
           return (
             <nav className="no-print admin-nav-root" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 56px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
-              <div className="admin-nav-left" style={{ display: "flex", alignItems: "center", gap: 28, flex: 1 }}>
-                {[{ label: "Creator Hub", v: "creatorHub" }, { label: "Pipeline", v: "pipeline" }, { label: "Campaigns", v: "campaigns" }].map((lk, i) => {
-                  const active = lk.v === "creatorHub" ? section === "creatorHub" : view === lk.v;
-                  return <button key={i} onClick={() => navigate(lk.v)} style={navLinkStyle(active)} onMouseEnter={(e) => hIn(e, active)} onMouseLeave={(e) => hOut(e, active)}>{lk.label}</button>;
-                })}
-              </div>
+              <div className="admin-nav-left" style={{ flex: 1 }} />
               <div className="admin-nav-logo" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => navigate("home")}>
                 <img src="/intake-logo-white.png" alt="Intake" style={{ height: 22, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
               </div>
