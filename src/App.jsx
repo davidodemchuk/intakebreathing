@@ -6355,10 +6355,82 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [templates, setTemplates] = useState([]);
   const [selectedTemplates, setSelectedTemplates] = useState({ "16:9": null, "1:1": null, "4:5": null, "9:16": null });
   const [jobSubmitting, setJobSubmitting] = useState(false);
+  const [textOverlays, setTextOverlays] = useState([]);
+  const [savingOverlays, setSavingOverlays] = useState(false);
 
   useEffect(() => {
     fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
+
+  // Load saved overlays when template selection changes
+  useEffect(() => {
+    const templateIds = Object.values(selectedTemplates).filter(Boolean);
+    if (templateIds.length === 0) return;
+    (async () => {
+      const { data } = await supabase.from("reformat_text_overlays").select("*")
+        .in("template_id", templateIds).order("sort_order");
+      if (data && data.length > 0) {
+        setTextOverlays(data.map(o => ({
+          content: o.content || "",
+          position_preset: o.position_preset || "bottom-center",
+          font_size: o.font_size || 36,
+          font_color: o.font_color || "#FFFFFF",
+          font_weight: o.font_weight || "bold",
+          background_color: o.background_color,
+          background_padding: o.background_padding || 10,
+          timing: o.timing || "full",
+          applyTo: "all",
+        })));
+      }
+    })();
+  }, [Object.values(selectedTemplates).join(",")]);
+
+  const addOverlay = () => {
+    setTextOverlays(prev => [...prev, {
+      content: "", position_preset: "bottom-center", font_size: 36,
+      font_color: "#FFFFFF", font_weight: "bold", background_color: "rgba(0,0,0,0.6)",
+      background_padding: 10, timing: "full", applyTo: "all",
+    }]);
+  };
+
+  const updateOverlay = (index, field, value) => {
+    setTextOverlays(prev => prev.map((o, i) => i === index ? { ...o, [field]: value } : o));
+  };
+
+  const removeOverlay = (index) => {
+    setTextOverlays(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const saveOverlaysToTemplate = async () => {
+    const templateId = Object.values(selectedTemplates).find(Boolean);
+    if (!templateId) { alert("Select a template first"); return; }
+    setSavingOverlays(true);
+    try {
+      await supabase.from("reformat_text_overlays").delete().eq("template_id", templateId);
+      const toSave = textOverlays.filter(o => o.content.trim());
+      if (toSave.length > 0) {
+        await supabase.from("reformat_text_overlays").insert(
+          toSave.map((o, i) => ({
+            template_id: templateId,
+            content: o.content,
+            position_preset: o.position_preset,
+            font_size: o.font_size,
+            font_weight: o.font_weight || "bold",
+            font_color: o.font_color,
+            background_color: o.background_color,
+            background_padding: o.background_padding || 10,
+            timing: o.timing,
+            sort_order: i,
+          }))
+        );
+      }
+      alert("Overlays saved to template");
+    } catch (e) {
+      alert("Save failed: " + e.message);
+    } finally {
+      setSavingOverlays(false);
+    }
+  };
 
   // Fetch video from ScrapeCreators
   const fetchVideo = async () => {
@@ -6588,6 +6660,13 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             ...selectedTemplates,
             cacheId: video.cacheId,
             videoUrls: video.videoUrls || [video.videoUrl],
+          },
+          textOverlays: textOverlays.filter(o => o.content.trim()),
+          variables: {
+            creator_handle: video.authorHandle || "",
+            campaign_name: "",
+            product: "Intake Breathing",
+            date: new Date().toLocaleDateString(),
           },
           estimatedSeconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * 4 + 3),
         }),
@@ -6944,9 +7023,115 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           })}
         </div>
 
+        {/* Text overlays */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Text Overlays <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+            <button onClick={addOverlay} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer", fontWeight: 500 }}>+ Add text</button>
+          </div>
+
+          {textOverlays.map((overlay, i) => (
+            <div key={i} style={{ padding: 14, borderRadius: 10, border: "1px solid " + t.border, background: t.cardAlt, marginBottom: 8 }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Text</label>
+                  <input type="text" value={overlay.content} onChange={(e) => updateOverlay(i, "content", e.target.value)}
+                    placeholder="{creator_handle} · {campaign_name} · {date}"
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }} />
+                  <div style={{ fontSize: 9, color: t.textFaint, marginTop: 3 }}>
+                    Variables: {"{creator_handle}"} &nbsp; {"{campaign_name}"} &nbsp; {"{product}"} &nbsp; {"{date}"}
+                  </div>
+                </div>
+                <button onClick={() => removeOverlay(i)} style={{ alignSelf: "flex-start", marginTop: 18, fontSize: 11, color: t.red || "#e55", background: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}>Remove</button>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Position</label>
+                  <select value={overlay.position_preset} onChange={(e) => updateOverlay(i, "position_preset", e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                    <option value="top-left">Top Left</option>
+                    <option value="top-center">Top Center</option>
+                    <option value="top-right">Top Right</option>
+                    <option value="center">Center</option>
+                    <option value="bottom-left">Bottom Left</option>
+                    <option value="bottom-center">Bottom Center</option>
+                    <option value="bottom-right">Bottom Right</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Size</label>
+                  <select value={overlay.font_size} onChange={(e) => updateOverlay(i, "font_size", Number(e.target.value))}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                    <option value={24}>Small (24px)</option>
+                    <option value={36}>Medium (36px)</option>
+                    <option value={48}>Large (48px)</option>
+                    <option value={64}>XL (64px)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Color</label>
+                  <div style={{ display: "flex", gap: 4, marginTop: 2 }}>
+                    {["#FFFFFF", "#000000", "#00FEA9", "#FF6B6B", "#63B7BA"].map(c => (
+                      <div key={c} onClick={() => updateOverlay(i, "font_color", c)} style={{
+                        width: 24, height: 24, borderRadius: 4, background: c, cursor: "pointer",
+                        border: overlay.font_color === c ? "2px solid " + t.green : "1px solid " + t.border,
+                      }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Background</label>
+                  <select value={overlay.background_color || "none"} onChange={(e) => updateOverlay(i, "background_color", e.target.value === "none" ? null : e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                    <option value="none">None</option>
+                    <option value="rgba(0,0,0,0.6)">Dark pill</option>
+                    <option value="rgba(255,255,255,0.8)">Light pill</option>
+                    <option value="rgba(0,254,169,0.9)">Green pill</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>When</label>
+                  <select value={overlay.timing} onChange={(e) => updateOverlay(i, "timing", e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                    <option value="full">Full video</option>
+                    <option value="first_3s">First 3 seconds</option>
+                    <option value="last_2s">Last 2 seconds</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Formats</label>
+                  <select value={overlay.applyTo || "all"} onChange={(e) => updateOverlay(i, "applyTo", e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                    <option value="all">All formats</option>
+                    <option value="16:9">16:9 only</option>
+                    <option value="1:1">1:1 only</option>
+                    <option value="4:5">4:5 only</option>
+                    <option value="9:16">9:16 only</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {textOverlays.length > 0 && (
+            <button onClick={saveOverlaysToTemplate} disabled={savingOverlays}
+              style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, cursor: savingOverlays ? "not-allowed" : "pointer", opacity: savingOverlays ? 0.6 : 1 }}>
+              {savingOverlays ? "Saving..." : "Save overlay config to selected template"}
+            </button>
+          )}
+        </div>
+
         {/* Time estimate */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
+          const hasTextOverlays = textOverlays.some(o => o.content.trim());
+          const textOverhead = hasTextOverlays ? 2 : 0;
           const fmtEstimates = [
             { ratio: "16:9", label: "16:9 Landscape" },
             { ratio: "1:1", label: "1:1 Square" },
@@ -6956,7 +7141,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             const tid = selectedTemplates[f.ratio];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
-            const seconds = isBlur ? Math.round(dur * 0.35) + 2 : 3;
+            const seconds = (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
             const method = isBlur ? "blur" : tmpl.type;
             return { ...f, seconds, method };
           });
@@ -6985,13 +7170,15 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         {/* Reformat All button */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
+          const hasTextOverlays = textOverlays.some(o => o.content.trim());
+          const textOverhead = hasTextOverlays ? 2 : 0;
           const fmtEstimates = [
             { ratio: "16:9" }, { ratio: "1:1" }, { ratio: "4:5" }, { ratio: "9:16" },
           ].map(f => {
             const tid = selectedTemplates[f.ratio];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
-            return isBlur ? Math.round(dur * 0.35) + 2 : 3;
+            return (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
           });
           const totalEst = fmtEstimates.reduce((s, n) => s + n, 0) + 3;
           return (

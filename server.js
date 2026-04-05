@@ -990,6 +990,60 @@ app.delete("/api/reformat-templates/:id", async (req, res) => {
 
 // ── Background Reformat Jobs ──
 
+function buildTextOverlayFilters(overlays, targetW, targetH, videoDuration, formatRatio) {
+  if (!Array.isArray(overlays) || overlays.length === 0) return "";
+
+  const filters = overlays
+    .filter(o => o.content && o.content.trim())
+    .filter(o => o.applyTo === "all" || o.applyTo === formatRatio)
+    .map(overlay => {
+      // Escape single quotes and colons for FFmpeg drawtext
+      const text = overlay.content.replace(/\\/g, "\\\\").replace(/'/g, "\u2019").replace(/:/g, "\\:");
+      const fontSize = overlay.font_size || 36;
+      const fontColor = (overlay.font_color || "white").replace(/#/g, "0x");
+
+      // Position mapping
+      let x, y;
+      switch (overlay.position_preset) {
+        case "top-left":     x = "20";             y = "20";             break;
+        case "top-center":   x = "(w-text_w)/2";   y = "20";             break;
+        case "top-right":    x = "w-text_w-20";    y = "20";             break;
+        case "center":       x = "(w-text_w)/2";   y = "(h-text_h)/2";   break;
+        case "bottom-left":  x = "20";             y = "h-text_h-20";    break;
+        case "bottom-right": x = "w-text_w-20";    y = "h-text_h-20";    break;
+        default:             x = "(w-text_w)/2";   y = "h-text_h-20";    break; // bottom-center
+      }
+
+      // Background box — parse rgba string to FFmpeg boxcolor format
+      let boxOpts = "";
+      if (overlay.background_color) {
+        // Convert "rgba(0,0,0,0.6)" → "black@0.6" or use hex
+        const rgbaMatch = overlay.background_color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (rgbaMatch) {
+          const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, "0");
+          const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, "0");
+          const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, "0");
+          const a = rgbaMatch[4] != null ? parseFloat(rgbaMatch[4]).toFixed(2) : "1.00";
+          const pad = overlay.background_padding || 10;
+          boxOpts = `:box=1:boxcolor=0x${r}${g}${b}@${a}:boxborderw=${pad}`;
+        }
+      }
+
+      // Timing
+      let enable = "";
+      if (overlay.timing === "first_3s") {
+        enable = ":enable='lte(t,3)'";
+      } else if (overlay.timing === "last_2s") {
+        const startTime = Math.max(0, (videoDuration || 0) - 2);
+        enable = `:enable='gte(t,${startTime})'`;
+      }
+
+      return `drawtext=text='${text}':fontsize=${fontSize}:fontcolor=${fontColor}:x=${x}:y=${y}${boxOpts}${enable}`;
+    });
+
+  return filters.join(",");
+}
+
 async function processReformatJob(jobId) {
   const { data: job, error: jobErr } = await supabaseServer.from("reformat_jobs").select("*").eq("id", jobId).single();
   if (!job || jobErr) throw new Error("Job not found: " + jobId);
@@ -999,6 +1053,14 @@ async function processReformatJob(jobId) {
   const config = job.template_config || {};
   const cacheId = config.cacheId || null;
   const videoUrls = config.videoUrls || (job.video_url ? [job.video_url] : []);
+
+  // Variable resolver for text overlays
+  const variables = config.variables || {};
+  const resolveVars = (text) => text
+    .replace(/\{creator_handle\}/g, variables.creator_handle || "")
+    .replace(/\{campaign_name\}/g, variables.campaign_name || "")
+    .replace(/\{product\}/g, variables.product || "Intake Breathing")
+    .replace(/\{date\}/g, variables.date || new Date().toLocaleDateString());
 
   // Locate or download the video
   let inp;
@@ -1018,12 +1080,12 @@ async function processReformatJob(jobId) {
     throw new Error("No video source available. Re-fetch the video.");
   }
 
-  // Probe source dimensions
-  let srcW = 1080, srcH = 1920;
+  // Probe source dimensions and duration
+  let srcW = 1080, srcH = 1920, srcDuration = 16;
   try {
     const probe = await new Promise((ok, no) => execFile(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_streams", inp], { timeout: 15000, maxBuffer: 2097152 }, (e, o) => e ? no(e) : ok(JSON.parse(o))));
     const vs = probe.streams?.find(s => s.codec_type === "video");
-    if (vs) { srcW = vs.width || 1080; srcH = vs.height || 1920; }
+    if (vs) { srcW = vs.width || 1080; srcH = vs.height || 1920; srcDuration = parseFloat(vs.duration) || 16; }
   } catch (e) { console.log(`[job:${jobId}] Probe fallback:`, e.message); }
 
   const formats = [
@@ -1070,11 +1132,30 @@ async function processReformatJob(jobId) {
 
     const { extraInputs, filterArgs, cleanup: filterCleanup } = await buildReformatFilter(template, fmt.width, fmt.height, srcW, srcH);
     const extraInputArgs = extraInputs.flatMap(p => ["-i", p]);
+
+    // Append text overlay drawtext filters if any
+    const rawOverlays = config.textOverlays || [];
+    const resolvedOverlays = rawOverlays.map(o => ({ ...o, content: resolveVars(o.content || "") }));
+    const textFilters = buildTextOverlayFilters(resolvedOverlays, fmt.width, fmt.height, srcDuration, fmt.ratio);
+
+    let finalFilterArgs = filterArgs;
+    if (textFilters) {
+      if (filterArgs[0] === "-vf") {
+        // Simple scale/pad chain — just append drawtext
+        finalFilterArgs = ["-vf", filterArgs[1] + "," + textFilters];
+      } else {
+        // -filter_complex: label the composite output, then chain drawtext into [vout]
+        const fc = filterArgs[1];
+        const fcLabeled = fc.replace(/overlay=\(W-w\)\/2:\(H-h\)\/2$/, "overlay=(W-w)/2:(H-h)/2[vtmp]");
+        finalFilterArgs = ["-filter_complex", fcLabeled + ";[vtmp]" + textFilters + "[vout]", "-map", "[vout]", "-map", "0:a?"];
+      }
+    }
+
     const outFile = path.join(outputDir, `${job.video_filename}_${fmt.name}.mp4`);
 
-    console.log(`[job:${jobId}] ${fmt.name} (${fmt.width}x${fmt.height})...`);
+    console.log(`[job:${jobId}] ${fmt.name} (${fmt.width}x${fmt.height})${textFilters ? " +text" : ""}...`);
     await new Promise((ok, no) => {
-      execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...filterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outFile],
+      execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...finalFilterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outFile],
         { timeout: 300000, maxBuffer: 10485760 },
         (e, _, stderr) => e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok());
     });
@@ -1118,14 +1199,20 @@ async function processReformatJob(jobId) {
 }
 
 app.post("/api/reformat-job", async (req, res) => {
-  const { videoFilename, templateConfig, estimatedSeconds } = req.body;
+  const { videoFilename, templateConfig, textOverlays, variables, estimatedSeconds } = req.body;
   const videoUrl = templateConfig?.videoUrls?.[0] || null;
+  // Merge textOverlays and variables into template_config so processReformatJob can read them
+  const fullConfig = {
+    ...(templateConfig || {}),
+    textOverlays: Array.isArray(textOverlays) ? textOverlays : [],
+    variables: variables || {},
+  };
   try {
     const { data: job, error } = await supabaseServer.from("reformat_jobs").insert({
       video_url: videoUrl,
       video_filename: (videoFilename || "video").replace(/[^a-zA-Z0-9_-]/g, "_"),
       status: "queued",
-      template_config: templateConfig || {},
+      template_config: fullConfig,
       estimated_seconds: estimatedSeconds || 60,
       progress: { formats_total: 4, formats_done: 0, current_format: null },
     }).select().single();
