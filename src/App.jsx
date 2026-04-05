@@ -5744,28 +5744,19 @@ function ChannelPipelineFeature({ onOpen, onTabOpen }) {
 
 function SiteFooter() {
   return (
-    <footer style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "48px 48px 32px", boxSizing: "border-box", marginTop: "auto" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
-        <div>
-          <img src="/intake-logo-white.png" alt="Intake" style={{ height: 20, width: "auto", objectFit: "contain", marginBottom: 8 }} />
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", lineHeight: 1.6, maxWidth: 260, marginBottom: 20 }}>Internal creator partnerships dashboard for Intake Breathing Technology.</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
-            <span style={{ fontSize: 11, color: "#333333", fontFamily: "'Inter', sans-serif", marginLeft: 4, alignSelf: "center" }}>Intake Brand Book v1.0</span>
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16, fontFamily: "'Inter', sans-serif" }}>Platform</div>
-          {["Creator Hub", "Channel Pipeline", "Campaigns", "Messaging Hub", "Settings"].map((item, i) => (<div key={i} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", marginBottom: 10 }}>{item}</div>))}
-        </div>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16, fontFamily: "'Inter', sans-serif" }}>Brand</div>
-          {[{ label: "Positioning", value: "Life Changing Breathing." }, { label: "Archetype", value: "Hero" }, { label: "Font", value: "Inter" }, { label: "Primary", value: "#00FEA9" }, { label: "Secondary", value: "#63B7BA" }].map((item, i) => (<div key={i} style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif" }}><span style={{ fontSize: 11, color: "#333333" }}>{item.label} — </span><span style={{ fontSize: 13, color: "#737373" }}>{item.value}</span></div>))}
+    <footer style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "24px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, marginTop: "auto" }}>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: "#FFFFFF", letterSpacing: "-0.01em" }}>intake creators</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: "#FFFFFF", letterSpacing: "0.04em", marginBottom: 10 }}>PLATFORM</div>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          {[{ label: "Creator Hub", href: "/creator-hub" }, { label: "Channel Pipeline", href: "/channel-pipeline" }, { label: "Campaigns", href: "/campaigns" }, { label: "Messaging Hub", href: "/messaging" }, { label: "Settings", href: "/settings" }].map((item, i) => (
+            <a key={i} href={item.href} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", textDecoration: "none", transition: "color 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.color = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "#737373"; }}>{item.label}</a>
+          ))}
         </div>
       </div>
-      <div style={{ borderTop: "1px solid #1a1a1a", paddingTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333" }}>&copy; 2025 Intake Breathing Technology LLC — Internal use only</div>
-        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333" }}>intakecreators.com &middot; Deployed on Railway &middot; Supabase</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333", marginLeft: 6 }}>Life Changing Breathing.</span>
       </div>
     </footer>
   );
