@@ -5679,7 +5679,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 // HOMEPAGE SECTIONS — Creator Hub hero, Channel Pipeline, Brand Book footer
 // ═══════════════════════════════════════════════════════════
 
-function CreatorHubHero({ stats, onOpen }) {
+function CreatorHubHero({ stats, onOpen, onNav }) {
   return (
     <div style={{ width: "100%", background: "#000000", padding: "56px 48px 48px", borderBottom: "1px solid #1a1a1a", boxSizing: "border-box", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: -60, right: -60, width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,254,169,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
@@ -5690,17 +5690,15 @@ function CreatorHubHero({ stats, onOpen }) {
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 400, color: "#737373", lineHeight: 1.6, marginBottom: 32, maxWidth: 380 }}>Manage all creators, programs, briefs, and campaigns across every program in one place.</div>
           <button onClick={onOpen} style={{ background: "#00FEA9", color: "#000000", height: 50, borderRadius: 25, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 15, padding: "0 32px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub</button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
           {[
-            { label: "Active Creators", value: stats.creators },
-            { label: "Programs", value: stats.programs },
-            { label: "Briefs", value: stats.briefs },
-            { label: "IB Scored", value: stats.scored },
-            { label: "Videos Tracked", value: stats.videos },
-            { label: "Campaigns", value: stats.campaigns },
+            { label: "Active Creators", value: stats.creators, nav: "creators" },
+            { label: "Programs", value: stats.programs, nav: "creatorHub" },
+            { label: "New Brief", value: null, nav: "create" },
+            { label: "Campaigns", value: stats.campaigns, nav: "campaigns" },
           ].map((s, i) => (
-            <div key={i} onClick={onOpen} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 10, padding: "18px 20px", cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#333333"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e1e"; }}>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 28, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 6 }}>{s.value ?? "\u2014"}</div>
+            <div key={i} onClick={() => onNav(s.nav)} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 10, padding: "18px 16px", cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#333333"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e1e"; }}>
+              {s.value != null ? <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 28, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 6 }}>{s.value}</div> : <div style={{ fontSize: 36, fontWeight: 500, color: "#00FEA9", lineHeight: 1, marginBottom: 6 }}>+</div>}
               <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#737373", letterSpacing: "0.04em" }}>{s.label}</div>
             </div>
           ))}
@@ -5711,24 +5709,31 @@ function CreatorHubHero({ stats, onOpen }) {
 }
 
 function ChannelPipelineFeature({ onOpen, onTabOpen }) {
+  const channels = [
+    { name: "TTS Native", star: true, badge: "First v2 native build", status: "Live", tab: "tts" },
+    { name: "Overview", star: false, badge: null, status: "Live", tab: "overview" },
+    { name: "Spend", star: false, badge: null, status: "Live", tab: "spend" },
+    { name: "Instagram", star: false, badge: null, status: "Live", tab: "instagram" },
+    { name: "SOPs", star: false, badge: null, status: "Live", tab: "sops" },
+  ];
   return (
     <div style={{ width: "100%", background: "#000000", padding: "48px 45px 48px 48px", borderBottom: "1px solid #1a1a1a", borderLeft: "3px solid #63B7BA", boxSizing: "border-box", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", bottom: -40, left: -40, width: 250, height: 250, borderRadius: "50%", background: "radial-gradient(circle, rgba(99,183,186,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 32 }}>
         <div style={{ flex: "1 1 400px" }}>
-          <div style={{ color: "#63B7BA", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>Channel Pipeline</div>
+          <div style={{ color: "#63B7BA", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 }}>Channel Pipeline — Performance Data</div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 40, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 14 }}>TTS, Instagram,<br />UGC & beyond.</div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 400, color: "#737373", lineHeight: 1.6, maxWidth: 420, marginBottom: 28 }}>Weekly data entry, calculated metrics, sparklines, and monthly rollups across all active channels.</div>
           <button onClick={onOpen} style={{ background: "transparent", color: "#63B7BA", height: 46, borderRadius: 23, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 14, padding: "0 28px", border: "1px solid rgba(99,183,186,0.4)", cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,183,186,0.08)"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(99,183,186,0.4)"; }}>Open Pipeline &rarr;</button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "0 0 auto" }}>
-          {[{ name: "TTS Native", tab: "tts", status: "Live", color: "#00FEA9" }, { name: "Instagram", tab: "instagram", status: "Live", color: "#00FEA9" }, { name: "UGC Weekly", tab: "ugc", status: "Live", color: "#00FEA9" }, { name: "YouTube", tab: null, status: "Coming soon", color: "#737373" }].map((ch, i) => (
-            <div key={i} onClick={() => { if (ch.tab && onTabOpen) onTabOpen(ch.tab); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 40, background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 8, padding: "12px 18px", minWidth: 240, cursor: ch.tab ? "pointer" : "default", transition: "all 0.15s ease" }} onMouseEnter={(e) => { if (ch.tab) { e.currentTarget.style.background = "#141414"; e.currentTarget.style.borderColor = "#63B7BA"; } }} onMouseLeave={(e) => { if (ch.tab) { e.currentTarget.style.background = "#0d0d0d"; e.currentTarget.style.borderColor = "#1e1e1e"; } }}>
-              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#FFFFFF" }}>{ch.name}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 500, color: ch.color, letterSpacing: "0.06em" }}>{ch.status}</span>
-                {ch.tab ? <span style={{ color: "#333", fontSize: 12 }}>&rarr;</span> : null}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, flex: "0 0 auto" }}>
+          {channels.map((ch, i) => (
+            <div key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minWidth: 220, transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.background = "#141414"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0d0d0d"; e.currentTarget.style.borderColor = "#1e1e1e"; }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#FFFFFF", display: "flex", alignItems: "center", gap: 6 }}>{ch.name}{ch.star ? <span style={{ fontSize: 10 }}>{"\u2B50"}</span> : null}</div>
+                {ch.badge ? <div style={{ fontSize: 9, fontWeight: 500, color: "#63B7BA", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 3 }}>{ch.badge}</div> : null}
               </div>
+              <span style={{ fontSize: 11, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.06em" }}>{ch.status} &rarr;</span>
             </div>
           ))}
         </div>
@@ -10251,7 +10256,7 @@ export default function App() {
           return (
             <div style={{ animation: "fadeIn 0.3s ease" }}>
               {/* SECTION 1 — Creator Hub Hero */}
-              <CreatorHubHero stats={homeStats} onOpen={() => navigate("creatorHub")} />
+              <CreatorHubHero stats={homeStats} onOpen={() => navigate("creatorHub")} onNav={(view) => navigate(view)} />
 
               {/* SECTION 2 — Channel Pipeline Feature */}
               <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} />
