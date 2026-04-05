@@ -5683,14 +5683,17 @@ function BrandBookBlock() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    (async () => {
+    const load = async () => {
       try {
         const { data, error: e } = await supabase.from("app_settings").select("value").eq("key", "brand_book").maybeSingle();
-        if (e || !data?.value) { setError(true); setLoading(false); return; }
+        if (e || !data?.value) { setLoading(false); return; }
         setBrandBook(JSON.parse(data.value));
-      } catch { setError(true); }
+      } catch (err) {
+        console.warn("BrandBookBlock failed silently:", err);
+      }
       setLoading(false);
-    })();
+    };
+    load();
   }, []);
 
   const pill = { width: "100%", height: 14, borderRadius: 7, background: "#222" };
@@ -5703,11 +5706,7 @@ function BrandBookBlock() {
     </div>
   );
 
-  if (error) return (
-    <div style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, padding: 24, marginBottom: 16 }}>
-      <div style={{ fontSize: 12, color: "#737373" }}>Brand book unavailable</div>
-    </div>
-  );
+  if (error || (!loading && !brandBook)) return null;
 
   const swatches = [
     { hex: "#000000", label: "Black", border: "1px solid rgba(255,255,255,0.2)" },
@@ -10232,7 +10231,7 @@ export default function App() {
               </div>
 
               {/* Brand Book */}
-              <BrandBookBlock />
+              {(() => { try { return <BrandBookBlock />; } catch { return null; } })()}
 
               {flowChartFullscreen ? (
                 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: t.bg }}>
