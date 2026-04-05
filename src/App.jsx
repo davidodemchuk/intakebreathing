@@ -5583,6 +5583,84 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 // ═══ Creator Portal components moved to ./components/CreatorPortal.jsx ═══
 
 // ═══════════════════════════════════════════════════════════
+// BRAND BOOK BLOCK — homepage inline component
+// ═══════════════════════════════════════════════════════════
+
+function BrandBookBlock() {
+  const [brandBook, setBrandBook] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error: e } = await supabase.from("app_settings").select("value").eq("key", "brand_book").maybeSingle();
+        if (e || !data?.value) { setError(true); setLoading(false); return; }
+        setBrandBook(JSON.parse(data.value));
+      } catch { setError(true); }
+      setLoading(false);
+    })();
+  }, []);
+
+  const pill = { width: "100%", height: 14, borderRadius: 7, background: "#222" };
+
+  if (loading) return (
+    <div style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+      <div style={{ ...pill, width: 80, marginBottom: 10 }} />
+      <div style={{ ...pill, width: 200, height: 20, marginBottom: 10 }} />
+      <div style={{ ...pill, width: 160 }} />
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+      <div style={{ fontSize: 12, color: "#737373" }}>Brand book unavailable</div>
+    </div>
+  );
+
+  const swatches = [
+    { hex: "#000000", label: "Black", border: "1px solid rgba(255,255,255,0.2)" },
+    { hex: "#FFFFFF", label: "White", border: "none" },
+    { hex: "#00FEA9", label: "Electric Green", border: "none" },
+    { hex: "#63B7BA", label: "Slate Blue", border: "none" },
+  ];
+
+  return (
+    <div style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: "#00FEA9" }}>BRAND BOOK</div>
+        <div style={{ fontSize: 11, color: "#737373" }}>v1.0 — Oct 2024</div>
+      </div>
+
+      <div style={{ fontSize: 20, fontWeight: 500, color: "#FFFFFF", marginBottom: 16 }}>
+        {brandBook?.positioning || "Life Changing Breathing."}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+        {swatches.map(s => (
+          <div key={s.hex} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 14, background: s.hex, border: s.border || "none" }} />
+            <div style={{ fontSize: 10, color: "#737373" }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 10, color: "#737373", letterSpacing: "0.08em", marginBottom: 2 }}>TYPOGRAPHY</div>
+        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{brandBook?.typography || "Inter — Regular & Medium"}</div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 10, color: "#737373", letterSpacing: "0.08em", marginBottom: 2 }}>ARCHETYPE</div>
+        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{brandBook?.archetype || "Hero"}</div>
+      </div>
+
+      <div style={{ fontSize: 12, color: "#737373" }}>Source of truth: Supabase app_settings &rarr; brand_book</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // DASHBOARD / TOOLS — Video Reformatter
 // ═══════════════════════════════════════════════════════════
 
@@ -9605,6 +9683,30 @@ export default function App() {
     <ThemeContext.Provider value={ctx}>
       <div style={S.app}>
         <style>{`
+          :root {
+            --color-black: #000000;
+            --color-white: #FFFFFF;
+            --color-green: #00FEA9;
+            --color-blue: #63B7BA;
+            --color-dark-grey: #737373;
+            --color-grey: #C8C8C7;
+            --color-light-grey: #EDEDED;
+            --font-family: 'Inter', sans-serif;
+            --cta-height: 50px;
+            --cta-radius: 25px;
+          }
+          .btn-primary {
+            background: var(--color-green);
+            color: var(--color-black);
+            height: var(--cta-height);
+            border-radius: var(--cta-radius);
+            font-family: var(--font-family);
+            font-weight: 400;
+            font-size: 15px;
+            padding: 0 24px;
+            border: none;
+            cursor: pointer;
+          }
           @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
           @keyframes spin { to { transform: rotate(360deg) } }
           @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
@@ -9984,6 +10086,9 @@ export default function App() {
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Opens in Canva</div>
                 </button>
               </div>
+
+              {/* Brand Book */}
+              <BrandBookBlock />
 
               {flowChartFullscreen ? (
                 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: t.bg }}>
