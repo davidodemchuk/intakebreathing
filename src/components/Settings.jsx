@@ -34,6 +34,19 @@ function SettingsPanel({
   const scrapeId = `${instanceId}-scrape-key-input`;
   const unlockId = `${instanceId}-api-unlock-pw`;
   const [apiKeysUnlocked, setApiKeysUnlocked] = useState(false);
+  const [savedResend, setSavedResend] = useState("");
+  const [savedTwilioSid, setSavedTwilioSid] = useState("");
+  const [savedTwilioToken, setSavedTwilioToken] = useState("");
+  const [savedTwilioPhone, setSavedTwilioPhone] = useState("");
+  useEffect(() => {
+    (async () => {
+      const [r, s, tk, p] = await Promise.all([dbGetSetting("resend-api-key"), dbGetSetting("twilio-account-sid"), dbGetSetting("twilio-auth-token"), dbGetSetting("twilio-phone-number")]);
+      if (r) setSavedResend(r);
+      if (s) setSavedTwilioSid(s);
+      if (tk) setSavedTwilioToken(tk);
+      if (p) setSavedTwilioPhone(p);
+    })();
+  }, []);
 
   return (
     <>
@@ -218,18 +231,18 @@ function SettingsPanel({
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Resend API Key</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input id={instanceId + "-resend-key"} type="password" placeholder="re_..." style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box" }} />
+                <input id={instanceId + "-resend-key"} type="password" defaultValue={savedResend} placeholder="re_..." style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid " + (savedResend ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box" }} />
                 <button onClick={async () => { const v = document.getElementById(instanceId + "-resend-key")?.value?.trim(); if (!v) return; await dbSetSetting("resend-api-key", v); try { const r = await fetch("/api/test-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); r.ok ? alert("Resend key saved & test email sent!") : alert("Key saved but test failed: " + (await r.json().catch(() => ({}))).error); } catch (e) { alert("Key saved. Test failed: " + e.message); } }} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save & Test</button>
               </div>
             </div>
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Twilio Account SID</div>
-              <input id={instanceId + "-twilio-sid"} type="password" placeholder="AC..." style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box", marginBottom: 6 }} />
+              <input id={instanceId + "-twilio-sid"} type="password" defaultValue={savedTwilioSid} placeholder="AC..." style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + (savedTwilioSid ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box", marginBottom: 6 }} />
               <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Twilio Auth Token</div>
-              <input id={instanceId + "-twilio-token"} type="password" placeholder="Token..." style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box", marginBottom: 6 }} />
+              <input id={instanceId + "-twilio-token"} type="password" defaultValue={savedTwilioToken} placeholder="Token..." style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid " + (savedTwilioToken ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box", marginBottom: 6 }} />
               <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Twilio Phone Number (from)</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input id={instanceId + "-twilio-from"} type="text" placeholder="+15551234567" style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+                <input id={instanceId + "-twilio-from"} type="text" defaultValue={savedTwilioPhone} placeholder="+15551234567" style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid " + (savedTwilioPhone ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
                 <button onClick={async () => { const sid = document.getElementById(instanceId + "-twilio-sid")?.value?.trim(); const tok = document.getElementById(instanceId + "-twilio-token")?.value?.trim(); const from = document.getElementById(instanceId + "-twilio-from")?.value?.trim(); if (!sid || !tok || !from) { alert("Fill all 3 Twilio fields."); return; } await dbSetSetting("twilio-account-sid", sid); await dbSetSetting("twilio-auth-token", tok); await dbSetSetting("twilio-phone-number", from); const testPhone = prompt("Enter a phone number to test SMS:", from); if (!testPhone) return; try { const r = await fetch("/api/test-sms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: testPhone }) }); r.ok ? alert("Twilio saved & test SMS sent!") : alert("Saved but test failed: " + (await r.json().catch(() => ({}))).error); } catch (e) { alert("Saved. Test failed: " + e.message); } }} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save & Test</button>
               </div>
             </div>
