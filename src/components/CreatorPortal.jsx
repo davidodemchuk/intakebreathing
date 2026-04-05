@@ -448,25 +448,25 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg }}>
-      <div style={{ background: "#0a0a0a", borderBottom: "1px solid #222222", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", height: 56 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <img src="/intake-logo-white.png" alt="Intake" style={{ height: 24, width: "auto", objectFit: "contain" }} />
-          <div style={{ display: "flex", gap: 2 }}>
-            {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent" }}>
-                {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: t.green, color: "#fff", fontWeight: 500 }}>{tab.count}</span> : null}
-              </button>
-            ))}
-          </div>
+      <nav style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1 }}>
+          <img src="/intake-logo-white.png" alt="Intake" style={{ height: 20, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
+          <div style={{ width: 1, height: 16, background: "#222" }} />
+          {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: activeTab === tab.id ? "#FFFFFF" : "#737373", padding: 0, transition: "color 0.15s ease" }} onMouseEnter={(e) => { if (activeTab !== tab.id) e.currentTarget.style.color = "#FFFFFF"; }} onMouseLeave={(e) => { if (activeTab !== tab.id) e.currentTarget.style.color = "#737373"; }}>
+              {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: "#00FEA9", color: "#000", fontWeight: 500 }}>{tab.count}</span> : null}
+            </button>
+          ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => navigate("creatorProfile")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.text, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-            <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, color: t.green }}>{(cp?.name || "C")[0]}</div>
-            {cp?.name?.split(" ")[0] || "Profile"}
-          </button>
-          <button onClick={async () => { await supabase.auth.signOut(); navigate("creatorLogin"); }} style={{ padding: "0 16px", height: 32, borderRadius: 8, border: "1px solid #333333", background: "transparent", color: "#FFFFFF", fontSize: 12, fontWeight: 400, cursor: "pointer" }}>Sign Out</button>
+        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
+          <img src="/intake-logo-white.png" alt="Intake" style={{ height: 22, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
         </div>
-      </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1, justifyContent: "flex-end" }}>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373" }}>@{cp?.instagramHandle || cp?.instagram_handle || cp?.handle || ""}</span>
+          <button onClick={() => navigate("creatorProfile")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", padding: 0, transition: "color 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "#737373"; }}>Profile</button>
+          <button onClick={async () => { await supabase.auth.signOut(); navigate("creatorLogin"); }} style={{ background: "none", border: "1px solid #222222", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", padding: "6px 14px", borderRadius: 6, transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#333333"; e.currentTarget.style.color = "#FFFFFF"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; e.currentTarget.style.color = "#737373"; }}>Sign Out</button>
+        </div>
+      </nav>
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 20px" }}>
         {activeTab === "home" ? (

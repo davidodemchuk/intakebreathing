@@ -10041,79 +10041,30 @@ export default function App() {
         )}
         {!hideManagerShell && <>
 
-        {/* NAV — context-aware (creators: Creator Hub library only) */}
+        {/* NAV — admin bar */}
         {(() => {
-          if (currentRole === ROLES.CREATOR) {
-            return (
-              <div className="no-print" style={S.nav}>
-                <div style={S.navLogo} onClick={() => navigate("library")}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <img src="/intake-logo-white.png" alt="Intake" style={{ height: 26, width: "auto", objectFit: "contain" }} />
-                    <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1, paddingLeft: 2 }}>{NAV_SUB_LABELS.creatorHub}</span>
-                  </div>
-                </div>
-                <div style={S.navLinks}>
-                  <button type="button" style={S.navBtn(view === "library" || view === "display")} onClick={() => navigate("library")}>Library{library.length > 0 ? ` (${library.length})` : ""}</button>
-                </div>
-              </div>
-            );
-          }
+          const navLinkStyle = (active) => ({ background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: active ? "#FFFFFF" : "#737373", padding: 0, transition: "color 0.15s ease", letterSpacing: "-0.01em" });
+          const hIn = (e, active) => { if (!active) e.currentTarget.style.color = "#FFFFFF"; };
+          const hOut = (e, active) => { if (!active) e.currentTarget.style.color = "#737373"; };
           const section = getCurrentSection(view);
-          const navSubText = NAV_SUB_LABELS[section] ?? NAV_SUB_LABELS.dashboard;
-          const dashBtn = { ...S.navBtn(false), color: t.textFaint, fontWeight: 600 };
+          const pageNames = { creatorHub: "Creator Hub", pipeline: "Channel Pipeline", campaigns: "Campaigns", messaging: "Messaging", settings: "Settings", creators: "Creators", create: "New Brief", library: "Brief Library", tools: "Tools" };
           return (
-            <div className="no-print" style={S.nav}>
-              <div style={S.navLogo} onClick={() => navigate("home")}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <img src="/intake-logo-white.png" alt="Intake" style={{ height: 26, width: "auto", objectFit: "contain" }} />
-                  <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1, paddingLeft: 2 }}>{navSubText}</span>
-                </div>
+            <nav className="no-print" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 28, flex: 1 }}>
+                {[{ label: "Creator Hub", v: "creatorHub" }, { label: "Pipeline", v: "pipeline" }, { label: "Campaigns", v: "campaigns" }, { label: "Messaging", v: "messaging" }].map((lk, i) => {
+                  const active = lk.v === "creatorHub" ? section === "creatorHub" : view === lk.v;
+                  return <button key={i} onClick={() => navigate(lk.v)} style={navLinkStyle(active)} onMouseEnter={(e) => hIn(e, active)} onMouseLeave={(e) => hOut(e, active)}>{lk.label}</button>;
+                })}
               </div>
-              <div style={S.navLinks}>
-                {section !== "dashboard" && (
-                  <button type="button" style={dashBtn} onClick={() => navigate("home")}>← Dashboard</button>
-                )}
-                {section === "creatorHub" && (
-                  <>
-                    <button type="button" style={S.navBtn(view === "creatorHub" || view === "ugcDashboard")} onClick={() => navigate("creatorHub")}>Creator Hub</button>
-                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
-                  </>
-                )}
-                {section === "tools" && (
-                  <>
-                    <button type="button" style={S.navBtn(view === "tools" || view === "videotool")} onClick={() => navigate("tools")}>All Tools</button>
-                    <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
-                  </>
-                )}
-                {section === "pipeline" && (
-                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
-                )}
-                {section === "influencer" && (
-                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
-                )}
-                {section === "dashboard" && (
-                  <button type="button" style={S.navBtn(view === "settings")} onClick={() => navigate("settings")}>Settings</button>
-                )}
-                <div style={{ width: 1, height: 16, background: t.border, margin: "0 4px" }} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem("intake-manager-auth");
-                    setManagerAuthed(false);
-                  }}
-                  style={{
-                    padding: "7px 12px", borderRadius: 8, border: "none",
-                    background: "transparent", color: t.textFaint,
-                    fontSize: 12, cursor: "pointer",
-                  }}
-                >
-                  Sign Out
-                </button>
-                <button type="button" onClick={() => setIsDark(!isDark)} style={S.themeToggle} title={isDark ? "Switch to light" : "Switch to dark"}>
-                  <div style={S.themeKnob(isDark)} />
-                </button>
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => navigate("home")}>
+                <img src="/intake-logo-white.png" alt="Intake" style={{ height: 22, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
               </div>
-            </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 20, flex: 1, justifyContent: "flex-end" }}>
+                {view !== "home" ? <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#333333", letterSpacing: "0.06em", textTransform: "uppercase" }}>{pageNames[view] || ""}</div> : null}
+                <button onClick={() => navigate("settings")} style={navLinkStyle(view === "settings")} onMouseEnter={(e) => hIn(e, view === "settings")} onMouseLeave={(e) => hOut(e, view === "settings")}>Settings</button>
+                <button onClick={() => { localStorage.removeItem("intake-manager-auth"); setManagerAuthed(false); }} style={{ background: "none", border: "1px solid #222222", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", padding: "6px 14px", borderRadius: 6, transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#333333"; e.currentTarget.style.color = "#FFFFFF"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; e.currentTarget.style.color = "#737373"; }}>Sign Out</button>
+              </div>
+            </nav>
           );
         })()}
 
