@@ -1098,14 +1098,6 @@ function CardIcon({ type, color, size = 32 }) {
 function getS(t) {
   return {
     app: { background: t.bg, minHeight: "100vh", color: t.text, fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif", transition: "background 0.3s, color 0.3s", display: "flex", flexDirection: "column" },
-    nav: { borderBottom: `1px solid ${t.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: t.navBg, backdropFilter: "blur(12px)", zIndex: 100, transition: "background 0.3s", boxShadow: t.shadow },
-    navLogo: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer" },
-    navTitle: { fontSize: 15, fontWeight: 500, letterSpacing: "-0.02em", color: t.text },
-    navSub: { fontSize: 11, color: t.textFaint, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" },
-    navLinks: { display: "flex", gap: 6, alignItems: "center" },
-    navBtn: (a) => ({ padding: "7px 14px", borderRadius: 8, border: "none", background: a ? t.green+"18" : "transparent", color: a ? t.green : t.textFaint, fontSize: 13, fontWeight: 600, cursor: "pointer" }),
-    themeToggle: { width: 36, height: 20, borderRadius: 10, border: "none", cursor: "pointer", position: "relative", background: t.border, display: "flex", alignItems: "center", padding: 2, transition: "background 0.2s" },
-    themeKnob: (isDark) => ({ width: 16, height: 16, borderRadius: 8, background: t.green, transition: "transform 0.2s", transform: isDark ? "translateX(16px)" : "translateX(0)" }),
     btnP: { padding: "13px 28px", borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 500, cursor: "pointer" },
     btnS: { padding: "13px 28px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.text, fontSize: 14, fontWeight: 600, cursor: "pointer" },
     formWrap: { maxWidth: 720, margin: "0 auto", padding: "40px 24px 80px" },
@@ -5778,83 +5770,6 @@ function SiteFooter({ isDark = true }) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// BRAND BOOK BLOCK — homepage inline component
-// ═══════════════════════════════════════════════════════════
-
-function BrandBookBlock() {
-  const [brandBook, setBrandBook] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data, error: e } = await supabase.from("app_settings").select("value").eq("key", "brand_book").maybeSingle();
-        if (e || !data?.value) { setLoading(false); return; }
-        setBrandBook(JSON.parse(data.value));
-      } catch (err) {
-        console.warn("BrandBookBlock failed silently:", err);
-      }
-      setLoading(false);
-    };
-    load();
-  }, []);
-
-  const pill = { width: "100%", height: 14, borderRadius: 7, background: "#222" };
-
-  if (loading) return (
-    <div style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, padding: 24, marginBottom: 16 }}>
-      <div style={{ ...pill, width: 80, marginBottom: 10 }} />
-      <div style={{ ...pill, width: 200, height: 20, marginBottom: 10 }} />
-      <div style={{ ...pill, width: 160 }} />
-    </div>
-  );
-
-  if (error || (!loading && !brandBook)) return null;
-
-  const swatches = [
-    { hex: "#000000", label: "Black", border: "1px solid rgba(255,255,255,0.2)" },
-    { hex: "#FFFFFF", label: "White", border: "none" },
-    { hex: "#00FEA9", label: "Electric Green", border: "none" },
-    { hex: "#63B7BA", label: "Slate Blue", border: "none" },
-  ];
-
-  return (
-    <div style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, padding: 24, marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: "#00FEA9" }}>BRAND BOOK</div>
-        <div style={{ fontSize: 11, color: "#737373" }}>v1.0 — Oct 2024</div>
-      </div>
-
-      <div style={{ fontSize: 20, fontWeight: 500, color: "#FFFFFF", marginBottom: 16 }}>
-        {typeof brandBook?.positioning === "string" ? brandBook.positioning : "Life Changing Breathing."}
-      </div>
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-        {swatches.map(s => (
-          <div key={s.hex} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 14, background: s.hex, border: s.border || "none" }} />
-            <div style={{ fontSize: 10, color: "#737373" }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, color: "#737373", letterSpacing: "0.08em", marginBottom: 2 }}>TYPOGRAPHY</div>
-        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{typeof brandBook?.typography === "string" ? brandBook.typography : brandBook?.typography?.font_family ? brandBook.typography.font_family + " — " + (Array.isArray(brandBook.typography.weights_used) ? brandBook.typography.weights_used.join(" & ") : "Regular & Medium") : "Inter — Regular & Medium"}</div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 10, color: "#737373", letterSpacing: "0.08em", marginBottom: 2 }}>ARCHETYPE</div>
-        <div style={{ fontSize: 13, color: "#FFFFFF" }}>{typeof brandBook?.archetype === "string" ? brandBook.archetype : brandBook?.archetype?.name || "Hero"}</div>
-      </div>
-
-      <div style={{ fontSize: 12, color: "#737373" }}>Source of truth: Supabase app_settings &rarr; brand_book</div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
 // DASHBOARD / TOOLS — Video Reformatter
 // ═══════════════════════════════════════════════════════════
 
@@ -10241,41 +10156,34 @@ export default function App() {
               <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} isDark={isDark} />
 
               {/* SECTION 3 — Utility Grid */}
-              <div className="utility-grid-container" style={{ padding: "32px 56px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
-                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e0e0dc" }}>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: "#0a0a0a", letterSpacing: "-0.02em" }}>Tools & Settings</div>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#999999" }}>5 items</div>
+              {(() => { const ug = { bg: isDark ? "#0a0a0a" : "#f8f8f6", cardBg: isDark ? "#111111" : "#FFFFFF", cardBorder: isDark ? "#1c1c1c" : "#e8e8e6", cardHBg: isDark ? "#1a1a1a" : "#fafaf8", cardHBorder: isDark ? "#2a2a2a" : "#c8c8c0", title: isDark ? "#FFFFFF" : "#0a0a0a", sub: isDark ? "#555555" : "#737373", muted: isDark ? "#444444" : "#aaaaaa", divider: isDark ? "#1a1a1a" : "#e0e0dc", resSub: isDark ? "#333333" : "#AAAAAA", resDivider: isDark ? "#1a1a1a" : "#E8E8E2" }; return (
+              <div className="utility-grid-container" style={{ padding: "32px 56px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: ug.bg }}>
+                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid " + ug.divider }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: ug.title, letterSpacing: "-0.02em" }}>Tools & Settings</div>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: ug.sub }}>5 items</div>
                 </div>
-                <div onClick={() => navigate("tools")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Tools</div>
-                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Video reformatter and team utilities</div>
-                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
-                </div>
-                <div onClick={() => navigate("sourceOfTruth")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>IB-Ai Source of Truth</div>
-                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Products, claims, scoring, outreach rules</div>
-                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
-                </div>
-                <div onClick={() => navigate("settings")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Settings</div>
-                  <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>API keys, team access, integrations</div>
-                  <div style={{ marginTop: 12, fontSize: 11, color: "#aaaaaa", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
-                </div>
+                {[{ label: "Tools", desc: "Video reformatter and team utilities", nav: "tools" }, { label: "IB-Ai Source of Truth", desc: "Products, claims, scoring, outreach rules", nav: "sourceOfTruth" }, { label: "Settings", desc: "API keys, team access, integrations", nav: "settings" }].map((item, i) => (
+                  <div key={i} onClick={() => navigate(item.nav)} style={{ background: ug.cardBg, border: "1px solid " + ug.cardBorder, borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = ug.cardHBorder; e.currentTarget.style.background = ug.cardHBg; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = ug.cardBorder; e.currentTarget.style.background = ug.cardBg; }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: ug.title }}>{item.label}</div>
+                    <div style={{ fontSize: 12, color: ug.sub, marginTop: 4 }}>{item.desc}</div>
+                    <div style={{ marginTop: 12, fontSize: 11, color: ug.muted, fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+                  </div>
+                ))}
                 <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 12, margin: "8px 0 4px" }}>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 500, color: isDark ? "#333333" : "#AAAAAA", letterSpacing: "0.08em", textTransform: "uppercase" }}>Resources</div>
-                  <div style={{ flex: 1, height: 1, background: isDark ? "#1a1a1a" : "#E8E8E2" }} />
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 500, color: ug.resSub, letterSpacing: "0.08em", textTransform: "uppercase" }}>Resources</div>
+                  <div style={{ flex: 1, height: 1, background: ug.resDivider }} />
                 </div>
-                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>Creator Flow Chart</div>
-                  <div style={{ fontSize: 11, color: "#737373", marginTop: 4 }}>Interactive Lucidchart diagram</div>
-                  <div style={{ marginTop: 10, fontSize: 10, color: "#bbbbbb", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: ug.cardBg, border: "1px solid " + ug.cardBorder, borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = ug.cardHBorder; e.currentTarget.style.background = ug.cardHBg; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = ug.cardBorder; e.currentTarget.style.background = ug.cardBg; }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: ug.title }}>Creator Flow Chart</div>
+                  <div style={{ fontSize: 11, color: ug.sub, marginTop: 4 }}>Interactive Lucidchart diagram</div>
+                  <div style={{ marginTop: 10, fontSize: 10, color: ug.muted, fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </button>
-                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c8c8c0"; e.currentTarget.style.background = "#fafaf8"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; e.currentTarget.style.background = "#FFFFFF"; }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>2025 In Review</div>
-                  <div style={{ fontSize: 11, color: "#737373", marginTop: 4 }}>Opens in Canva</div>
-                  <div style={{ marginTop: 10, fontSize: 10, color: "#bbbbbb", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: ug.cardBg, border: "1px solid " + ug.cardBorder, borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = ug.cardHBorder; e.currentTarget.style.background = ug.cardHBg; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = ug.cardBorder; e.currentTarget.style.background = ug.cardBg; }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: ug.title }}>2025 In Review</div>
+                  <div style={{ fontSize: 11, color: ug.sub, marginTop: 4 }}>Opens in Canva</div>
+                  <div style={{ marginTop: 10, fontSize: 10, color: ug.muted, fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
                 </button>
-              </div>
+              </div>); })()}
 
               {/* Fullscreen flow chart modal */}
               {flowChartFullscreen ? (
