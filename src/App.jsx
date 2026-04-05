@@ -1108,7 +1108,7 @@ function CardIcon({ type, color, size = 32 }) {
 
 function getS(t) {
   return {
-    app: { background: t.bg, minHeight: "100vh", color: t.text, fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif", transition: "background 0.3s, color 0.3s" },
+    app: { background: t.bg, minHeight: "100vh", color: t.text, fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif", transition: "background 0.3s, color 0.3s", display: "flex", flexDirection: "column" },
     nav: { borderBottom: `1px solid ${t.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: t.navBg, backdropFilter: "blur(12px)", zIndex: 100, transition: "background 0.3s", boxShadow: t.shadow },
     navLogo: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer" },
     navTitle: { fontSize: 15, fontWeight: 500, letterSpacing: "-0.02em", color: t.text },
@@ -5710,7 +5710,7 @@ function CreatorHubHero({ stats, onOpen }) {
             { label: "Videos Tracked", value: stats.videos },
             { label: "Campaigns", value: stats.campaigns },
           ].map((s, i) => (
-            <div key={i} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 10, padding: "18px 20px" }}>
+            <div key={i} onClick={onOpen} style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 10, padding: "18px 20px", cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#333333"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e1e"; }}>
               <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 28, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 6 }}>{s.value ?? "\u2014"}</div>
               <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#737373", letterSpacing: "0.04em" }}>{s.label}</div>
             </div>
@@ -5721,9 +5721,9 @@ function CreatorHubHero({ stats, onOpen }) {
   );
 }
 
-function ChannelPipelineFeature({ onOpen }) {
+function ChannelPipelineFeature({ onOpen, onTabOpen }) {
   return (
-    <div style={{ width: "100%", background: "#050505", padding: "48px 48px", borderBottom: "1px solid #1a1a1a", boxSizing: "border-box", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100%", background: "#000000", padding: "48px 45px 48px 48px", borderBottom: "1px solid #1a1a1a", borderLeft: "3px solid #63B7BA", boxSizing: "border-box", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", bottom: -40, left: -40, width: 250, height: 250, borderRadius: "50%", background: "radial-gradient(circle, rgba(99,183,186,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 32 }}>
         <div style={{ flex: "1 1 400px" }}>
@@ -5733,10 +5733,13 @@ function ChannelPipelineFeature({ onOpen }) {
           <button onClick={onOpen} style={{ background: "transparent", color: "#63B7BA", height: 46, borderRadius: 23, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 14, padding: "0 28px", border: "1px solid rgba(99,183,186,0.4)", cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,183,186,0.08)"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(99,183,186,0.4)"; }}>Open Pipeline &rarr;</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "0 0 auto" }}>
-          {[{ name: "TTS Native", status: "Live", color: "#00FEA9" }, { name: "Instagram", status: "Live", color: "#00FEA9" }, { name: "UGC Weekly", status: "Live", color: "#00FEA9" }, { name: "YouTube", status: "Coming soon", color: "#737373" }].map((ch, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 40, background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 8, padding: "12px 18px", minWidth: 240 }}>
+          {[{ name: "TTS Native", tab: "tts", status: "Live", color: "#00FEA9" }, { name: "Instagram", tab: "instagram", status: "Live", color: "#00FEA9" }, { name: "UGC Weekly", tab: "ugc", status: "Live", color: "#00FEA9" }, { name: "YouTube", tab: null, status: "Coming soon", color: "#737373" }].map((ch, i) => (
+            <div key={i} onClick={() => { if (ch.tab && onTabOpen) onTabOpen(ch.tab); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 40, background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 8, padding: "12px 18px", minWidth: 240, cursor: ch.tab ? "pointer" : "default", transition: "all 0.15s ease" }} onMouseEnter={(e) => { if (ch.tab) { e.currentTarget.style.background = "#141414"; e.currentTarget.style.borderColor = "#63B7BA"; } }} onMouseLeave={(e) => { if (ch.tab) { e.currentTarget.style.background = "#0d0d0d"; e.currentTarget.style.borderColor = "#1e1e1e"; } }}>
               <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#FFFFFF" }}>{ch.name}</span>
-              <span style={{ fontSize: 11, fontWeight: 500, color: ch.color, letterSpacing: "0.06em" }}>{ch.status}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 500, color: ch.color, letterSpacing: "0.06em" }}>{ch.status}</span>
+                {ch.tab ? <span style={{ color: "#333", fontSize: 12 }}>&rarr;</span> : null}
+              </div>
             </div>
           ))}
         </div>
@@ -5745,22 +5748,32 @@ function ChannelPipelineFeature({ onOpen }) {
   );
 }
 
-function BrandBookFooter() {
+function SiteFooter() {
   return (
-    <div style={{ width: "100%", background: "#080808", borderTop: "1px solid #1a1a1a", padding: "20px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <div style={{ color: "#00FEA9", fontSize: 10, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase" }}>Brand Book</div>
-        <div style={{ color: "#333", fontSize: 12 }}>&mdash;</div>
-        <div style={{ color: "#737373", fontSize: 12, fontWeight: 400 }}>Life Changing Breathing.</div>
+    <footer style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "48px 48px 32px", boxSizing: "border-box", marginTop: "auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
+        <div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 500, color: "#FFFFFF", marginBottom: 8 }}>intake creators</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", lineHeight: 1.6, maxWidth: 260, marginBottom: 20 }}>Internal creator partnerships dashboard for Intake Breathing Technology.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
+            <span style={{ fontSize: 11, color: "#333333", fontFamily: "'Inter', sans-serif", marginLeft: 4, alignSelf: "center" }}>Intake Brand Book v1.0</span>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16, fontFamily: "'Inter', sans-serif" }}>Platform</div>
+          {["Creator Hub", "Channel Pipeline", "Campaigns", "Messaging Hub", "Settings"].map((item, i) => (<div key={i} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", marginBottom: 10 }}>{item}</div>))}
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16, fontFamily: "'Inter', sans-serif" }}>Brand</div>
+          {[{ label: "Positioning", value: "Life Changing Breathing." }, { label: "Archetype", value: "Hero" }, { label: "Font", value: "Inter" }, { label: "Primary", value: "#00FEA9" }, { label: "Secondary", value: "#63B7BA" }].map((item, i) => (<div key={i} style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif" }}><span style={{ fontSize: 11, color: "#333333" }}>{item.label} — </span><span style={{ fontSize: 13, color: "#737373" }}>{item.value}</span></div>))}
+        </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (
-          <div key={i} style={{ width: 16, height: 16, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none" }} />
-        ))}
-        <div style={{ color: "#737373", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>Inter — Regular & Medium</div>
+      <div style={{ borderTop: "1px solid #1a1a1a", paddingTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333" }}>&copy; 2025 Intake Breathing Technology LLC — Internal use only</div>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333" }}>intakecreators.com &middot; Deployed on Railway &middot; Supabase</div>
       </div>
-      <div style={{ color: "#333333", fontSize: 11, fontWeight: 400 }}>v1.0 — Oct 2024</div>
-    </div>
+    </footer>
   );
 }
 
@@ -10252,34 +10265,31 @@ export default function App() {
               <CreatorHubHero stats={homeStats} onOpen={() => navigate("creatorHub")} />
 
               {/* SECTION 2 — Channel Pipeline Feature */}
-              <ChannelPipelineFeature onOpen={() => navigate("pipeline")} />
+              <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} />
 
               {/* SECTION 3 — Utility Grid */}
-              <div style={{ padding: "32px 48px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#000000", borderBottom: "1px solid #1a1a1a" }}>
-                <div onClick={() => navigate("tools")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>Tools</div>
+              <div style={{ padding: "32px 48px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
+                <div onClick={() => navigate("tools")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Tools</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Video reformatter and team utilities</div>
                 </div>
-                <div onClick={() => navigate("sourceOfTruth")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>IB-Ai Source of Truth</div>
+                <div onClick={() => navigate("sourceOfTruth")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>IB-Ai Source of Truth</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Products, claims, scoring, outreach rules</div>
                 </div>
-                <div onClick={() => navigate("settings")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#737373"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>Settings</div>
+                <div onClick={() => navigate("settings")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Settings</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>API keys, team access, integrations</div>
                 </div>
-                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>Creator Flow Chart</div>
+                <button onClick={() => setFlowChartFullscreen(true)} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>Creator Flow Chart</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Interactive Lucidchart diagram</div>
                 </button>
-                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#FFFFFF" }}>2025 In Review</div>
+                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ background: "#FFFFFF", border: "1px solid #e8e8e6", borderRadius: 10, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e8e8e6"; }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>2025 In Review</div>
                   <div style={{ fontSize: 12, color: "#737373", marginTop: 4 }}>Opens in Canva</div>
                 </button>
               </div>
-
-              {/* FOOTER — Brand Book strip */}
-              <BrandBookFooter />
 
               {/* Fullscreen flow chart modal */}
               {flowChartFullscreen ? (
@@ -11743,6 +11753,7 @@ export default function App() {
           const currentPage = pageNames[view] || view || "Unknown";
           return <ChangeRequestWidget currentPage={currentPage} t={t} navigate={navigate} refreshOpenCount={() => { supabase.from("change_requests").select("id").eq("status", "open").then(({ data }) => setOpenChangeRequests((data || []).length)); }} />;
         })()}
+        <SiteFooter />
       </div>
     </ThemeContext.Provider>
   );
