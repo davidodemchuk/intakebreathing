@@ -58,17 +58,6 @@ import { supabase } from "./supabase.js";
 
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
-const IntakeLogo = ({ size = 28, showWordmark = true, color = "#FFFFFF" }) => (
-  <div style={{ display: "flex", alignItems: "center", gap: showWordmark ? 8 : 0, userSelect: "none" }}>
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20 2L35.588 11V29L20 38L4.412 29V11L20 2Z" fill={color} />
-      <path d="M20 10L28.66 15V25L20 30L11.34 25V15L20 10Z" fill={color === "#FFFFFF" ? "#000000" : "#FFFFFF"} />
-      <path d="M11.34 25L20 30L20 38L4.412 29V20L11.34 25Z" fill={color} />
-    </svg>
-    {showWordmark ? <span style={{ fontFamily: "'Inter', sans-serif", fontSize: size * 0.6, fontWeight: 500, color, letterSpacing: "-0.01em", lineHeight: 1 }}>intake</span> : null}
-  </div>
-);
-
 const CREATOR_COLUMNS = [
   { key: "select", label: "", width: 28, sortable: false },
   { key: "status", label: "Status", width: 100, filterable: true, sortable: true },
@@ -5753,7 +5742,7 @@ function SiteFooter() {
     <footer style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "48px 48px 32px", boxSizing: "border-box", marginTop: "auto" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
         <div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 500, color: "#FFFFFF", marginBottom: 8 }}>intake creators</div>
+          <img src="/intake-logo-white.png" alt="Intake" style={{ height: 20, width: "auto", objectFit: "contain", marginBottom: 8 }} />
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", lineHeight: 1.6, maxWidth: 260, marginBottom: 20 }}>Internal creator partnerships dashboard for Intake Breathing Technology.</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
@@ -10063,7 +10052,7 @@ export default function App() {
               <div className="no-print" style={S.nav}>
                 <div style={S.navLogo} onClick={() => navigate("library")}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <IntakeLogo size={26} showWordmark={true} color="#FFFFFF" />
+                    <img src="/intake-logo-white.png" alt="Intake" style={{ height: 26, width: "auto", objectFit: "contain" }} />
                     <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1, paddingLeft: 2 }}>{NAV_SUB_LABELS.creatorHub}</span>
                   </div>
                 </div>
@@ -10080,7 +10069,7 @@ export default function App() {
             <div className="no-print" style={S.nav}>
               <div style={S.navLogo} onClick={() => navigate("home")}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <IntakeLogo size={26} showWordmark={true} color="#FFFFFF" />
+                  <img src="/intake-logo-white.png" alt="Intake" style={{ height: 26, width: "auto", objectFit: "contain" }} />
                   <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1, paddingLeft: 2 }}>{navSubText}</span>
                 </div>
               </div>
