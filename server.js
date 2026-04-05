@@ -1200,6 +1200,51 @@ app.post("/api/sheets-refresh", (req, res) => {
 });
 
 // Static + SPA
+// ── Email + SMS campaign notifications ──
+async function getAppSetting(key) { const { data } = await supabaseServer.from("app_settings").select("value").eq("key", key).maybeSingle(); return data?.value || null; }
+
+app.post("/api/send-campaign-invite", async (req, res) => {
+  try {
+    const { creatorEmail, creatorPhone, creatorName, creatorHandle, campaignName, campaignId, briefSummary, estimatedRate, notifyEmail, notifySms } = req.body;
+    const results = { email: null, sms: null };
+    if (notifyEmail && creatorEmail) {
+      const resendKey = await getAppSetting("resend-api-key");
+      if (resendKey) {
+        const html = '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px"><h1 style="font-size:24px;font-weight:500;color:#0a0a0a;margin-bottom:8px">You\'re invited to a campaign</h1><p style="font-size:15px;color:#666;line-height:1.6;margin-bottom:24px">Hey ' + (creatorName || creatorHandle || "there") + ', the Intake Breathing team has invited you to create content for a new campaign.</p><div style="background:#f8f8f6;border:1px solid #e8e8e4;border-radius:12px;padding:20px;margin-bottom:24px"><div style="font-size:11px;font-weight:500;color:#00a86b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">CAMPAIGN</div><div style="font-size:18px;font-weight:500;color:#0a0a0a;margin-bottom:4px">' + campaignName + '</div>' + (briefSummary ? '<p style="font-size:13px;color:#666;line-height:1.5;margin:8px 0 0">' + briefSummary + '</p>' : '') + (estimatedRate ? '<div style="font-size:13px;color:#00a86b;font-weight:500;margin-top:8px">Estimated rate: $' + estimatedRate + '/video</div>' : '') + '</div><a href="https://www.intakecreators.com/creator/campaign?id=' + campaignId + '" style="display:inline-block;background:#00FEA9;color:#000;font-size:14px;font-weight:500;text-decoration:none;padding:12px 28px;border-radius:22px">View Campaign →</a><p style="font-size:12px;color:#999;margin-top:32px;line-height:1.5">You\'re receiving this because you\'re part of the Intake Breathing creator network.</p></div>';
+        const emailRes = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + resendKey, "Content-Type": "application/json" }, body: JSON.stringify({ from: "Intake Breathing <campaigns@intakecreators.com>", to: [creatorEmail], subject: "You're invited: " + campaignName + " — Intake Breathing", html }) });
+        results.email = emailRes.ok ? "sent" : "failed: " + (await emailRes.json().catch(() => ({}))).message;
+      } else results.email = "skipped: no Resend API key";
+    }
+    if (notifySms && creatorPhone) {
+      const sid = await getAppSetting("twilio-account-sid"); const token = await getAppSetting("twilio-auth-token"); const from = await getAppSetting("twilio-phone-number");
+      if (sid && token && from) {
+        let phone = creatorPhone.replace(/[^0-9+]/g, ""); if (!phone.startsWith("+")) phone = "+1" + phone.replace(/^1/, "");
+        const smsRes = await fetch("https://api.twilio.com/2010-04-01/Accounts/" + sid + "/Messages.json", { method: "POST", headers: { Authorization: "Basic " + Buffer.from(sid + ":" + token).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ To: phone, From: from, Body: 'Intake Breathing: You\'ve been invited to "' + campaignName + '"! Check your email or view: https://www.intakecreators.com/creator/campaign?id=' + campaignId }).toString() });
+        results.sms = smsRes.ok ? "sent" : "failed: " + (await smsRes.json().catch(() => ({}))).message;
+      } else results.sms = "skipped: Twilio not configured";
+    }
+    res.json({ ok: true, results });
+  } catch (err) { console.error("[notify] Campaign invite error:", err); res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/test-email", async (req, res) => {
+  try {
+    const key = await getAppSetting("resend-api-key"); if (!key) return res.status(400).json({ error: "No Resend API key" });
+    const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify({ from: "Intake Breathing <campaigns@intakecreators.com>", to: [req.body.email || "david@intakebreathing.com"], subject: "Intake Creators — Email test", html: "<p>Email sending is working. You're all set.</p>" }) });
+    r.ok ? res.json({ ok: true }) : res.status(400).json({ error: (await r.json().catch(() => ({}))).message || r.status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/test-sms", async (req, res) => {
+  try {
+    const sid = await getAppSetting("twilio-account-sid"); const token = await getAppSetting("twilio-auth-token"); const from = await getAppSetting("twilio-phone-number");
+    if (!sid || !token || !from) return res.status(400).json({ error: "Twilio credentials not set" });
+    let phone = (req.body.phone || "").replace(/[^0-9+]/g, ""); if (!phone) return res.status(400).json({ error: "No phone number" }); if (!phone.startsWith("+")) phone = "+1" + phone.replace(/^1/, "");
+    const r = await fetch("https://api.twilio.com/2010-04-01/Accounts/" + sid + "/Messages.json", { method: "POST", headers: { Authorization: "Basic " + Buffer.from(sid + ":" + token).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ To: phone, From: from, Body: "Intake Creators — SMS test. You're all set." }).toString() });
+    r.ok ? res.json({ ok: true }) : res.status(400).json({ error: (await r.json().catch(() => ({}))).message || r.status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.use(express.static(path.join(__dirname, "dist")));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "dist", "index.html")));
 

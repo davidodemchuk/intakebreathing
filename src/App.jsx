@@ -5824,6 +5824,7 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
       const conv = await dbGetOrCreateConversation(cr.id);
       if (conv) await dbSaveMessage({ conversation_id: conv.id, creator_id: cr.id, direction: "outbound", channel: "email", subject: "You\u2019re invited: " + (campaign?.name || "Campaign"), body: text, status: "sent", sent_at: new Date().toISOString(), ai_generated: true, campaign_id: campaign?.id });
       notifyOwners(cr.id, ch, "campaign_invite", { campaignName: campaign?.name });
+      try { await fetch("/api/send-campaign-invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creatorEmail: cr.email || null, creatorPhone: cr.phone || null, creatorName: cr.tiktokData?.displayName || cr.instagramData?.fullName || cr.name || null, creatorHandle: ch, campaignName: campaign?.name, campaignId: campaign?.id, briefSummary: campaign?.description || "", estimatedRate: cc.estimated_rate || null, notifyEmail: cr.notify_email !== false, notifySms: cr.notify_sms === true && !!cr.phone }) }); } catch (ne) { console.warn("[notify] Email/SMS failed:", ne.message); }
       setPreviewDraft(null);
     } catch (e) { alert("Send failed: " + e.message); }
   };
@@ -8595,6 +8596,15 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                   Send ↗
                 </a>
               ) : null}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Phone</div>
+            <input value={c.phone || ""} onChange={(e) => updateCreator(c.id, { phone: e.target.value })} placeholder="+1 (555) 123-4567" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+              <label style={{ fontSize: 11, color: t.textMuted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={c.notify_email !== false} onChange={(e) => updateCreator(c.id, { notify_email: e.target.checked })} style={{ accentColor: t.green }} />Email notifications</label>
+              <label style={{ fontSize: 11, color: t.textMuted, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={c.notify_sms === true} onChange={(e) => updateCreator(c.id, { notify_sms: e.target.checked })} style={{ accentColor: t.green }} />SMS notifications</label>
             </div>
           </div>
 

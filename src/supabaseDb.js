@@ -64,6 +64,9 @@ export function creatorToRow(c) {
     creator_tier: c.creator_tier || null,
     intake_size: c.intakeSize || c.intake_size || "",
     other_social: c.otherSocial || c.other_social || "",
+    phone: c.phone || "",
+    notify_email: c.notify_email !== false,
+    notify_sms: c.notify_sms === true,
   };
 
   const clean = {};
@@ -142,6 +145,9 @@ export function rowToCreator(row) {
     creator_tier: row.creator_tier || null,
     intakeSize: row.intake_size || "",
     otherSocial: row.other_social || "",
+    phone: row.phone || "",
+    notify_email: row.notify_email !== false,
+    notify_sms: row.notify_sms === true,
   };
 }
 
