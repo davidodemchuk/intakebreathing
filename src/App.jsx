@@ -8173,6 +8173,30 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               }}
             />
           </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Intake Size</div>
+            <select
+              value={c.intakeSize || c.intake_size || ""}
+              onChange={(e) => updateCreator(c.id, { intakeSize: e.target.value })}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+            >
+              <option value="">Not set</option>
+              <option value="Small">Small</option>
+              <option value="Medium">Medium</option>
+              <option value="Large">Large</option>
+              <option value="XL">XL</option>
+              <option value="Not sure">Not sure</option>
+            </select>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Other Social</div>
+            <input
+              value={c.otherSocial || c.other_social || ""}
+              onChange={(e) => updateCreator(c.id, { otherSocial: e.target.value })}
+              placeholder="Platform: @handle"
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+            />
+          </div>
         </div>
         <div style={{ flex: "1 1 280px", minWidth: 240 }}>
           <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Contact & Links</div>
@@ -8255,22 +8279,30 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             ) : null}
           </div>
 
-          {c.youtubeData?.channelUrl ? (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>YouTube</div>
-              <a
-                href={c.youtubeData.channelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: "inline-flex", padding: "8px 12px", borderRadius: 8, background: "#FF000012", border: "1px solid #FF000025", fontSize: 12, fontWeight: 600, color: "#FF0000", textDecoration: "none", gap: 4 }}
-              >
-                YouTube ↗
-              </a>
-              {c.youtubeData.subscribers ? (
-                <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 8 }}>{formatMetricShort(c.youtubeData.subscribers)} subscribers</span>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>YouTube</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={c.youtubeHandle || ""}
+                onChange={(e) => updateCreator(c.id, { youtubeHandle: e.target.value.replace("@", "").trim() })}
+                placeholder="channel or handle"
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
+              />
+              {(c.youtubeData?.channelUrl || c.youtubeHandle) ? (
+                <a
+                  href={c.youtubeData?.channelUrl || ("https://youtube.com/@" + (c.youtubeHandle || ""))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: "8px 12px", borderRadius: 8, background: "#FF000012", border: "1px solid #FF000025", fontSize: 11, fontWeight: 600, color: "#FF0000", textDecoration: "none", whiteSpace: "nowrap" }}
+                >
+                  Open ↗
+                </a>
               ) : null}
             </div>
-          ) : null}
+            {c.youtubeData?.subscribers ? (
+              <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{formatMetricShort(c.youtubeData.subscribers)} subscribers</div>
+            ) : null}
+          </div>
 
           {c.twitterData?.followers ? (
             <div style={{ marginBottom: 12 }}>
