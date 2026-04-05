@@ -5674,6 +5674,24 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 // ═══ Creator Portal components moved to ./components/CreatorPortal.jsx ═══
 
 // ═══════════════════════════════════════════════════════════
+// HOMEPAGE HERO — full-width brand header
+// ═══════════════════════════════════════════════════════════
+
+function HomepageHero({ navigate }) {
+  return (
+    <div style={{ width: "100%", background: "#000000", padding: "72px 48px 64px", borderBottom: "1px solid #1a1a1a", boxSizing: "border-box" }}>
+      <div style={{ color: "#00FEA9", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 20 }}>Intake Creators — Internal Dashboard</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 64, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.05, letterSpacing: "-0.02em", maxWidth: 700, marginBottom: 20 }}>Life Changing<br />Breathing.</div>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#737373", maxWidth: 480, lineHeight: 1.6, marginBottom: 36 }}>Manage your creator partnerships, campaigns, and UGC pipeline — all in one place.</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <button onClick={() => navigate("creatorHub")} style={{ background: "#00FEA9", color: "#000000", height: 50, borderRadius: 25, fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 15, padding: "0 32px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease" }} onMouseEnter={(e) => { e.target.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.target.style.opacity = "1"; }}>Open Creator Hub</button>
+        <div style={{ color: "#737373", fontSize: 13, fontWeight: 400 }}>{"\u2B21"} Intake Creators v{APP_VERSION}</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // BRAND BOOK BLOCK — homepage inline component
 // ═══════════════════════════════════════════════════════════
 
@@ -10143,16 +10161,11 @@ export default function App() {
         {/* HOME — hero + secondary cards */}
         {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
           return (
-            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+            <div style={{ animation: "fadeIn 0.3s ease" }}>
+              <HomepageHero navigate={navigate} />
+              <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 60px" }}>
               {/* Header */}
               <div style={{ marginBottom: 32 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                  <img src="/favicon-32.png" alt="" style={{ width: 32, height: 32 }} onError={(e) => { e.target.style.display = "none"; }} />
-                  <div>
-                    <div style={{ fontSize: 24, fontWeight: 500, color: t.text, letterSpacing: "-0.03em" }}>Creator Partnerships</div>
-                    <div style={{ fontSize: 12, color: t.textFaint }}>Intake Breathing Technology</div>
-                  </div>
-                </div>
 
                 {/* Creator Hub — hero card */}
                 <div onClick={() => navigate("creatorHub")}
@@ -10272,6 +10285,7 @@ export default function App() {
               ) : null}
 
               <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60", marginTop: 16 }}>v{APP_VERSION}</div>
+            </div>
             </div>
           );
         })()}
