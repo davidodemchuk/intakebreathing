@@ -713,7 +713,7 @@ const ThemeContext = createContext();
 
 const NAV_SECTIONS = {
   dashboard: ["home"],
-  creatorHub: ["creatorHub", "ugcDashboard", "create", "display", "library", "creators", "creatorDetail"],
+  creatorHub: ["creatorHub", "ugcDashboard", "create", "display", "library", "creators", "creatorDetail", "campaigns", "campaignDetail"],
   tools: ["tools", "videotool"],
   pipeline: ["pipeline"],
   influencer: ["influencer"],
@@ -759,6 +759,7 @@ const ROUTES = {
   "/change-requests": "changeRequests",
   "/messaging": "messaging",
   "/campaigns": "campaigns",
+  "/creator-hub/campaign": "campaignDetail",
   "/creator": "creatorLogin",
   "/creator/dashboard": "creatorDashboard",
   "/creator/onboard": "creatorOnboard",
@@ -786,6 +787,7 @@ const VIEW_TO_PATH = {
   changeRequests: "/change-requests",
   messaging: "/messaging",
   campaigns: "/campaigns",
+  campaignDetail: "/creator-hub/campaign",
   creatorLogin: "/creator",
   creatorDashboard: "/creator/dashboard",
   creatorOnboard: "/creator/onboard",
@@ -816,6 +818,7 @@ function getViewFromPath() {
   if (path === "/channel-pipeline" || path.startsWith("/channel-pipeline/")) return "pipeline";
   if (path === "/messaging") return "messaging";
   if (path === "/campaigns" || path.startsWith("/campaigns")) return "campaigns";
+  if (path === "/creator-hub/campaign") return "campaignDetail";
   return ROUTES[path] || "home";
 }
 
@@ -5685,30 +5688,18 @@ function CreatorHubHero({ stats, onOpen, onNav, isDark = true }) {
       <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 44, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 4 }}>Creator Hub</div>
       <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 4, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
       <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 16, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
-      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="stat-card" onClick={() => onNav("creators")} style={cardS(accent)} onMouseEnter={(e) => hIn(e, accent)} onMouseLeave={(e) => hOut(e, accent)}>
           <div style={{ marginBottom: 14 }}><CardIcon type="creator" color={accent} /></div>
-          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Active Creators</div>
-          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>View, search, and manage your creator roster</div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Creators</div>
+          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Your full creator roster — search, filter, enrich, and manage partnerships</div>
           <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{stats.creators ?? "\u2014"} active</div>
         </div>
-        <div className="stat-card" onClick={onOpen} style={cardS(accent)} onMouseEnter={(e) => hIn(e, accent)} onMouseLeave={(e) => hOut(e, accent)}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={accent} /></div>
-          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Programs</div>
-          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Creator tiers, onboarding flows, and scoring</div>
-          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{stats.programs ?? "\u2014"} programs</div>
-        </div>
-        <div className="stat-card" onClick={() => onNav("create")} style={cardS(accent)} onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.briefHoverBorder; e.currentTarget.style.boxShadow = "0 4px 16px " + accent + "15"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = accent + "60"; e.currentTarget.style.boxShadow = "0 2px 8px " + accent + "08"; }}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={accent} /></div>
-          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>New Brief</div>
-          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Create a UGC creator brief with IB-Ai</div>
-          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>IB-Ai powered</div>
-        </div>
-        <div className="stat-card" onClick={() => onNav("campaigns")} style={cardS(accent)} onMouseEnter={(e) => hIn(e, accent)} onMouseLeave={(e) => hOut(e, accent)}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={accent} /></div>
+        <div className="stat-card" onClick={() => onNav("campaigns")} style={cardS(isDark ? "#63B7BA" : "#3A7E82")} onMouseEnter={(e) => hIn(e, isDark ? "#63B7BA" : "#3A7E82")} onMouseLeave={(e) => hOut(e, isDark ? "#63B7BA" : "#3A7E82")}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={isDark ? "#63B7BA" : "#3A7E82"} /></div>
           <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Campaigns</div>
-          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, invite creators, track results</div>
-          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{stats.campaigns ?? "\u2014"} campaigns</div>
+          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns with IB-Ai briefs, assign creators, and track deliverables</div>
+          <div style={{ fontSize: 12, color: isDark ? "#63B7BA" : "#3A7E82", fontWeight: 500 }}>{stats.campaigns ?? "\u2014"}</div>
         </div>
       </div>
     </div>
@@ -8459,6 +8450,9 @@ export default function App() {
     if (newView === "creatorDetail" && o.creatorId) {
       path = `/creator-hub/creator?id=${encodeURIComponent(String(o.creatorId))}`;
     }
+    if (newView === "campaignDetail" && o.campaignId) {
+      path = `/creator-hub/campaign?id=${encodeURIComponent(String(o.campaignId))}`;
+    }
     if (newView === "creatorBriefView" && (o.briefId || o.assignmentId)) {
       const q = new URLSearchParams();
       if (o.briefId) q.set("briefId", String(o.briefId));
@@ -10243,8 +10237,15 @@ export default function App() {
         {/* CAMPAIGNS */}
         {!aiLoading && isCreatorViewAllowed && view === "campaigns" && (
           <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
-            <button type="button" onClick={() => navigate("home")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
+            <button type="button" onClick={() => navigate("creatorHub")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>&larr; Back to Creator Hub</button>
             <CampaignsPage t={t} S={S} teamMembers={teamMembers} creators={creators} navigate={navigate} briefs={library} />
+          </div>
+        )}
+        {!aiLoading && isCreatorViewAllowed && view === "campaignDetail" && (
+          <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+            <button type="button" onClick={() => navigate("campaigns")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 12 }}>&larr; Back to Campaigns</button>
+            <div style={{ fontSize: 24, fontWeight: 500, color: t.text, marginBottom: 8 }}>Campaign Detail</div>
+            <div style={{ fontSize: 13, color: t.textMuted }}>Phase 2 will build this view with Brief, Creators, and Tracking sections.</div>
           </div>
         )}
 

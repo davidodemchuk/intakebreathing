@@ -41,8 +41,7 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
       <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
         {[
           { v: active, l: "Active Creators", c: t.green },
-          { v: library.length, l: "Briefs Created", c: t.blue },
-          { v: vids, l: "Videos Tracked", c: t.orange },
+          { v: "\u2014", l: "Campaigns", c: t.blue },
           { v: scored, l: "Creators Scored", c: t.purple || "#8b6cc4" },
         ].map((s, i) => (
           <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
@@ -52,66 +51,25 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: t.text, letterSpacing: "-0.01em" }}>Programs</div>
-        <button onClick={() => goToProgram("all")} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer", fontWeight: 600 }}>View all {total} creators &rarr;</button>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
-        {programs.map(prog => (
-          <div key={prog.id} style={cardStyle(prog.color)} onClick={() => goToProgram(prog.id)}
-            onMouseEnter={(e) => hoverIn(e, prog.color)} onMouseLeave={(e) => hoverOut(e, prog.color)}>
-            <div style={{ marginBottom: 14 }}><CardIcon type={prog.icon} color={prog.color} /></div>
-            <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>{prog.name}</div>
-            <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>{prog.desc}</div>
-            <div style={{ fontSize: 12, color: prog.color, fontWeight: 600 }}>{programCounts[prog.id]} creator{programCounts[prog.id] !== 1 ? "s" : ""}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
-        <div style={cardStyle(t.green)} onClick={() => navigate("create")}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+        <div style={cardStyle(t.green)} onClick={() => navigate("creators")}
           onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={(e) => hoverOut(e, t.green)}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.green} /></div>
-          <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>New Brief</div>
-          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create a UGC creator brief with IB-Ai</div>
-          <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>IB-Ai powered</div>
+          <div style={{ marginBottom: 14 }}><CardIcon type="creator" color={t.green} /></div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Creators</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Your full creator roster — search, filter by program, enrich profiles, and manage partnerships</div>
+          <div style={{ fontSize: 12, color: t.green, fontWeight: 500 }}>{active} active &middot; {scored} scored &middot; {total} total</div>
         </div>
 
         <div style={cardStyle(t.blue)} onClick={() => navigate("campaigns")}
           onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={(e) => hoverOut(e, t.blue)}>
           <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.blue} /></div>
           <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Campaigns</div>
-          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, invite creators, track results</div>
-          <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>Manage campaigns</div>
-        </div>
-
-        <div style={cardStyle(t.orange)} onClick={() => navigate("library")}
-          onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={(e) => hoverOut(e, t.orange)}>
-          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.orange} /></div>
-          <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Brief Library</div>
-          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Browse, edit, and regenerate your saved briefs</div>
-          <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns with IB-Ai briefs, assign creators, and track deliverables</div>
+          <div style={{ fontSize: 12, color: t.blue, fontWeight: 500 }}>Create your first campaign</div>
         </div>
       </div>
 
-      {library.length > 0 ? (
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, letterSpacing: "-0.01em", marginBottom: 10 }}>Recent Briefs</div>
-          {library.slice(0, 5).map((item) => (
-            <div key={item.id} onClick={() => navigate("display")}
-              style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.name}</div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>{item.formData?.manager || ""} · {item.date}</div>
-              </div>
-              <span style={{ fontSize: 11, color: t.textFaint }}>&rarr;</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <button onClick={() => navigate("campaigns")} style={{ background: t.green, color: t.isLight ? "#fff" : "#000", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 28px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>+ New Campaign</button>
     </div>
   );
 }
