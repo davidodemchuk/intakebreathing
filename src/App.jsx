@@ -6342,6 +6342,15 @@ function ReformatNotificationBar({ job, setJob, t }) {
   );
 }
 
+// NOTE: Update this list to match your exact brand book fonts.
+const BRAND_FONTS = [
+  { name: "Roboto",           family: "Roboto, sans-serif",            weights: ["400","500","700","900"], label: "Roboto — Primary" },
+  { name: "Roboto Condensed", family: "'Roboto Condensed', sans-serif", weights: ["400","700"],            label: "Roboto Condensed — Headlines" },
+  { name: "Montserrat",       family: "Montserrat, sans-serif",        weights: ["400","500","600","700","800","900"], label: "Montserrat — Bold" },
+];
+
+const WEIGHT_LABELS = { "400": "Regular", "500": "Medium", "600": "Semi-Bold", "700": "Bold", "800": "Extra Bold", "900": "Black" };
+
 const FORMAT_PREVIEW_DIMS = {
   "16:9": { w: 1920, h: 1080, displayW: 300, displayH: 169 },
   "1:1":  { w: 1080, h: 1080, displayW: 200, displayH: 200 },
@@ -6349,7 +6358,7 @@ const FORMAT_PREVIEW_DIMS = {
   "9:16": { w: 1080, h: 1920, displayW: 135, displayH: 240 },
 };
 
-function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onTextDrag, onTemplateChange, templates, selectedTemplateId }) {
+function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onUpdateOverlayPosition, onTemplateChange, templates, selectedTemplateId }) {
   const containerRef = useRef(null);
   const [dragging, setDragging] = useState(null);
 
@@ -6365,42 +6374,24 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
   const vidLeft = (dims.displayW - vidDisplayW) / 2;
   const vidTop = (dims.displayH - vidDisplayH) / 2;
 
-  // CSS position style for preset text positions
-  const getPresetStyle = (preset) => {
-    const pad = Math.max(2, Math.round(20 * scale));
-    switch (preset) {
-      case "top-left":     return { top: pad, left: pad };
-      case "top-center":   return { top: pad, left: "50%", transform: "translateX(-50%)" };
-      case "top-right":    return { top: pad, right: pad };
-      case "center":       return { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
-      case "bottom-left":  return { bottom: pad, left: pad };
-      case "bottom-right": return { bottom: pad, right: pad };
-      default:             return { bottom: pad, left: "50%", transform: "translateX(-50%)" };
-    }
-  };
-
   const handleMouseDown = (e, origIdx) => {
     e.preventDefault();
+    e.stopPropagation();
     const overlay = textOverlays[origIdx];
-    let baseX, baseY;
-    if (overlay.customPosition?.[format.ratio]) {
-      baseX = overlay.customPosition[format.ratio].x;
-      baseY = overlay.customPosition[format.ratio].y;
-    } else if (containerRef.current) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cRect = containerRef.current.getBoundingClientRect();
-      baseX = (rect.left - cRect.left) / scale;
-      baseY = (rect.top - cRect.top) / scale;
-    } else { baseX = 0; baseY = 0; }
-    setDragging({ index: origIdx, startX: e.clientX, startY: e.clientY, baseX, baseY });
+    const pos = overlay.positions?.[format.ratio];
+    const origX = pos?.x ?? Math.round(dims.w / 2);
+    const origY = pos?.y ?? Math.round(dims.h * 0.9);
+    setDragging({ index: origIdx, startX: e.clientX, startY: e.clientY, origX, origY });
   };
 
   useEffect(() => {
-    if (dragging === null) return;
+    if (!dragging) return;
     const onMove = (e) => {
-      const newX = dragging.baseX + (e.clientX - dragging.startX) / scale;
-      const newY = dragging.baseY + (e.clientY - dragging.startY) / scale;
-      onTextDrag(format.ratio, dragging.index, newX, newY);
+      const dx = (e.clientX - dragging.startX) / scale;
+      const dy = (e.clientY - dragging.startY) / scale;
+      const newX = Math.max(0, Math.min(dims.w - 50, dragging.origX + dx));
+      const newY = Math.max(0, Math.min(dims.h - 30, dragging.origY + dy));
+      onUpdateOverlayPosition(dragging.index, format.ratio, Math.round(newX), Math.round(newY));
     };
     const onUp = () => setDragging(null);
     window.addEventListener("mousemove", onMove);
@@ -6411,6 +6402,8 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
   const isBlur = !template || template.type === "blur";
   const blurSigma = Math.round((template?.blur_sigma || 50) / 3);
   const brightness = template?.darken_opacity != null ? (1 - parseFloat(template.darken_opacity)).toFixed(2) : "0.55";
+
+  const visibleOverlays = textOverlays.filter(o => o.content?.trim() && (o.applyTo === "all" || o.applyTo === format.ratio));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
@@ -6427,27 +6420,31 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
         {/* Video frame */}
         {previewFrame && <img src={previewFrame} alt="" style={{ position: "absolute", left: vidLeft, top: vidTop, width: vidDisplayW, height: vidDisplayH, objectFit: "contain" }} />}
 
-        {/* Text overlays */}
+        {/* Text overlays — free-placed */}
         {textOverlays.map((overlay, origIdx) => {
           if (!overlay.content?.trim()) return null;
           if (overlay.applyTo !== "all" && overlay.applyTo !== format.ratio) return null;
           const baseFontSize = overlay.fontSizeOverrides?.[format.ratio] || overlay.font_size || 36;
           const scaledFont = Math.max(7, Math.round(baseFontSize * scale));
-          const customPos = overlay.customPosition?.[format.ratio];
+          const pos = overlay.positions?.[format.ratio];
+          const posX = (pos?.x ?? Math.round(dims.w / 2)) * scale;
+          const posY = (pos?.y ?? Math.round(dims.h * 0.9)) * scale;
           const bgPad = overlay.background_color ? Math.max(1, Math.round((overlay.background_padding || 10) * scale)) : 0;
-          const posStyle = customPos
-            ? { left: Math.round(customPos.x * scale), top: Math.round(customPos.y * scale) }
-            : getPresetStyle(overlay.position_preset);
+          const fontFamily = overlay.font_family ? `${overlay.font_family}, sans-serif` : "Roboto, sans-serif";
+          const isDraggingThis = dragging?.index === origIdx;
           return (
             <div key={origIdx} onMouseDown={(e) => handleMouseDown(e, origIdx)} style={{
-              position: "absolute", ...posStyle,
-              fontSize: scaledFont, fontWeight: overlay.font_weight || "bold",
+              position: "absolute", left: posX, top: posY,
+              fontSize: scaledFont, fontFamily, fontWeight: overlay.font_weight || "700",
               color: overlay.font_color || "#fff",
               background: overlay.background_color || "transparent",
               padding: bgPad ? `${bgPad}px` : 0,
               borderRadius: bgPad ? 2 : 0,
-              cursor: "grab", userSelect: "none", whiteSpace: "nowrap", lineHeight: 1.2,
-              textShadow: !overlay.background_color ? "0 1px 2px rgba(0,0,0,0.9)" : "none",
+              cursor: isDraggingThis ? "grabbing" : "grab",
+              userSelect: "none", whiteSpace: "nowrap", lineHeight: 1.2,
+              textShadow: !overlay.background_color ? "0 1px 4px rgba(0,0,0,0.9)" : "none",
+              outline: isDraggingThis ? "1px dashed rgba(0,254,169,0.6)" : "none",
+              outlineOffset: 3,
               maxWidth: dims.displayW - 8, overflow: "hidden", textOverflow: "ellipsis",
             }}>
               {(overlay.content || "")
@@ -6468,6 +6465,13 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
           <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
         ))}
       </select>
+
+      {/* Position coordinates for placed text */}
+      {visibleOverlays.map((o, i) => (
+        <div key={i} style={{ fontSize: 8, color: t.textFaint, textAlign: "center" }}>
+          Text {textOverlays.indexOf(o) + 1}: x={o.positions?.[format.ratio]?.x ?? "—"}, y={o.positions?.[format.ratio]?.y ?? "—"}
+        </div>
+      ))}
     </div>
   );
 }
@@ -6528,9 +6532,22 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
 
   const addOverlay = () => {
     setTextOverlays(prev => [...prev, {
-      content: "", position_preset: "bottom-center", font_size: 36,
-      font_color: "#FFFFFF", font_weight: "bold", background_color: "rgba(0,0,0,0.6)",
-      background_padding: 10, timing: "full", applyTo: "all",
+      content: "",
+      positions: {
+        "16:9": { x: 960,  y: 980  },
+        "1:1":  { x: 540,  y: 980  },
+        "4:5":  { x: 540,  y: 1250 },
+        "9:16": { x: 540,  y: 1800 },
+      },
+      font_size: 36,
+      font_family: "Roboto",
+      font_weight: "700",
+      font_color: "#FFFFFF",
+      background_color: "rgba(0,0,0,0.6)",
+      background_padding: 10,
+      timing: "full",
+      applyTo: "all",
+      fontSizeOverrides: {},
     }]);
   };
 
@@ -6573,10 +6590,10 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
     }
   };
 
-  const handleTextDrag = (formatRatio, overlayIndex, x, y) => {
+  const handleUpdateOverlayPosition = (overlayIndex, formatRatio, x, y) => {
     setTextOverlays(prev => prev.map((overlay, i) => {
       if (i !== overlayIndex) return overlay;
-      return { ...overlay, customPosition: { ...(overlay.customPosition || {}), [formatRatio]: { x, y } } };
+      return { ...overlay, positions: { ...(overlay.positions || {}), [formatRatio]: { x, y } } };
     }));
   };
 
@@ -7164,7 +7181,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                         textOverlays={textOverlays}
                         t={t}
                         videoInfo={video}
-                        onTextDrag={handleTextDrag}
+                        onUpdateOverlayPosition={handleUpdateOverlayPosition}
                         onTemplateChange={handleTemplateChange}
                         templates={templates}
                         selectedTemplateId={templateId}
@@ -7199,43 +7216,52 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {/* Font family */}
                 <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Position</label>
-                  <select value={overlay.position_preset} onChange={(e) => updateOverlay(i, "position_preset", e.target.value)}
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Font</label>
+                  <select value={overlay.font_family || "Roboto"} onChange={(e) => updateOverlay(i, "font_family", e.target.value)}
                     style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    <option value="top-left">Top Left</option>
-                    <option value="top-center">Top Center</option>
-                    <option value="top-right">Top Right</option>
-                    <option value="center">Center</option>
-                    <option value="bottom-left">Bottom Left</option>
-                    <option value="bottom-center">Bottom Center</option>
-                    <option value="bottom-right">Bottom Right</option>
+                    {BRAND_FONTS.map(f => <option key={f.name} value={f.name}>{f.label}</option>)}
                   </select>
                 </div>
 
+                {/* Font weight */}
                 <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Size</label>
-                  <select value={overlay.font_size} onChange={(e) => updateOverlay(i, "font_size", Number(e.target.value))}
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Weight</label>
+                  <select value={overlay.font_weight || "700"} onChange={(e) => updateOverlay(i, "font_weight", e.target.value)}
                     style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    <option value={24}>Small (24px)</option>
-                    <option value={36}>Medium (36px)</option>
-                    <option value={48}>Large (48px)</option>
-                    <option value={64}>XL (64px)</option>
+                    {(BRAND_FONTS.find(f => f.name === (overlay.font_family || "Roboto"))?.weights || ["400","700"]).map(w => (
+                      <option key={w} value={w}>{WEIGHT_LABELS[w] || w}</option>
+                    ))}
                   </select>
                 </div>
 
+                {/* Font size — free number input */}
+                <div>
+                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Size (px)</label>
+                  <input type="number" min={8} max={200} value={overlay.font_size || 36}
+                    onChange={(e) => updateOverlay(i, "font_size", Math.max(8, Number(e.target.value) || 36))}
+                    style={{ width: 64, padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }} />
+                </div>
+
+                {/* Color swatches + hex input */}
                 <div>
                   <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Color</label>
-                  <div style={{ display: "flex", gap: 4, marginTop: 2 }}>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     {["#FFFFFF", "#000000", "#00FEA9", "#FF6B6B", "#63B7BA"].map(c => (
                       <div key={c} onClick={() => updateOverlay(i, "font_color", c)} style={{
-                        width: 24, height: 24, borderRadius: 4, background: c, cursor: "pointer",
+                        width: 22, height: 22, borderRadius: 4, background: c, cursor: "pointer",
                         border: overlay.font_color === c ? "2px solid " + t.green : "1px solid " + t.border,
+                        flexShrink: 0,
                       }} />
                     ))}
+                    <input type="text" value={overlay.font_color || "#FFFFFF"}
+                      onChange={(e) => updateOverlay(i, "font_color", e.target.value)}
+                      style={{ width: 72, padding: "4px 6px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11 }} />
                   </div>
                 </div>
 
+                {/* Background pill */}
                 <div>
                   <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Background</label>
                   <select value={overlay.background_color || "none"} onChange={(e) => updateOverlay(i, "background_color", e.target.value === "none" ? null : e.target.value)}
@@ -7247,6 +7273,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                   </select>
                 </div>
 
+                {/* Timing */}
                 <div>
                   <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>When</label>
                   <select value={overlay.timing} onChange={(e) => updateOverlay(i, "timing", e.target.value)}
@@ -7257,6 +7284,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                   </select>
                 </div>
 
+                {/* Apply to format */}
                 <div>
                   <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Formats</label>
                   <select value={overlay.applyTo || "all"} onChange={(e) => updateOverlay(i, "applyTo", e.target.value)}
@@ -7294,6 +7322,11 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             </div>
           ))}
 
+          {textOverlays.length > 0 && (
+            <div style={{ fontSize: 11, color: t.textFaint, fontStyle: "italic", marginBottom: 6 }}>
+              Drag text directly on the preview panels to position it. Each format can have its own text position.
+            </div>
+          )}
           {textOverlays.length > 0 && (
             <button onClick={saveOverlaysToTemplate} disabled={savingOverlays}
               style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, cursor: savingOverlays ? "not-allowed" : "pointer", opacity: savingOverlays ? 0.6 : 1 }}>

@@ -1023,9 +1023,13 @@ function buildTextOverlayFilters(overlays, targetW, targetH, videoDuration, form
       const fontSize = overlay.fontSizeOverrides?.[formatRatio] || overlay.font_size || 36;
       const fontColor = (overlay.font_color || "white").replace(/#/g, "0x");
 
-      // Position mapping — use custom drag position if set, else preset
+      // Position mapping — use drag position if set, else preset
+      const fontName = (overlay.font_family || "Roboto").replace(/'/g, "");
       let x, y;
-      if (overlay.customPosition?.[formatRatio]) {
+      if (overlay.positions?.[formatRatio]) {
+        x = String(Math.round(overlay.positions[formatRatio].x));
+        y = String(Math.round(overlay.positions[formatRatio].y));
+      } else if (overlay.customPosition?.[formatRatio]) {
         x = String(Math.round(overlay.customPosition[formatRatio].x));
         y = String(Math.round(overlay.customPosition[formatRatio].y));
       } else {
@@ -1064,7 +1068,7 @@ function buildTextOverlayFilters(overlays, targetW, targetH, videoDuration, form
         enable = `:enable='gte(t,${startTime})'`;
       }
 
-      return `drawtext=text='${text}':fontsize=${fontSize}:fontcolor=${fontColor}:x=${x}:y=${y}${boxOpts}${enable}`;
+      return `drawtext=font='${fontName}':text='${text}':fontsize=${fontSize}:fontcolor=${fontColor}:x=${x}:y=${y}${boxOpts}${enable}`;
     });
 
   return filters.join(",");
