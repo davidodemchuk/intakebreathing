@@ -4464,6 +4464,8 @@ const BriefForm = memo(function BriefForm({ prefill, onGenerate, aiKnowledge, te
   const [showCustomTone, setShowCustomTone] = useState((pf.tone || DEFAULTS.tone) === "Other");
   const [showCustomManager, setShowCustomManager] = useState((pf.manager || DEFAULTS.manager) === "Other");
   const [managerSel, setManagerSel] = useState(pf.manager ?? DEFAULTS.manager);
+  const [showSubmitterPicker, setShowSubmitterPicker] = useState(false);
+  const [submitterSearch, setSubmitterSearch] = useState("");
   const [contentQty, setContentQty] = useState(pf.contentQuantity ?? DEFAULTS.contentQuantity);
   const [supervisionLevel, setSupervisionLevel] = useState(pf.supervisionLevel ?? DEFAULTS.supervisionLevel);
   const [otherPlatformDraft, setOtherPlatformDraft] = useState("");
@@ -4660,22 +4662,33 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         <div style={S.r3}>
           <div style={S.fg}>
             <label style={S.label}>Submitted By</label>
-            <select
-              style={S.select}
-              value={managerSel}
-              onChange={(e) => {
-                const v = e.target.value;
-                vals.current.manager = v;
-                setManagerSel(v);
-                setShowCustomManager(v === "Other");
-              }}
-            >
-              {(teamMembers.filter(m => ["owner", "manager", "team"].includes(m.role)).length > 0 ? teamMembers.filter(m => ["owner", "manager", "team"].includes(m.role)).map(m => (
-                <option key={m.id} value={m.name}>{m.name}{m.title ? " \u2014 " + m.title : ""}</option>
-              )) : MANAGERS.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              )))}
-            </select>
+            {(() => {
+              const filteredTeam = teamMembers.filter(m => ["owner", "manager", "team"].includes(m.role));
+              const selMember = filteredTeam.find(m => m.name === managerSel);
+              if (filteredTeam.length === 0) return <select style={S.select} value={managerSel} onChange={(e) => { vals.current.manager = e.target.value; setManagerSel(e.target.value); setShowCustomManager(e.target.value === "Other"); }}>{MANAGERS.map(m => <option key={m} value={m}>{m}</option>)}</select>;
+              return (
+                <div style={{ position: "relative" }} data-submitter-picker>
+                  <button type="button" onClick={() => setShowSubmitterPicker(p => !p)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, cursor: "pointer", width: "100%", textAlign: "left", boxSizing: "border-box" }}>
+                    {selMember?.avatar_url ? <img src={selMember.avatar_url} alt="" style={{ width: 28, height: 28, borderRadius: 14, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 28, height: 28, borderRadius: 14, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: t.textFaint }}>{(managerSel || "?").charAt(0).toUpperCase()}</div>}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{managerSel || "Select team member"}</div>
+                      {selMember?.title ? <div style={{ fontSize: 11, color: t.textFaint }}>{selMember.title}</div> : null}
+                    </div>
+                    <span style={{ fontSize: 11, color: t.textFaint }}>{"\u25BE"}</span>
+                  </button>
+                  {showSubmitterPicker ? <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.3)", marginTop: 4, maxHeight: 320, overflowY: "auto" }}>
+                    <input type="text" placeholder="Search team..." value={submitterSearch} onChange={(e) => setSubmitterSearch(e.target.value)} autoFocus style={{ width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid " + t.border, background: "transparent", color: t.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    {filteredTeam.filter(m => !submitterSearch || m.name.toLowerCase().includes(submitterSearch.toLowerCase())).map(m => (
+                      <div key={m.id} onClick={() => { vals.current.manager = m.name; setManagerSel(m.name); setShowCustomManager(false); setShowSubmitterPicker(false); setSubmitterSearch(""); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                        {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 500, color: t.textFaint }}>{m.name.charAt(0).toUpperCase()}</div>}
+                        <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{m.name}</div>{m.title ? <div style={{ fontSize: 11, color: t.textFaint }}>{m.title}</div> : null}</div>
+                        {m.name === managerSel ? <span style={{ fontSize: 11, color: t.green }}>{"\u2713"}</span> : null}
+                      </div>
+                    ))}
+                  </div> : null}
+                </div>
+              );
+            })()}
           </div>
           <div style={S.fg}>
             <label style={S.label}># of Videos Needed</label>
