@@ -9854,78 +9854,125 @@ export default function App() {
           </div>
         )}
 
-        {/* HOME — card grid (managers only; creators use library) */}
+        {/* HOME — hero + secondary cards */}
         {!aiLoading && isCreatorViewAllowed && view === "home" && (() => {
-          const activeCreatorCount = creators.filter((c) => c.status === "Active").length;
-          const homeCard = (accentColor) => ({
-            background: t.card, border: `2px solid ${accentColor}60`, borderRadius: 14, padding: 22,
-            cursor: "pointer", boxShadow: `0 2px 8px ${accentColor}08`,
-            transition: "border-color 0.2s, box-shadow 0.2s",
-          });
-          const homeHoverIn = (e, accentColor) => { e.currentTarget.style.borderColor = accentColor; e.currentTarget.style.boxShadow = `0 4px 16px ${accentColor}15`; };
-          const homeHoverOut = (e, accentColor) => { e.currentTarget.style.borderColor = accentColor + "60"; e.currentTarget.style.boxShadow = `0 2px 8px ${accentColor}08`; };
-
           return (
-            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Intake Breathing</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Partnerships</div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 32 }}>
-                <div style={homeCard(t.green)} onClick={() => navigate("creatorHub")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.green)} onMouseLeave={(e) => homeHoverOut(e, t.green)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="ugc" color={t.green} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Hub</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creators, campaigns, briefs — all programs in one place</div>
-                  <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>{creators.length} creators · {[...new Set(creators.flatMap(c => c.programs || []))].length} programs</div>
+            <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px 60px", animation: "fadeIn 0.3s ease" }}>
+              {/* Header */}
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <img src="/favicon-32.png" alt="" style={{ width: 32, height: 32 }} onError={(e) => { e.target.style.display = "none"; }} />
+                  <div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.03em" }}>Creator Partnerships</div>
+                    <div style={{ fontSize: 12, color: t.textFaint }}>Intake Breathing Technology</div>
+                  </div>
                 </div>
 
-                <div style={homeCard(t.orange)} onClick={() => navigate("pipeline")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.orange)} onMouseLeave={(e) => homeHoverOut(e, t.orange)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="pipeline" color={t.orange} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Channel Pipeline</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Performance, spend, and operations across all channels</div>
-                  <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>8 tabs · Live data</div>
+                {/* Creator Hub — hero card */}
+                <div onClick={() => navigate("creatorHub")}
+                  style={{
+                    background: t.card, border: "2px solid " + t.green + "50", borderRadius: 16,
+                    padding: "28px 32px", cursor: "pointer", position: "relative", overflow: "hidden",
+                    transition: "border-color 0.2s, box-shadow 0.2s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; e.currentTarget.style.boxShadow = "0 8px 32px " + t.green + "12"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.boxShadow = "none"; }}
+                >
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, " + t.green + ", " + t.blue + ")" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Hub</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 4 }}>Creator Hub</div>
+                      <div style={{ fontSize: 13, color: t.textMuted }}>Manage all creators, programs, campaigns, and briefs</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: t.green, fontWeight: 700, padding: "6px 14px", borderRadius: 8, background: t.green + "10", border: "1px solid " + t.green + "25" }}>Open &rarr;</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 24, marginTop: 20, paddingTop: 16, borderTop: "1px solid " + t.border }}>
+                    {[
+                      { v: creators.filter(c => c.status === "Active").length, l: "Active creators", c: t.green },
+                      { v: [...new Set(creators.flatMap(c => c.programs || []))].length, l: "Programs", c: t.blue },
+                      { v: library.length, l: "Briefs", c: t.orange },
+                      { v: creators.filter(c => c.ibScore != null).length, l: "Scored", c: t.purple || "#8b6cc4" },
+                      { v: creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0), l: "Videos tracked", c: t.text },
+                    ].map((s, i) => (
+                      <div key={i}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: s.c }}>{s.v}</div>
+                        <div style={{ fontSize: 10, color: t.textFaint, marginTop: 1 }}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Secondary cards — 2 column */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+                <div onClick={() => navigate("pipeline")}
+                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Channel Pipeline</div>
+                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Performance and operations across all channels</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.orange, fontWeight: 600 }}>8 tabs</div>
+                  </div>
                 </div>
 
-                <div style={homeCard(t.blue)} onClick={() => navigate("tools")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.blue)} onMouseLeave={(e) => homeHoverOut(e, t.blue)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="tools" color={t.blue} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Tools</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Video reformatter and team utilities</div>
-                  <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>1 tool available</div>
+                <div onClick={() => navigate("tools")}
+                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Tools</div>
+                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Video reformatter and team utilities</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.blue, fontWeight: 600 }}>1 tool</div>
+                  </div>
                 </div>
 
-                <div style={homeCard(t.purple)} onClick={() => navigate("sourceOfTruth")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.purple)} onMouseLeave={(e) => homeHoverOut(e, t.purple)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="brain" color={t.purple} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>IB-Ai Source of Truth</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>What IB-Ai knows — products, claims, scoring, rates, outreach</div>
-                  <div style={{ fontSize: 12, color: t.purple, fontWeight: 600 }}>Editable by managers</div>
+                <div onClick={() => navigate("sourceOfTruth")}
+                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.purple || "#8b6cc4"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>IB-Ai Source of Truth</div>
+                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Products, claims, scoring, outreach rules</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.purple || "#8b6cc4", fontWeight: 600 }}>Editable</div>
+                  </div>
                 </div>
 
-                <div style={homeCard(t.textMuted)} onClick={() => navigate("settings")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.textMuted)} onMouseLeave={(e) => homeHoverOut(e, t.textMuted)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="settings" color={t.textMuted} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Settings</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>API keys, team password, database connection</div>
-                  <div style={{ fontSize: 12, color: t.textMuted, fontWeight: 600 }}>v{APP_VERSION}</div>
+                <div onClick={() => navigate("settings")}
+                  style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: "18px 22px", cursor: "pointer", transition: "border-color 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.textMuted; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Settings</div>
+                      <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>API keys, team access, integrations</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 600 }}>v{APP_VERSION}</div>
+                  </div>
                 </div>
+              </div>
 
-                <div style={homeCard(t.blue)} onClick={() => setFlowChartFullscreen(true)}
-                  onMouseEnter={(e) => homeHoverIn(e, t.blue)} onMouseLeave={(e) => homeHoverOut(e, t.blue)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="pipeline" color={t.blue} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creator Flow Chart</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Interactive diagram of the creator partnerships pipeline</div>
-                  <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>Click to view</div>
-                </div>
-
-                <div style={homeCard(t.orange)} onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")}
-                  onMouseEnter={(e) => homeHoverIn(e, t.orange)} onMouseLeave={(e) => homeHoverOut(e, t.orange)}>
-                  <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.orange} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>2025 In Review</div>
-                  <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Creator partnerships year in review presentation</div>
-                  <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>Opens in Canva</div>
-                </div>
+              {/* Tertiary — flow chart + canva as small links */}
+              <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+                <button onClick={() => setFlowChartFullscreen(true)} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.card, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Creator Flow Chart</div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Interactive Lucidchart diagram</div>
+                </button>
+                <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.card, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>2025 In Review</div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Opens in Canva</div>
+                </button>
               </div>
 
               {flowChartFullscreen ? (
@@ -9935,7 +9982,7 @@ export default function App() {
                 </div>
               ) : null}
 
-              <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60" }}>v{APP_VERSION}</div>
+              <div style={{ textAlign: "center", fontSize: 11, color: t.textFaint + "60", marginTop: 16 }}>v{APP_VERSION}</div>
             </div>
           );
         })()}
