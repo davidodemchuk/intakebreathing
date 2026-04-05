@@ -5684,31 +5684,31 @@ function CreatorHubHero({ stats, onOpen, onNav }) {
   const cIn = (e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = "#2a2a2a"; };
   const cOut = (e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = "#1c1c1c"; };
   return (
-    <div style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
-        <button onClick={onOpen} style={{ background: "#00FEA9", color: "#000000", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub &rarr;</button>
+    <div className="homepage-section" style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
+      <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+        <button className="open-hub-btn" onClick={onOpen} style={{ background: "#00FEA9", color: "#000000", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub &rarr;</button>
       </div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Creator Hub</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#00FEA9", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        <div onClick={() => onNav("creators")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.creators ?? "\u2014"}</div>
+      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Creator Hub</div>
+      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#00FEA9", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
+      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
+      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        <div className="stat-card" onClick={() => onNav("creators")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.creators ?? "\u2014"}</div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>Active Creators</div>
           <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>View all &rarr;</div>
         </div>
-        <div onClick={onOpen} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.programs ?? "\u2014"}</div>
+        <div className="stat-card" onClick={onOpen} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.programs ?? "\u2014"}</div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>Programs</div>
           <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>Open Hub &rarr;</div>
         </div>
-        <div onClick={() => onNav("create")} style={{ ...cd }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,254,169,0.04)"; e.currentTarget.style.borderColor = "rgba(0,254,169,0.2)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = "#1c1c1c"; }}>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 400, color: "#00FEA9", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>+</div>
+        <div className="stat-card" onClick={() => onNav("create")} style={{ ...cd }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,254,169,0.04)"; e.currentTarget.style.borderColor = "rgba(0,254,169,0.2)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = "#1c1c1c"; }}>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 400, color: "#00FEA9", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>+</div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>New Brief</div>
           <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>Create &rarr;</div>
         </div>
-        <div onClick={() => onNav("campaigns")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.campaigns ?? "\u2014"}</div>
+        <div className="stat-card" onClick={() => onNav("campaigns")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.campaigns ?? "\u2014"}</div>
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>Campaigns</div>
           <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
         </div>
@@ -5726,16 +5726,16 @@ function ChannelPipelineFeature({ onOpen, onTabOpen }) {
     { name: "SOPs", star: false, sub: "Processes & docs", tab: "sops" },
   ];
   return (
-    <div style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+    <div className="homepage-section" style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
+      <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
         <button onClick={onOpen} style={{ background: "transparent", color: "#63B7BA", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "1px solid rgba(99,183,186,0.35)", cursor: "pointer", transition: "all 0.18s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,183,186,0.08)"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(99,183,186,0.35)"; }}>Open Pipeline &rarr;</button>
       </div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Channel Pipeline</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#63B7BA", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Performance & Data.</div>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Channel Pipeline</div>
+      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#63B7BA", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Performance & Data.</div>
+      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
+      <div className="channel-pipeline-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
         {channels.map((ch, i) => (
-          <div key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: "#0a0a0a", border: ch.star ? "1px solid rgba(99,183,186,0.25)" : "1px solid #1c1c1c", borderRadius: 12, padding: "28px 24px 24px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = ch.star ? "#63B7BA" : "#2a2a2a"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = ch.star ? "rgba(99,183,186,0.25)" : "#1c1c1c"; }}>
+          <div className="stat-card" key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: "#0a0a0a", border: ch.star ? "1px solid rgba(99,183,186,0.25)" : "1px solid #1c1c1c", borderRadius: 12, padding: "28px 24px 24px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = ch.star ? "#63B7BA" : "#2a2a2a"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = ch.star ? "rgba(99,183,186,0.25)" : "#1c1c1c"; }}>
             {ch.star ? <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(99,183,186,0.12)", border: "1px solid rgba(99,183,186,0.3)", borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 500, color: "#63B7BA", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>{"\u2B50"} v2</div> : null}
             <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 500, color: "#FFFFFF", marginBottom: 8, letterSpacing: "-0.01em" }}>{ch.name}</div>
             <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", marginBottom: 24 }}>{ch.sub}</div>
@@ -5752,17 +5752,17 @@ function ChannelPipelineFeature({ onOpen, onTabOpen }) {
 
 function SiteFooter() {
   return (
-    <footer style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "24px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, marginTop: "auto" }}>
+    <footer className="site-footer-root" style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "24px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, marginTop: "auto" }}>
       <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: "#FFFFFF", letterSpacing: "-0.01em" }}>intake creators</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      <div className="site-footer-platform" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: "#FFFFFF", letterSpacing: "0.04em", marginBottom: 10 }}>PLATFORM</div>
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div className="site-footer-platform-links" style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           {[{ label: "Creator Hub", href: "/creator-hub" }, { label: "Channel Pipeline", href: "/channel-pipeline" }, { label: "Campaigns", href: "/campaigns" }, { label: "Messaging Hub", href: "/messaging" }, { label: "Settings", href: "/settings" }].map((item, i) => (
             <a key={i} href={item.href} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", textDecoration: "none", transition: "color 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.color = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "#737373"; }}>{item.label}</a>
           ))}
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div className="site-footer-swatches" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
         <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333", marginLeft: 6 }}>Life Changing Breathing.</span>
       </div>
@@ -10017,6 +10017,27 @@ export default function App() {
               page-break-inside: avoid;
             }
           }
+          @media(max-width:768px){
+            .admin-nav-left,.admin-nav-breadcrumb,.admin-nav-theme-toggle{display:none!important}
+            .admin-nav-root{padding:0 20px!important;height:48px!important}
+            .admin-nav-logo{position:static!important;transform:none!important}
+            .homepage-section{padding:32px 20px!important}
+            .homepage-display-heading{font-size:36px!important;letter-spacing:-0.02em!important}
+            .homepage-subtitle{font-size:15px!important}
+            .homepage-description{font-size:13px!important;margin-bottom:20px!important}
+            .creator-hub-card-grid,.channel-pipeline-card-grid{grid-template-columns:1fr 1fr!important;gap:8px!important}
+            .stat-card{padding:18px 16px 14px!important}
+            .stat-card-number{font-size:32px!important}
+            .homepage-top-row{margin-bottom:16px!important}
+            .open-hub-btn{height:38px!important;font-size:12px!important;padding:0 16px!important}
+            .utility-grid-container{padding:24px 20px!important;grid-template-columns:1fr!important}
+            .site-footer-root{padding:16px 20px!important;flex-direction:column!important;align-items:flex-start!important;gap:12px!important}
+            .site-footer-platform-links{flex-direction:column!important;gap:10px!important;margin-top:8px!important}
+            .site-footer-swatches{display:none!important}
+            .creator-nav-root{padding:0 20px!important;height:48px!important}
+            .creator-nav-left-tabs{display:none!important}
+            .creator-nav-center{position:static!important;transform:none!important}
+          }
         `}</style>
 
         {/* STORAGE LOADING */}
@@ -10057,19 +10078,19 @@ export default function App() {
           const section = getCurrentSection(view);
           const pageNames = { creatorHub: "Creator Hub", pipeline: "Channel Pipeline", campaigns: "Campaigns", messaging: "Messaging", settings: "Settings", creators: "Creators", create: "New Brief", library: "Brief Library", tools: "Tools" };
           return (
-            <nav className="no-print" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 56px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 28, flex: 1 }}>
+            <nav className="no-print admin-nav-root" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 56px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+              <div className="admin-nav-left" style={{ display: "flex", alignItems: "center", gap: 28, flex: 1 }}>
                 {[{ label: "Creator Hub", v: "creatorHub" }, { label: "Pipeline", v: "pipeline" }, { label: "Campaigns", v: "campaigns" }].map((lk, i) => {
                   const active = lk.v === "creatorHub" ? section === "creatorHub" : view === lk.v;
                   return <button key={i} onClick={() => navigate(lk.v)} style={navLinkStyle(active)} onMouseEnter={(e) => hIn(e, active)} onMouseLeave={(e) => hOut(e, active)}>{lk.label}</button>;
                 })}
               </div>
-              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => navigate("home")}>
+              <div className="admin-nav-logo" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", cursor: "pointer" }} onClick={() => navigate("home")}>
                 <img src="/intake-logo-white.png" alt="Intake" style={{ height: 22, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 20, flex: 1, justifyContent: "flex-end" }}>
-                {view !== "home" ? <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#333333", letterSpacing: "0.06em", textTransform: "uppercase" }}>{pageNames[view] || ""}</div> : null}
-                <button onClick={() => setIsDark(!isDark)} style={{ background: isDark ? "#1a1a1a" : "#e8e8e8", border: "1px solid", borderColor: isDark ? "#333" : "#d0d0d0", borderRadius: 20, width: 44, height: 24, cursor: "pointer", position: "relative", transition: "all 0.2s ease", flexShrink: 0 }} title={isDark ? "Switch to light mode" : "Switch to dark mode"}><div style={{ position: "absolute", top: 3, left: isDark ? 22 : 3, width: 16, height: 16, borderRadius: "50%", background: isDark ? "#00FEA9" : "#737373", transition: "left 0.2s ease" }} /></button>
+                {view !== "home" ? <div className="admin-nav-breadcrumb" style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#333333", letterSpacing: "0.06em", textTransform: "uppercase" }}>{pageNames[view] || ""}</div> : null}
+                <button className="admin-nav-theme-toggle" onClick={() => setIsDark(!isDark)} style={{ background: isDark ? "#1a1a1a" : "#e8e8e8", border: "1px solid", borderColor: isDark ? "#333" : "#d0d0d0", borderRadius: 20, width: 44, height: 24, cursor: "pointer", position: "relative", transition: "all 0.2s ease", flexShrink: 0 }} title={isDark ? "Switch to light mode" : "Switch to dark mode"}><div style={{ position: "absolute", top: 3, left: isDark ? 22 : 3, width: 16, height: 16, borderRadius: "50%", background: isDark ? "#00FEA9" : "#737373", transition: "left 0.2s ease" }} /></button>
                 <button onClick={() => navigate("settings")} style={navLinkStyle(view === "settings")} onMouseEnter={(e) => hIn(e, view === "settings")} onMouseLeave={(e) => hOut(e, view === "settings")}>Settings</button>
                 <button onClick={() => { localStorage.removeItem("intake-manager-auth"); setManagerAuthed(false); }} style={{ background: "none", border: "1px solid #222222", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", padding: "6px 14px", borderRadius: 6, transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#333333"; e.currentTarget.style.color = "#FFFFFF"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#222222"; e.currentTarget.style.color = "#737373"; }}>Sign Out</button>
               </div>
@@ -10213,7 +10234,7 @@ export default function App() {
               <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} />
 
               {/* SECTION 3 — Utility Grid */}
-              <div style={{ padding: "32px 56px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
+              <div className="utility-grid-container" style={{ padding: "32px 56px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
                 <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #e0e0dc" }}>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: "#0a0a0a", letterSpacing: "-0.02em" }}>Tools & Settings</div>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#999999" }}>5 items</div>

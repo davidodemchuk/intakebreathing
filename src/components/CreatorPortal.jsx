@@ -448,17 +448,19 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg }}>
-      <nav style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+      <nav className="creator-nav-root" style={{ width: "100%", height: 56, background: "#000000", borderBottom: "1px solid #111111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", boxSizing: "border-box", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1 }}>
           <img src="/intake-logo-white.png" alt="Intake" style={{ height: 20, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
-          <div style={{ width: 1, height: 16, background: "#222" }} />
+          <div className="creator-nav-left-tabs" style={{ display: "flex", alignItems: "center", gap: 0 }}>
+          <div style={{ width: 1, height: 16, background: "#222", marginRight: 16 }} />
           {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: activeTab === tab.id ? "#FFFFFF" : "#737373", padding: 0, transition: "color 0.15s ease" }} onMouseEnter={(e) => { if (activeTab !== tab.id) e.currentTarget.style.color = "#FFFFFF"; }} onMouseLeave={(e) => { if (activeTab !== tab.id) e.currentTarget.style.color = "#737373"; }}>
               {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: "#00FEA9", color: "#000", fontWeight: 500 }}>{tab.count}</span> : null}
             </button>
           ))}
+          </div>
         </div>
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
+        <div className="creator-nav-center" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
           <img src="/intake-logo-white.png" alt="Intake" style={{ height: 22, width: "auto", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1, justifyContent: "flex-end" }}>
