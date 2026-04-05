@@ -1080,6 +1080,12 @@ function CardIcon({ type, color, size = 32 }) {
         <path d="M10 24c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
     ),
+    campaigns: (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx={r} fill={bg}/>
+        <path d="M13 11.5V22a1.2 1.2 0 01-2.3.4L9 18M21 17a2.5 2.5 0 100-5M9 18a3 3 0 011.2-2.4L12 14h1.4c3 0 5.6-.9 6.6-2.2v10.4c-1-1.3-3.6-2.2-6.6-2.2H12" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
   };
   return icons[type] || null;
 }
@@ -9628,7 +9634,7 @@ export default function App() {
         {storageReady && <>
         {hideManagerShell && (
           <>
-            {view === "publicBrief" && <PublicBriefView t={t} />}
+            {view === "publicBrief" && <PublicBriefView t={t} BriefDisplay={BriefDisplay} />}
             {view === "creatorLogin" && <CreatorLogin navigate={navigate} t={t} />}
             {view === "creatorOnboard" && creatorProfile && <CreatorOnboard creatorProfile={creatorProfile} navigate={navigate} t={t} />}
             {view === "creatorOnboard" && !creatorProfile && creatorSession && (
@@ -9641,7 +9647,7 @@ export default function App() {
             {view === "creatorProfile" && creatorProfile && (
               <CreatorProfileEdit creatorProfile={creatorProfile} navigate={navigate} t={t} onProfileUpdate={() => loadCreatorProfile(creatorSession?.user?.email)} />
             )}
-            {view === "creatorBriefView" && <CreatorBriefView navigate={navigate} t={t} />}
+            {view === "creatorBriefView" && <CreatorBriefView navigate={navigate} t={t} BriefDisplay={BriefDisplay} />}
             {view === "creatorMessages" && creatorProfile && <CreatorMessages creatorProfile={creatorProfile} navigate={navigate} t={t} />}
           </>
         )}

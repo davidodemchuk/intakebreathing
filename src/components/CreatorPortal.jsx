@@ -481,7 +481,7 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
   );
 }
 
-function CreatorBriefView({ navigate, t }) {
+function CreatorBriefView({ navigate, t, BriefDisplay }) {
   const [brief, setBrief] = useState(null);
   const [formData, setFormData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -489,28 +489,22 @@ function CreatorBriefView({ navigate, t }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const briefId = params.get("briefId") || params.get("id");
-    if (!briefId) {
-      setLoading(false);
-      return;
-    }
-
+    if (!briefId) { setLoading(false); return; }
     (async () => {
       const { data } = await supabase.from("briefs").select("*").eq("id", briefId).maybeSingle();
-      if (data) {
-        setBrief(data.brief_data);
-        setFormData(data.form_data);
-      }
+      if (data) { setBrief(data.brief_data); setFormData(data.form_data); }
       setLoading(false);
     })();
   }, []);
 
   if (loading) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading brief...</div>;
   if (!brief) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textFaint }}>Brief not found.</div>;
+  if (!BriefDisplay) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textFaint }}>Brief viewer unavailable.</div>;
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg }}>
-      <div style={{ padding: "12px 24px", borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", gap: 12 }}>
-        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>← Back to Dashboard</button>
+      <div style={{ padding: "12px 24px", borderBottom: "1px solid " + t.border, display: "flex", alignItems: "center", gap: 12 }}>
+        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>&larr; Back to Dashboard</button>
         <span style={{ fontSize: 13, color: t.textMuted }}>Viewing brief</span>
       </div>
       <BriefDisplay brief={brief} formData={formData || {}} currentRole={ROLES.CREATOR} creators={[]} onBack={() => navigate("creatorDashboard")} onRegenerate={() => {}} onRegenerateAI={() => {}} />
@@ -544,7 +538,8 @@ function CreatorMessages({ creatorProfile: cp, navigate, t }) {
   }, [cp?.id]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = endRef.current?.parentElement;
+    if (container) container.scrollTop = container.scrollHeight;
   }, [msgs.length]);
 
   const send = async () => {
@@ -594,11 +589,14 @@ function CreatorMessages({ creatorProfile: cp, navigate, t }) {
 function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }) {
   const [form, setForm] = useState({
     name: cp?.name || "",
-    instagramHandle: cp?.instagramHandle || "",
-    tiktokHandle: cp?.tiktokHandle || "",
+    instagramHandle: cp?.instagramHandle || cp?.instagram_handle || "",
+    tiktokHandle: cp?.tiktokHandle || cp?.tiktok_handle || "",
+    youtubeHandle: cp?.youtubeHandle || cp?.youtube_handle || "",
+    otherSocial: cp?.otherSocial || cp?.other_social || "",
     address: cp?.address || "",
-    costPerVideo: cp?.costPerVideo || "",
+    costPerVideo: cp?.costPerVideo || cp?.cost_per_video || "",
     niche: cp?.niche || "",
+    intakeSize: cp?.intakeSize || cp?.intake_size || "",
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -609,19 +607,19 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
     setSaved(false);
     const ig = form.instagramHandle.replace("@", "").trim();
     const tt = form.tiktokHandle.replace("@", "").trim();
-    const { error } = await supabase
-      .from("creators")
-      .update({
-        name: form.name.trim(),
-        instagram_handle: ig,
-        tiktok_handle: tt,
-        instagram_url: ig ? `https://www.instagram.com/${ig}/` : "",
-        tiktok_url: tt ? `https://www.tiktok.com/@${tt}` : "",
-        address: form.address.trim(),
-        cost_per_video: form.costPerVideo.trim(),
-        niche: form.niche.trim(),
-      })
-      .eq("id", cp.id);
+    const { error } = await supabase.from("creators").update({
+      name: form.name.trim(),
+      instagram_handle: ig,
+      tiktok_handle: tt,
+      youtube_handle: form.youtubeHandle?.replace("@", "").trim() || null,
+      other_social: form.otherSocial?.trim() || null,
+      instagram_url: ig ? "https://www.instagram.com/" + ig + "/" : "",
+      tiktok_url: tt ? "https://www.tiktok.com/@" + tt : "",
+      address: form.address.trim(),
+      cost_per_video: form.costPerVideo.trim(),
+      niche: form.niche.trim(),
+      intake_size: form.intakeSize || null,
+    }).eq("id", cp.id);
     setSaving(false);
     if (!error) {
       setSaved(true);
@@ -634,9 +632,9 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>{label}</div>
       {opts?.multi ? (
-        <textarea value={form[key]} onChange={(e) => upd(key, e.target.value)} placeholder={ph} rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+        <textarea value={form[key]} onChange={(e) => upd(key, e.target.value)} placeholder={ph} rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
       ) : (
-        <input value={form[key]} onChange={(e) => upd(key, e.target.value)} placeholder={ph} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+        <input value={form[key]} onChange={(e) => upd(key, e.target.value)} placeholder={ph} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
       )}
     </div>
   );
@@ -644,19 +642,34 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
   return (
     <div style={{ minHeight: "100vh", background: t.bg, padding: 24 }}>
       <div style={{ maxWidth: 480, margin: "0 auto", paddingTop: 24 }}>
-        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 20 }}>← Back</button>
+        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 20 }}>&larr; Back</button>
         <div style={{ fontSize: 20, fontWeight: 800, color: t.text, marginBottom: 20 }}>Your Profile</div>
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24 }}>
+        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, padding: 24 }}>
           {inp("Name", "name", "Your name")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {inp("Instagram", "instagramHandle", "handle")}
             {inp("TikTok", "tiktokHandle", "handle")}
           </div>
+          {inp("YouTube", "youtubeHandle", "channel name or handle")}
+          {inp("Other Platforms", "otherSocial", "Twitter, Snapchat, etc.")}
           {inp("Niches", "niche", "Fitness, Lifestyle...")}
           {inp("Rate / video ($)", "costPerVideo", "100")}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>Intake Size</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 6 }}>
+              {["Small", "Medium", "Large", "XL", "Not sure"].map(sz => (
+                <button key={sz} type="button" onClick={() => upd("intakeSize", sz)} style={{
+                  padding: "8px 4px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  border: form.intakeSize === sz ? "2px solid " + t.green : "1px solid " + t.border,
+                  background: form.intakeSize === sz ? t.green + "10" : "transparent",
+                  color: form.intakeSize === sz ? t.green : t.textMuted,
+                }}>{sz}</button>
+              ))}
+            </div>
+          </div>
           {inp("Shipping Address", "address", "Street, City, State, ZIP", { multi: true })}
           <button type="button" onClick={save} disabled={saving} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
-            {saving ? "Saving..." : saved ? "✓ Saved" : "Save Changes"}
+            {saving ? "Saving..." : saved ? "\u2713 Saved" : "Save Changes"}
           </button>
         </div>
       </div>
@@ -664,29 +677,24 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
   );
 }
 
-function PublicBriefView({ t }) {
+function PublicBriefView({ t, BriefDisplay }) {
   const [brief, setBrief] = useState(null);
   const [formData, setFormData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const shareId = new URLSearchParams(window.location.search).get("id");
-    if (!shareId?.trim()) {
-      setLoading(false);
-      return;
-    }
+    if (!shareId?.trim()) { setLoading(false); return; }
     (async () => {
       const { data } = await supabase.from("briefs").select("*").eq("share_id", shareId.trim()).maybeSingle();
-      if (data) {
-        setBrief(data.brief_data);
-        setFormData(data.form_data || {});
-      }
+      if (data) { setBrief(data.brief_data); setFormData(data.form_data || {}); }
       setLoading(false);
     })();
   }, []);
 
   if (loading) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading brief...</div>;
   if (!brief) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textFaint, padding: 24 }}>Brief not found or invalid link.</div>;
+  if (!BriefDisplay) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textFaint }}>Brief viewer unavailable.</div>;
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, padding: "16px 24px 40px" }}>
@@ -694,80 +702,5 @@ function PublicBriefView({ t }) {
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════
-// IB-Ai — prompt builder (Claude)
-// ═══════════════════════════════════════════════════════════
-
-function buildAIPrompt(d, knowledge) {
-  const k = knowledge && typeof knowledge === "object" ? knowledge : null;
-  const ageR = d.ageRange || "25-34";
-  const gen = d.gender || "Men & Women";
-  const productResolved = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
-  const vibeResolved = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
-  const prob = (d.problem ?? d._problem ?? d.customProblem ?? "").trim();
-  const audienceCompact = `${gen} ${ageR}`;
-  const audienceForm = d._audience || `Ages ${ageR} — ${gen}`;
-  const plats = normalizePlatforms(d);
-  const platLine = plats.map((p) => {
-    if (p === "Other" && (d.customPlatform || "").trim()) return `Other (${(d.customPlatform || "").trim()})`;
-    return p;
-  }).join(", ");
-  const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
-  const rejectionsLine = Array.isArray(d._rejections) && d._rejections.length
-    ? d._rejections.join(". ")
-    : buildRejectionsArray(d, k?.defaultRejections).join(". ");
-  const mgrName = managerDisplayName(d);
-  const qtyVideos = String(d.contentQuantity ?? "1").trim() || "1";
-  const rawBudgetAi = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
-  const budgetStrAi = rawBudgetAi ? `$${rawBudgetAi}` : "TBD";
-  const supValAi = d.supervisionLevel || "full";
-  const supEntry = SUPERVISION_LEVELS.find((s) => s.value === supValAi) || SUPERVISION_LEVELS[0];
-  const supervisionLabelAi = supEntry.label;
-  const supervisionDescAi = supEntry.desc;
-  const supervisionToneNote =
-    supValAi === "handsoff"
-      ? "Supervision is Hands Off: the brief must be extra clear and detailed — creators will not have revision rounds, so every requirement, format spec, and CTA must be self-contained and unambiguous."
-      : supValAi === "full"
-        ? "Supervision is Full Review: you may keep the creative direction slightly looser knowing 1-2 revision rounds will refine the work — but still be specific on compliance and deliverables."
-        : "Supervision is Light Touch: balance clarity with brevity — minor feedback may occur but avoid relying on heavy revision cycles.";
-  const brandBlock = k?.brandContext && String(k.brandContext).trim()
-    ? `BRAND CONTEXT (internal — match tone and claims to this):\n${String(k.brandContext).trim()}\n\n`
-    : "";
-  return `You are an expert UGC (user-generated content) brief writer for Intake Breathing, a magnetic nasal dilator company. Write a complete creator brief. Be specific, creative, and tailored to this exact campaign — not generic.
-
-${brandBlock}PRODUCT: ${productResolved} by Intake Breathing
-CAMPAIGN NAME: ${d.campaignName || "Untitled"}
-CAMPAIGN VIBE: ${vibeResolved}
-MISSION: ${d.mission || "N/A"}
-SUBMITTED BY: ${mgrName}
-CONTENT QUANTITY: ${qtyVideos} videos needed
-BUDGET: ${budgetStrAi} per video
-SUPERVISION LEVEL: ${supervisionLabelAi} — ${supervisionDescAi}
-${supervisionToneNote}
-TARGET AUDIENCE: ${audienceCompact}
-AUDIENCE (form selection, ageRange + gender): ${audienceForm}
-CORE PROBLEM: ${prob}
-APPROVED CLAIMS (creators CAN say): ${d._approved || ""}
-BANNED CLAIMS (NEVER say): ${d._banned || ""}
-REVISION REQUIRED CRITERIA (revisions will be needed if any of these appear): ${rejectionsLine}
-
-Include these revision criteria in the brief and make sure the creative direction avoids all of them.
-
-PLATFORMS: ${platLine}
-VIDEO LENGTH: ${d.videoLength || ""}
-TONE: ${toneResolved}
-CREATIVE NOTES: ${d.notes || "None"}
-
-TONE DIRECTION: The creative tone for this brief is "${toneResolved}". Match this voice consistently in hooks, on-camera delivery, pacing, overlay text, and every line of copy — do not default to a generic influencer voice.
-
-The deliverables JSON field must clearly state that ${qtyVideos} video(s) are requested for this campaign, in addition to format and upload requirements.
-
-Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — don't be generic. Write hooks that would actually stop someone mid-scroll. Write riff lines that sound like a real person talking, not marketing copy. Overlay ideas should be specific visual directions.
-
-Return ONLY this JSON (no other text):
-{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires — be vivid and specific","theyAre":["4 psychographic traits that describe this viewer"],"theyAreNot":["4 things this viewer is NOT — help creators avoid wrong assumptions"],"probInst":"directive for the PROBLEM beat — tell the creator exactly what to show/say in the opening","probLines":["3 specific lines creators can say or riff on for the problem beat — conversational, not corporate"],"probOverlays":["3 specific text overlay or visual ideas for the problem beat"],"agInst":"directive for the AGITATE beat — how to twist the knife and create urgency","agLines":["3 agitate lines — make the viewer feel the cost of inaction"],"agOverlays":["3 overlay/visual ideas for the agitate beat"],"solInst":"directive for the SOLUTION beat — the payoff, the reveal, the transformation","solLines":["3 solution lines — the relief, the wow moment, the conversion push"],"solOverlays":["3 overlay/visual ideas for the solution beat"],"hooks":["4 scroll-stopping hook options for the first 2-3 seconds — these must be thumb-stoppers"],"sayThis":["5 approved phrases creators should use"],"notThis":["5 phrases creators must NEVER say"],"rejections":["array of strings — every revision-required rule listed above; include all criteria verbatim"],"platNotes":"platform-specific tips for all selected platforms (${platLine}) at ${d.videoLength}","deliverables":"what creators need to submit and format specs"}`;
-}
-
 
 export { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView };

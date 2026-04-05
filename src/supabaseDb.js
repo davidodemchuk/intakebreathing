@@ -62,6 +62,8 @@ export function creatorToRow(c) {
     assigned_by: c.assignedBy || null,
     programs: c.programs || [],
     creator_tier: c.creator_tier || null,
+    intake_size: c.intakeSize || c.intake_size || "",
+    other_social: c.otherSocial || c.other_social || "",
   };
 
   const clean = {};
@@ -138,6 +140,8 @@ export function rowToCreator(row) {
     assignedBy: row.assigned_by || null,
     programs: row.programs || [],
     creator_tier: row.creator_tier || null,
+    intakeSize: row.intake_size || "",
+    otherSocial: row.other_social || "",
   };
 }
 
