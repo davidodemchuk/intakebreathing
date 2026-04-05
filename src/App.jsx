@@ -5679,45 +5679,47 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 // HOMEPAGE SECTIONS — Creator Hub hero, Channel Pipeline, Brand Book footer
 // ═══════════════════════════════════════════════════════════
 
-function CreatorHubHero({ stats, onOpen, onNav }) {
-  const cd = { background: "#0a0a0a", border: "1px solid #1c1c1c", borderRadius: 12, padding: "28px 28px 24px", cursor: "pointer", transition: "all 0.18s ease" };
-  const cIn = (e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = "#2a2a2a"; };
-  const cOut = (e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = "#1c1c1c"; };
+function CreatorHubHero({ stats, onOpen, onNav, isDark = true }) {
+  const c = { sectionBg: isDark ? "#000000" : "#F5F5F0", sectionBorder: isDark ? "1px solid #0f0f0f" : "1px solid #E8E8E2", heading: isDark ? "#FFFFFF" : "#0A0A0A", subtitle: isDark ? "#00FEA9" : "#008F5E", desc: isDark ? "#555555" : "#666666", cardBg: isDark ? "#0a0a0a" : "#FFFFFF", cardBorder: isDark ? "1px solid #1c1c1c" : "1px solid #E0E0DA", cardNum: isDark ? "#FFFFFF" : "#0A0A0A", cardLabel: isDark ? "#555555" : "#888888", cardAction: isDark ? "#00FEA9" : "#008F5E", hBg: isDark ? "#111111" : "#F8F8F4", hBorder: isDark ? "#2a2a2a" : "#C8C8C0", btnBg: isDark ? "#00FEA9" : "#0A0A0A", btnColor: isDark ? "#000000" : "#FFFFFF", briefHoverBg: isDark ? "rgba(0,254,169,0.04)" : "rgba(0,143,94,0.04)", briefHoverBorder: isDark ? "rgba(0,254,169,0.2)" : "rgba(0,143,94,0.2)" };
+  const cd = { background: c.cardBg, border: c.cardBorder, borderRadius: 12, padding: "28px 28px 24px", cursor: "pointer", transition: "all 0.18s ease" };
+  const cIn = (e) => { e.currentTarget.style.background = c.hBg; e.currentTarget.style.borderColor = c.hBorder; };
+  const cOut = (e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); };
   return (
-    <div className="homepage-section" style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
+    <div className="homepage-section" style={{ background: c.sectionBg, padding: "40px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
       <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
-        <button className="open-hub-btn" onClick={onOpen} style={{ background: "#00FEA9", color: "#000000", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub &rarr;</button>
+        <button className="open-hub-btn" onClick={onOpen} style={{ background: c.btnBg, color: c.btnColor, height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Open Creator Hub &rarr;</button>
       </div>
-      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Creator Hub</div>
-      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#00FEA9", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
-      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
+      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Creator Hub</div>
+      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
+      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
       <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
         <div className="stat-card" onClick={() => onNav("creators")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.creators ?? "\u2014"}</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>Active Creators</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>View all &rarr;</div>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: c.cardNum, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.creators ?? "\u2014"}</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>Active Creators</div>
+          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>View all &rarr;</div>
         </div>
         <div className="stat-card" onClick={onOpen} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.programs ?? "\u2014"}</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>Programs</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>Open Hub &rarr;</div>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: c.cardNum, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.programs ?? "\u2014"}</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>Programs</div>
+          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>Open Hub &rarr;</div>
         </div>
-        <div className="stat-card" onClick={() => onNav("create")} style={{ ...cd }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,254,169,0.04)"; e.currentTarget.style.borderColor = "rgba(0,254,169,0.2)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = "#1c1c1c"; }}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 400, color: "#00FEA9", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>+</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>New Brief</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>Create &rarr;</div>
+        <div className="stat-card" onClick={() => onNav("create")} style={{ ...cd }} onMouseEnter={(e) => { e.currentTarget.style.background = c.briefHoverBg; e.currentTarget.style.borderColor = c.briefHoverBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); }}>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 400, color: c.subtitle, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>+</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>New Brief</div>
+          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>Create &rarr;</div>
         </div>
         <div className="stat-card" onClick={() => onNav("campaigns")} style={cd} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: "#FFFFFF", lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.campaigns ?? "\u2014"}</div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", letterSpacing: "0.02em" }}>Campaigns</div>
-          <div style={{ marginTop: 16, fontSize: 11, color: "#00FEA9", fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
+          <div className="stat-card-number" style={{ fontFamily: "'Inter', sans-serif", fontSize: 48, fontWeight: 500, color: c.cardNum, lineHeight: 1, marginBottom: 12, letterSpacing: "-0.03em" }}>{stats.campaigns ?? "\u2014"}</div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.02em" }}>Campaigns</div>
+          <div style={{ marginTop: 16, fontSize: 11, color: c.cardAction, fontFamily: "'Inter', sans-serif" }}>Open &rarr;</div>
         </div>
       </div>
     </div>
   );
 }
 
-function ChannelPipelineFeature({ onOpen, onTabOpen }) {
+function ChannelPipelineFeature({ onOpen, onTabOpen, isDark = true }) {
+  const c = { sectionBg: isDark ? "#000000" : "#F5F5F0", sectionBorder: isDark ? "1px solid #0f0f0f" : "1px solid #E8E8E2", heading: isDark ? "#FFFFFF" : "#0A0A0A", subtitle: isDark ? "#63B7BA" : "#3A7E82", desc: isDark ? "#555555" : "#666666", cardBg: isDark ? "#0a0a0a" : "#FFFFFF", cardBorder: isDark ? "1px solid #1c1c1c" : "1px solid #E0E0DA", cardName: isDark ? "#FFFFFF" : "#0A0A0A", cardSub: isDark ? "#555555" : "#888888", live: isDark ? "#63B7BA" : "#3A7E82", hBg: isDark ? "#111111" : "#F8F8F4", hBorder: isDark ? "#2a2a2a" : "#C8C8C0", ttsBorder: isDark ? "rgba(99,183,186,0.25)" : "rgba(58,126,130,0.25)", ttsHBorder: isDark ? "#63B7BA" : "#3A7E82", ttsBadgeBg: isDark ? "rgba(99,183,186,0.12)" : "rgba(58,126,130,0.08)", ttsBadgeBorder: isDark ? "rgba(99,183,186,0.3)" : "rgba(58,126,130,0.25)", ttsBadgeColor: isDark ? "#63B7BA" : "#3A7E82", btnBorder: isDark ? "rgba(99,183,186,0.35)" : "rgba(58,126,130,0.4)", btnColor: isDark ? "#63B7BA" : "#3A7E82", btnHoverBg: isDark ? "rgba(99,183,186,0.08)" : "rgba(58,126,130,0.06)" };
   const channels = [
     { name: "TTS Native", star: true, sub: "First native build", tab: "tts-native" },
     { name: "Overview", star: false, sub: "All channels", tab: "overview" },
@@ -5726,22 +5728,22 @@ function ChannelPipelineFeature({ onOpen, onTabOpen }) {
     { name: "SOPs", star: false, sub: "Processes & docs", tab: "sops" },
   ];
   return (
-    <div className="homepage-section" style={{ background: "#000000", padding: "40px 56px", borderBottom: "1px solid #0f0f0f", boxSizing: "border-box" }}>
+    <div className="homepage-section" style={{ background: c.sectionBg, padding: "40px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
       <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
-        <button onClick={onOpen} style={{ background: "transparent", color: "#63B7BA", height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "1px solid rgba(99,183,186,0.35)", cursor: "pointer", transition: "all 0.18s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,183,186,0.08)"; e.currentTarget.style.borderColor = "#63B7BA"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(99,183,186,0.35)"; }}>Open Pipeline &rarr;</button>
+        <button onClick={onOpen} style={{ background: "transparent", color: c.btnColor, height: 44, borderRadius: 22, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "1px solid " + c.btnBorder, cursor: "pointer", transition: "all 0.18s ease", letterSpacing: "-0.01em" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.btnHoverBg; e.currentTarget.style.borderColor = c.btnColor; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = c.btnBorder; }}>Open Pipeline &rarr;</button>
       </div>
-      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: "#FFFFFF", lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Channel Pipeline</div>
-      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: "#63B7BA", lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Performance & Data.</div>
-      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: "#555555", lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
+      <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 56, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 8 }}>Channel Pipeline</div>
+      <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 6, letterSpacing: "-0.01em" }}>Performance & Data.</div>
+      <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 28, maxWidth: 420 }}>Weekly entry, calculated metrics, and monthly rollups across every active channel.</div>
       <div className="channel-pipeline-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
         {channels.map((ch, i) => (
-          <div className="stat-card" key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: "#0a0a0a", border: ch.star ? "1px solid rgba(99,183,186,0.25)" : "1px solid #1c1c1c", borderRadius: 12, padding: "28px 24px 24px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = "#111111"; e.currentTarget.style.borderColor = ch.star ? "#63B7BA" : "#2a2a2a"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0a0a0a"; e.currentTarget.style.borderColor = ch.star ? "rgba(99,183,186,0.25)" : "#1c1c1c"; }}>
-            {ch.star ? <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(99,183,186,0.12)", border: "1px solid rgba(99,183,186,0.3)", borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 500, color: "#63B7BA", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>{"\u2B50"} v2</div> : null}
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 500, color: "#FFFFFF", marginBottom: 8, letterSpacing: "-0.01em" }}>{ch.name}</div>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: "#555555", marginBottom: 24 }}>{ch.sub}</div>
+          <div className="stat-card" key={i} onClick={() => { if (onTabOpen) onTabOpen(ch.tab); }} style={{ background: c.cardBg, border: ch.star ? "1px solid " + c.ttsBorder : c.cardBorder, borderRadius: 12, padding: "28px 24px 24px", cursor: "pointer", transition: "all 0.18s ease", position: "relative" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.hBg; e.currentTarget.style.borderColor = ch.star ? c.ttsHBorder : c.hBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = ch.star ? c.ttsBorder : c.cardBorder.split(" ").pop(); }}>
+            {ch.star ? <div style={{ position: "absolute", top: 16, right: 16, background: c.ttsBadgeBg, border: "1px solid " + c.ttsBadgeBorder, borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 500, color: c.ttsBadgeColor, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Inter', sans-serif" }}>{"\u2B50"} v2</div> : null}
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 500, color: c.cardName, marginBottom: 8, letterSpacing: "-0.01em" }}>{ch.name}</div>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: c.cardSub, marginBottom: 24 }}>{ch.sub}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#63B7BA", boxShadow: "0 0 6px rgba(99,183,186,0.5)" }} />
-              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: "#63B7BA" }}>Live &rarr;</span>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", background: c.live, boxShadow: "0 0 6px " + c.live + "80" }} />
+              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.live }}>Live &rarr;</span>
             </div>
           </div>
         ))}
@@ -5750,21 +5752,22 @@ function ChannelPipelineFeature({ onOpen, onTabOpen }) {
   );
 }
 
-function SiteFooter() {
+function SiteFooter({ isDark = true }) {
+  const c = { bg: isDark ? "#000000" : "#F5F5F0", border: isDark ? "1px solid #1a1a1a" : "1px solid #E8E8E2", brand: isDark ? "#FFFFFF" : "#0A0A0A", platLabel: isDark ? "#FFFFFF" : "#0A0A0A", link: isDark ? "#737373" : "#888888", linkHover: isDark ? "#00FEA9" : "#008F5E", tagline: isDark ? "#333333" : "#AAAAAA" };
   return (
-    <footer className="site-footer-root" style={{ width: "100%", background: "#000000", borderTop: "1px solid #1a1a1a", padding: "24px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, marginTop: "auto" }}>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: "#FFFFFF", letterSpacing: "-0.01em" }}>intake creators</div>
+    <footer className="site-footer-root" style={{ width: "100%", background: c.bg, borderTop: c.border, padding: "24px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, marginTop: "auto" }}>
+      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: c.brand, letterSpacing: "-0.01em" }}>intake creators</div>
       <div className="site-footer-platform" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: "#FFFFFF", letterSpacing: "0.04em", marginBottom: 10 }}>PLATFORM</div>
+        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: c.platLabel, letterSpacing: "0.04em", marginBottom: 10 }}>PLATFORM</div>
         <div className="site-footer-platform-links" style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           {[{ label: "Creator Hub", href: "/creator-hub" }, { label: "Channel Pipeline", href: "/channel-pipeline" }, { label: "Campaigns", href: "/campaigns" }, { label: "Messaging Hub", href: "/messaging" }, { label: "Settings", href: "/settings" }].map((item, i) => (
-            <a key={i} href={item.href} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: "#737373", textDecoration: "none", transition: "color 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.color = "#00FEA9"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "#737373"; }}>{item.label}</a>
+            <a key={i} href={item.href} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: c.link, textDecoration: "none", transition: "color 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.color = c.linkHover; }} onMouseLeave={(e) => { e.currentTarget.style.color = c.link; }}>{item.label}</a>
           ))}
         </div>
       </div>
       <div className="site-footer-swatches" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "#333333", marginLeft: 6 }}>Life Changing Breathing.</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: c.tagline, marginLeft: 6 }}>Life Changing Breathing.</span>
       </div>
     </footer>
   );
@@ -10228,10 +10231,10 @@ export default function App() {
           return (
             <div style={{ animation: "fadeIn 0.3s ease" }}>
               {/* SECTION 1 — Creator Hub Hero */}
-              <CreatorHubHero stats={homeStats} onOpen={() => navigate("creatorHub")} onNav={(view) => navigate(view)} />
+              <CreatorHubHero stats={homeStats} onOpen={() => navigate("creatorHub")} onNav={(view) => navigate(view)} isDark={isDark} />
 
               {/* SECTION 2 — Channel Pipeline Feature */}
-              <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} />
+              <ChannelPipelineFeature onOpen={() => navigate("pipeline")} onTabOpen={(tab) => { window.history.pushState(null, "", "/channel-pipeline/" + tab); navigate("pipeline"); }} isDark={isDark} />
 
               {/* SECTION 3 — Utility Grid */}
               <div className="utility-grid-container" style={{ padding: "32px 56px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, background: "#f8f8f6" }}>
@@ -11728,7 +11731,7 @@ export default function App() {
           const currentPage = pageNames[view] || view || "Unknown";
           return <ChangeRequestWidget currentPage={currentPage} t={t} navigate={navigate} refreshOpenCount={() => { supabase.from("change_requests").select("id").eq("status", "open").then(({ data }) => setOpenChangeRequests((data || []).length)); }} />;
         })()}
-        <SiteFooter />
+        <SiteFooter isDark={isDark} />
       </div>
     </ThemeContext.Provider>
   );
