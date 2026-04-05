@@ -35,8 +35,8 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Intake Breathing</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Hub</div>
+      <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.14em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Intake Breathing</div>
+      <div style={{ fontSize: 28, fontWeight: 500, color: t.text, letterSpacing: "-0.03em", marginBottom: 24 }}>Creator Hub</div>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
         {[
@@ -46,14 +46,14 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
           { v: scored, l: "Creators Scored", c: t.purple || "#8b6cc4" },
         ].map((s, i) => (
           <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: s.c }}>{s.v}</div>
+            <div style={{ fontSize: 28, fontWeight: 500, color: s.c }}>{s.v}</div>
             <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{s.l}</div>
           </div>
         ))}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em" }}>Programs</div>
+        <div style={{ fontSize: 14, fontWeight: 500, color: t.text, letterSpacing: "-0.01em" }}>Programs</div>
         <button onClick={() => goToProgram("all")} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer", fontWeight: 600 }}>View all {total} creators &rarr;</button>
       </div>
 
@@ -62,7 +62,7 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
           <div key={prog.id} style={cardStyle(prog.color)} onClick={() => goToProgram(prog.id)}
             onMouseEnter={(e) => hoverIn(e, prog.color)} onMouseLeave={(e) => hoverOut(e, prog.color)}>
             <div style={{ marginBottom: 14 }}><CardIcon type={prog.icon} color={prog.color} /></div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>{prog.name}</div>
+            <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>{prog.name}</div>
             <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>{prog.desc}</div>
             <div style={{ fontSize: 12, color: prog.color, fontWeight: 600 }}>{programCounts[prog.id]} creator{programCounts[prog.id] !== 1 ? "s" : ""}</div>
           </div>
@@ -73,7 +73,7 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
         <div style={cardStyle(t.green)} onClick={() => navigate("create")}
           onMouseEnter={(e) => hoverIn(e, t.green)} onMouseLeave={(e) => hoverOut(e, t.green)}>
           <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.green} /></div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>New Brief</div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>New Brief</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create a UGC creator brief with IB-Ai</div>
           <div style={{ fontSize: 12, color: t.green, fontWeight: 600 }}>IB-Ai powered</div>
         </div>
@@ -81,7 +81,7 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
         <div style={cardStyle(t.blue)} onClick={() => navigate("campaigns")}
           onMouseEnter={(e) => hoverIn(e, t.blue)} onMouseLeave={(e) => hoverOut(e, t.blue)}>
           <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={t.blue} /></div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Campaigns</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, invite creators, track results</div>
           <div style={{ fontSize: 12, color: t.blue, fontWeight: 600 }}>Manage campaigns</div>
         </div>
@@ -89,7 +89,7 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
         <div style={cardStyle(t.orange)} onClick={() => navigate("library")}
           onMouseEnter={(e) => hoverIn(e, t.orange)} onMouseLeave={(e) => hoverOut(e, t.orange)}>
           <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={t.orange} /></div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Brief Library</div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Brief Library</div>
           <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5, marginBottom: 14 }}>Browse, edit, and regenerate your saved briefs</div>
           <div style={{ fontSize: 12, color: t.orange, fontWeight: 600 }}>{library.length} brief{library.length !== 1 ? "s" : ""}</div>
         </div>
@@ -97,7 +97,7 @@ function CreatorHubLanding({ navigate, creators, t, S, library, CardIcon, setPro
 
       {library.length > 0 ? (
         <div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: t.text, letterSpacing: "-0.01em", marginBottom: 10 }}>Recent Briefs</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, letterSpacing: "-0.01em", marginBottom: 10 }}>Recent Briefs</div>
           {library.slice(0, 5).map((item) => (
             <div key={item.id} onClick={() => navigate("display")}
               style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
@@ -137,11 +137,11 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>Creator Hub</div>
+          <div style={{ fontSize: 28, fontWeight: 500, color: t.text, letterSpacing: "-0.02em" }}>Creator Hub</div>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>{active} creators · {programs.length} programs · {library.length} briefs</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={goNewBrief} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New Brief</button>
+          <button onClick={goNewBrief} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New Brief</button>
           <button onClick={() => navigate("creators")} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>View All Creators</button>
         </div>
       </div>
@@ -157,7 +157,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
             marginBottom: -1,
           }}>
             {tab.label}
-            {tab.count != null ? <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 8, background: activeTab === tab.id ? t.green + "15" : t.border, color: activeTab === tab.id ? t.green : t.textFaint, fontWeight: 700 }}>{tab.count}</span> : null}
+            {tab.count != null ? <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 8, background: activeTab === tab.id ? t.green + "15" : t.border, color: activeTab === tab.id ? t.green : t.textFaint, fontWeight: 500 }}>{tab.count}</span> : null}
           </button>
         ))}
       </div>
@@ -175,7 +175,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
               { v: programs.length, l: "Programs Active", c: t.blue },
             ].map((s, i) => (
               <div key={i} style={{ flex: "1 1 120px", minWidth: 120 }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: s.c }}>{s.v}</div>
+                <div style={{ fontSize: 28, fontWeight: 500, color: s.c }}>{s.v}</div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{s.l}</div>
               </div>
             ))}
@@ -187,7 +187,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.green + "60"; }}>
               <div style={{ marginBottom: 10 }}><CardIcon type="creator" color={t.green} /></div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>Creators</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>Creators</div>
               <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>View, search, and manage your creator roster</div>
               <div style={{ fontSize: 11, color: t.green, fontWeight: 600, marginTop: 8 }}>{active} active · {scored} scored</div>
             </div>
@@ -196,7 +196,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.purple || "#8b6cc4"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = (t.purple || "#8b6cc4") + "60"; }}>
               <div style={{ marginBottom: 10 }}><CardIcon type="influencer" color={t.purple || "#8b6cc4"} /></div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>Campaigns</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>Campaigns</div>
               <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>Create campaigns, invite creators, track results</div>
               <div style={{ fontSize: 11, color: t.purple || "#8b6cc4", fontWeight: 600, marginTop: 8 }}>Manage campaigns</div>
             </div>
@@ -205,7 +205,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.blue + "60"; }}>
               <div style={{ marginBottom: 10 }}><CardIcon type="brief" color={t.blue} /></div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>New Brief</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>New Brief</div>
               <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>Create a UGC brief with IB-Ai</div>
               <div style={{ fontSize: 11, color: t.blue, fontWeight: 600, marginTop: 8 }}>IB-Ai powered</div>
             </div>
@@ -214,7 +214,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
           {/* Recent briefs */}
           {library.length > 0 ? (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent briefs</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Recent briefs</div>
               {library.slice(0, 5).map((item) => (
                 <div key={item.id} onClick={() => onOpenBrief?.(item)}
                   style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: onOpenBrief ? "pointer" : "default", display: "flex", justifyContent: "space-between", alignItems: "center" }}
@@ -236,7 +236,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
       {activeTab === "creators" ? (
         <div>
           <div style={{ textAlign: "center", padding: 40 }}>
-            <button onClick={() => navigate("creators")} style={{ padding: "12px 24px", borderRadius: 10, fontSize: 14, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Open full creator roster</button>
+            <button onClick={() => navigate("creators")} style={{ padding: "12px 24px", borderRadius: 10, fontSize: 14, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Open full creator roster</button>
             <div style={{ fontSize: 12, color: t.textFaint, marginTop: 8 }}>{active} active creators · {scored} scored</div>
           </div>
         </div>
@@ -246,7 +246,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
       {activeTab === "campaigns" ? (
         <div>
           <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 12 }}>Create and manage campaigns directly from the Creator Hub.</div>
-          <button onClick={() => navigate("campaigns")} style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Open Campaigns Manager</button>
+          <button onClick={() => navigate("campaigns")} style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Open Campaigns Manager</button>
         </div>
       ) : null}
 
@@ -255,7 +255,7 @@ function UGCDashboard({ navigate, library, creators, t, S, onOpenBrief, onNewBri
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: t.textFaint }}>{library.length} briefs in library</div>
-            <button onClick={goNewBrief} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New Brief</button>
+            <button onClick={goNewBrief} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New Brief</button>
           </div>
           {library.length === 0 ? (
             <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>
@@ -328,12 +328,12 @@ function ManagerLogin({ onLogin, t }) {
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <img src="/favicon-32.png" alt="Intake" style={{ width: 48, height: 48, marginBottom: 12 }} onError={(e) => { e.target.style.display = "none"; }} />
-          <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>Manager Dashboard</div>
+          <div style={{ fontSize: 22, fontWeight: 500, color: t.text }}>Manager Dashboard</div>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Intake Breathing — Creator Partnerships</div>
         </div>
 
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 28 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Sign in</div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 16 }}>Sign in</div>
           <input
             type="password"
             value={password}
@@ -355,7 +355,7 @@ function ManagerLogin({ onLogin, t }) {
             style={{
               width: "100%", padding: 12, borderRadius: 8, border: "none",
               background: t.green, color: t.isLight ? "#fff" : "#000",
-              fontSize: 14, fontWeight: 700,
+              fontSize: 14, fontWeight: 500,
               cursor: checking ? "wait" : "pointer",
               opacity: checking ? 0.6 : 1,
             }}

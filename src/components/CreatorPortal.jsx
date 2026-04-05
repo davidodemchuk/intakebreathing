@@ -11,8 +11,8 @@ function ProfilePreview({ profile, platform, t }) {
       {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", border: "2px solid " + t.green + "40" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{platform}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: t.green, background: t.green + "15", padding: "2px 7px", borderRadius: 6 }}>Verified</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{platform}</span>
+          <span style={{ fontSize: 10, fontWeight: 500, color: t.green, background: t.green + "15", padding: "2px 7px", borderRadius: 6 }}>Verified</span>
         </div>
         <div style={{ fontSize: 12, color: t.textMuted }}>{fmtNum(profile.followers)} followers{profile.bio ? " · " + profile.bio.slice(0, 60) + (profile.bio.length > 60 ? "..." : "") : ""}</div>
       </div>
@@ -200,34 +200,34 @@ function CreatorLogin({ navigate, t }) {
   if (checkingSession) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading...</div>;
 
   const inp = { width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 15, outline: "none", boxSizing: "border-box" };
-  const btn = { width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 700, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1 };
-  const verifyBtn = (verifying) => ({ padding: "10px 18px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontSize: 13, fontWeight: 700, cursor: verifying ? "wait" : "pointer", opacity: verifying ? 0.6 : 1, whiteSpace: "nowrap" });
+  const btn = { width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 500, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1 };
+  const verifyBtn = (verifying) => ({ padding: "10px 18px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontSize: 13, fontWeight: 500, cursor: verifying ? "wait" : "pointer", opacity: verifying ? 0.6 : 1, whiteSpace: "nowrap" });
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 460 }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.02em" }}>Creator Portal</div>
+          <div style={{ fontSize: 26, fontWeight: 500, color: t.text, letterSpacing: "-0.02em" }}>Creator Portal</div>
           <div style={{ fontSize: 14, color: t.textMuted, marginTop: 6 }}>Intake Breathing Technology</div>
         </div>
         <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 16, padding: 32, boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
           <div style={{ display: "flex", marginBottom: 24, borderRadius: 10, overflow: "hidden", border: "1px solid " + t.border }}>
-            <button onClick={() => { setMode("login"); setStep(1); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "login" ? t.green : "transparent", color: mode === "login" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Log in</button>
-            <button onClick={() => { setMode("signup"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: mode === "signup" ? t.green : "transparent", color: mode === "signup" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Sign up</button>
+            <button onClick={() => { setMode("login"); setStep(1); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: mode === "login" ? t.green : "transparent", color: mode === "login" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Log in</button>
+            <button onClick={() => { setMode("signup"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: mode === "signup" ? t.green : "transparent", color: mode === "signup" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Sign up</button>
           </div>
 
           {mode === "signup" ? (
             <>
               {/* Step indicator */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-                <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>1</div>
+                <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center" }}>1</div>
                 <div style={{ flex: 1, height: 2, background: step >= 2 ? t.green : t.border, borderRadius: 1, transition: "background 0.3s" }} />
-                <div style={{ width: 24, height: 24, borderRadius: 12, background: step >= 2 ? t.green : t.border, color: step >= 2 ? (t.isLight ? "#fff" : "#000") : t.textFaint, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.3s, color 0.3s" }}>2</div>
+                <div style={{ width: 24, height: 24, borderRadius: 12, background: step >= 2 ? t.green : t.border, color: step >= 2 ? (t.isLight ? "#fff" : "#000") : t.textFaint, fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.3s, color 0.3s" }}>2</div>
               </div>
 
               {step === 1 ? (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 16 }}>Account details</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 16 }}>Account details</div>
                   <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Full name</div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus style={inp} /></div>
                   <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" style={inp} /></div>
                   <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" style={inp} /></div>
@@ -236,7 +236,7 @@ function CreatorLogin({ navigate, t }) {
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>Connect your socials</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 4 }}>Connect your socials</div>
                   <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 18 }}>We verify your profiles so brands can discover you.</div>
 
                   {/* Instagram — required */}
@@ -354,13 +354,13 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
       <div style={{ maxWidth: 500, margin: "0 auto", paddingTop: 32 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <img src="/favicon-32.png" alt="Intake" style={{ width: 48, height: 48, marginBottom: 12 }} onError={(e) => { e.target.style.display = "none"; }} />
-          <div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>Welcome, {creatorName.split(" ")[0] || "Creator"}!</div>
+          <div style={{ fontSize: 24, fontWeight: 500, color: t.text }}>Welcome, {creatorName.split(" ")[0] || "Creator"}!</div>
           <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Just a few more details to get you set up</div>
         </div>
 
         {(igHandle || ttHandle) ? (
           <div style={{ background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, padding: "14px 18px", marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Verified accounts</div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: t.green, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Verified accounts</div>
             {igHandle ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: ttHandle ? 8 : 0 }}>
                 {igData.avatarUrl ? <img src={igData.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
@@ -410,7 +410,7 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
             <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>We'll send you Intake product to create content with</div>
             <textarea value={form.address} onChange={(e) => upd("address", e.target.value)} placeholder="Street, City, State, ZIP" rows={3} style={{ ...inpStyle, fontFamily: "inherit", resize: "vertical" }} />
           </div>
-          <button onClick={save} disabled={saving} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 700, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
+          <button onClick={save} disabled={saving} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 500, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
             {saving ? "Saving..." : "Complete setup"}
           </button>
         </div>
@@ -449,18 +449,18 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
     <div style={{ minHeight: "100vh", background: t.bg }}>
       <div style={{ background: t.card, borderBottom: "1px solid " + t.border, padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 14, fontWeight: 800, color: t.text, padding: "14px 0" }}>Intake</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: t.text, padding: "14px 0" }}>Intake</span>
           <div style={{ display: "flex", gap: 2 }}>
             {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent" }}>
-                {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: t.green, color: "#fff", fontWeight: 700 }}>{tab.count}</span> : null}
+                {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: t.green, color: "#fff", fontWeight: 500 }}>{tab.count}</span> : null}
               </button>
             ))}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={() => navigate("creatorProfile")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: t.green }}>{(cp?.name || "C")[0]}</div>
+            <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, color: t.green }}>{(cp?.name || "C")[0]}</div>
             {cp?.name?.split(" ")[0] || "Profile"}
           </button>
           <button onClick={async () => { await supabase.auth.signOut(); navigate("creatorLogin"); }} style={{ padding: "6px 10px", borderRadius: 6, border: "none", background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>Sign Out</button>
@@ -471,30 +471,30 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
         {activeTab === "home" ? (
           <>
             <div style={{ background: "linear-gradient(135deg, " + t.green + "15, " + t.blue + "10)", border: "1px solid " + t.green + "25", borderRadius: 14, padding: "20px 24px", marginBottom: 20 }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>Hey, {cp?.name?.split(" ")[0] || "Creator"}</div>
+              <div style={{ fontSize: 20, fontWeight: 500, color: t.text }}>Hey, {cp?.name?.split(" ")[0] || "Creator"}</div>
               <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Welcome to your Intake Breathing dashboard</div>
               {pendingCampaigns.length > 0 ? <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: t.orange + "15", border: "1px solid " + t.orange + "30", fontSize: 12, color: t.orange, fontWeight: 600, cursor: "pointer" }} onClick={() => setActiveTab("campaigns")}>{pendingCampaigns.length} campaign invite{pendingCampaigns.length > 1 ? "s" : ""} waiting</div> : null}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
               {[{ v: assignments.length, l: "Briefs", c: t.blue }, { v: activeCampaigns.length, l: "Active campaigns", c: t.green }, { v: pendingCampaigns.length, l: "Pending invites", c: t.orange }].map((s, i) => (
                 <div key={i} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: s.c }}>{s.v}</div>
+                  <div style={{ fontSize: 24, fontWeight: 500, color: s.c }}>{s.v}</div>
                   <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.l}</div>
                 </div>
               ))}
             </div>
-            {assignments.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8 }}>Recent briefs</div>{assignments.slice(0, 3).map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div><div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</div> : null}
+            {assignments.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Recent briefs</div>{assignments.slice(0, 3).map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div><div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</div> : null}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div onClick={() => navigate("creatorMessages")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Messages</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Chat with your manager</div></div>
-              <div onClick={() => navigate("creatorProfile")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Edit profile</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Update your info</div></div>
+              <div onClick={() => navigate("creatorMessages")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Messages</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Chat with your manager</div></div>
+              <div onClick={() => navigate("creatorProfile")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Edit profile</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Update your info</div></div>
             </div>
           </>
         ) : null}
         {activeTab === "briefs" ? (
-          <>{assignments.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}><div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No briefs yet</div><div style={{ fontSize: 12 }}>Your manager will assign briefs when campaigns are ready.</div></div> : assignments.map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</>
+          <>{assignments.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}><div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No briefs yet</div><div style={{ fontSize: 12 }}>Your manager will assign briefs when campaigns are ready.</div></div> : assignments.map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</>
         ) : null}
         {activeTab === "campaigns" ? (
-          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 700, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div>{camp?.brief_id ? <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: t.blue + "08", border: "1px solid " + t.blue + "20" }}><div style={{ fontSize: 10, fontWeight: 600, color: t.blue, textTransform: "uppercase" }}>Brief included</div><div style={{ fontSize: 12, color: t.text, marginTop: 2 }}>Accept to view the full brief and content requirements</div></div> : null}<div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); if (camp?.brief_id) { await supabase.from("brief_assignments").insert({ creator_id: cp.id, brief_id: camp.brief_id, campaign_id: camp.id, status: "assigned", assigned_at: new Date().toISOString() }); const { data: ra } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false }); if (ra) setAssignments(ra); } }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 700, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div></div>; })}</div> : null}</>}</>
+          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div>{camp?.brief_id ? <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: t.blue + "08", border: "1px solid " + t.blue + "20" }}><div style={{ fontSize: 10, fontWeight: 600, color: t.blue, textTransform: "uppercase" }}>Brief included</div><div style={{ fontSize: 12, color: t.text, marginTop: 2 }}>Accept to view the full brief and content requirements</div></div> : null}<div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); if (camp?.brief_id) { await supabase.from("brief_assignments").insert({ creator_id: cp.id, brief_id: camp.brief_id, campaign_id: camp.id, status: "assigned", assigned_at: new Date().toISOString() }); const { data: ra } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false }); if (ra) setAssignments(ra); } }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div></div>; })}</div> : null}</>}</>
         ) : null}
       </div>
     </div>
@@ -575,7 +575,7 @@ function CreatorMessages({ creatorProfile: cp, navigate, t }) {
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "12px 24px", borderBottom: "1px solid " + t.border, display: "flex", alignItems: "center", gap: 12 }}>
         <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>&larr; Back</button>
-        <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Messages</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: t.text }}>Messages</span>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px", maxWidth: 600, margin: "0 auto", width: "100%" }}>
@@ -599,7 +599,7 @@ function CreatorMessages({ creatorProfile: cp, navigate, t }) {
       <div style={{ borderTop: "1px solid " + t.border, padding: "12px 24px" }}>
         <div style={{ display: "flex", gap: 8, maxWidth: 600, margin: "0 auto" }}>
           <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Type a message..." style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, outline: "none" }} />
-          <button type="button" onClick={send} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Send</button>
+          <button type="button" onClick={send} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Send</button>
         </div>
       </div>
     </div>
@@ -663,7 +663,7 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
     <div style={{ minHeight: "100vh", background: t.bg, padding: 24 }}>
       <div style={{ maxWidth: 480, margin: "0 auto", paddingTop: 24 }}>
         <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 20 }}>&larr; Back</button>
-        <div style={{ fontSize: 20, fontWeight: 800, color: t.text, marginBottom: 20 }}>Your Profile</div>
+        <div style={{ fontSize: 20, fontWeight: 500, color: t.text, marginBottom: 20 }}>Your Profile</div>
         <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, padding: 24 }}>
           {inp("Name", "name", "Your name")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -688,7 +688,7 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
             </div>
           </div>
           {inp("Shipping Address", "address", "Street, City, State, ZIP", { multi: true })}
-          <button type="button" onClick={save} disabled={saving} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
+          <button type="button" onClick={save} disabled={saving} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 500, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
             {saving ? "Saving..." : saved ? "\u2713 Saved" : "Save Changes"}
           </button>
         </div>

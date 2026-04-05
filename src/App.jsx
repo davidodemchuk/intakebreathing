@@ -1100,19 +1100,19 @@ function getS(t) {
     app: { background: t.bg, minHeight: "100vh", color: t.text, fontFamily: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif", transition: "background 0.3s, color 0.3s" },
     nav: { borderBottom: `1px solid ${t.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: t.navBg, backdropFilter: "blur(12px)", zIndex: 100, transition: "background 0.3s", boxShadow: t.shadow },
     navLogo: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer" },
-    navTitle: { fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: t.text },
+    navTitle: { fontSize: 15, fontWeight: 500, letterSpacing: "-0.02em", color: t.text },
     navSub: { fontSize: 11, color: t.textFaint, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" },
     navLinks: { display: "flex", gap: 6, alignItems: "center" },
     navBtn: (a) => ({ padding: "7px 14px", borderRadius: 8, border: "none", background: a ? t.green+"18" : "transparent", color: a ? t.green : t.textFaint, fontSize: 13, fontWeight: 600, cursor: "pointer" }),
     themeToggle: { width: 36, height: 20, borderRadius: 10, border: "none", cursor: "pointer", position: "relative", background: t.border, display: "flex", alignItems: "center", padding: 2, transition: "background 0.2s" },
     themeKnob: (isDark) => ({ width: 16, height: 16, borderRadius: 8, background: t.green, transition: "transform 0.2s", transform: isDark ? "translateX(16px)" : "translateX(0)" }),
-    btnP: { padding: "13px 28px", borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 700, cursor: "pointer" },
+    btnP: { padding: "13px 28px", borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 500, cursor: "pointer" },
     btnS: { padding: "13px 28px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.text, fontSize: 14, fontWeight: 600, cursor: "pointer" },
     formWrap: { maxWidth: 720, margin: "0 auto", padding: "40px 24px 80px" },
-    formTitle: { fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text },
+    formTitle: { fontSize: 26, fontWeight: 500, letterSpacing: "-0.03em", marginBottom: 6, color: t.text },
     formSub: { fontSize: 14, color: t.textMuted },
     section: { marginBottom: 32 },
-    secLabel: { fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: t.green, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 },
+    secLabel: { fontSize: 12, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", color: t.green, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 },
     fg: { marginBottom: 18 },
     label: { display: "block", fontSize: 13, fontWeight: 600, color: t.textSecondary, marginBottom: 6 },
     hint: { fontSize: 11, color: t.textFaint, marginTop: 4, fontStyle: "italic" },
@@ -1121,7 +1121,7 @@ function getS(t) {
     select: { width: "100%", padding: "11px 14px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", cursor: "pointer", transition: "background 0.3s", boxShadow: t.isLight ? "inset 0 1px 2px rgba(0,0,0,0.06)" : "none" },
     r2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
     r3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 },
-    genBtn: { width: "100%", padding: "16px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.green},${t.blue})`, color: t.isLight ? "#fff" : "#000", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 12 },
+    genBtn: { width: "100%", padding: "16px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.green},${t.blue})`, color: t.isLight ? "#fff" : "#000", fontSize: 16, fontWeight: 500, cursor: "pointer", marginTop: 12 },
     chipGrid: { display: "flex", flexWrap: "wrap", gap: 8 },
     chip: (on) => ({
       padding: "8px 14px", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: on ? 600 : 500,
@@ -1133,30 +1133,30 @@ function getS(t) {
     }),
     roBox: { background: t.cardAlt, borderRadius: 10, border: `1px solid ${t.border}`, padding: "12px 14px", fontSize: 13, color: t.textFaint, lineHeight: 1.6, transition: "background 0.3s" },
     roItem: () => ({ marginBottom: 4, fontSize: 13, color: t.textSecondary, lineHeight: 1.6 }),
-    roMarker: (c) => ({ color: c, fontWeight: 700, marginRight: 6 }),
+    roMarker: (c) => ({ color: c, fontWeight: 500, marginRight: 6 }),
     bWrap: { maxWidth: 760, margin: "0 auto", padding: "40px 24px 80px" },
     bHeader: { textAlign: "center", marginBottom: 40, paddingBottom: 32, borderBottom: `1px solid ${t.border}` },
-    bCampaign: { fontSize: 32, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 8, color: t.text },
+    bCampaign: { fontSize: 32, fontWeight: 500, letterSpacing: "-0.03em", marginBottom: 8, color: t.text },
     bMission: { fontSize: 16, color: t.textMuted, fontStyle: "italic", marginBottom: 18 },
     badges: { display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" },
-    badge: (c) => ({ padding: "5px 12px", borderRadius: 20, background: c + (t.isLight ? "20" : "18"), color: c, fontSize: 12, fontWeight: 700, border: t.isLight ? `1px solid ${c}30` : "none" }),
+    badge: (c) => ({ padding: "5px 12px", borderRadius: 20, background: c + (t.isLight ? "20" : "18"), color: c, fontSize: 12, fontWeight: 500, border: t.isLight ? `1px solid ${c}30` : "none" }),
     bSec: { marginBottom: 32 },
-    bSecTitle: { fontSize: 14, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: t.textFaint, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 },
+    bSecTitle: { fontSize: 14, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: t.textFaint, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 },
     card: { background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: 20, marginBottom: 12, transition: "background 0.3s", boxShadow: t.shadow },
     cols2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 },
     beat: (c) => ({ background: t.card, borderRadius: 12, border: `1px solid ${c}25`, borderLeft: `4px solid ${c}`, padding: 20, marginBottom: 14, transition: "background 0.3s", boxShadow: t.shadow }),
-    beatLabel: (c) => ({ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: c, marginBottom: 8 }),
+    beatLabel: (c) => ({ fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: c, marginBottom: 8 }),
     beatInst: { fontSize: 14, color: t.text, lineHeight: 1.6, marginBottom: 14 },
-    beatSub: { fontSize: 11, fontWeight: 700, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 },
+    beatSub: { fontSize: 11, fontWeight: 500, color: t.textFaint, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 },
     beatLine: { fontSize: 13, color: t.textSecondary, lineHeight: 1.7, paddingLeft: 12, borderLeft: `2px solid ${t.border}`, marginBottom: 4 },
     hookItem: { display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 },
-    hookNum: { minWidth: 28, height: 28, borderRadius: 8, background: t.orange + (t.isLight ? "20" : "22"), color: t.orange, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, border: t.isLight ? `1px solid ${t.orange}35` : "none" },
+    hookNum: { minWidth: 28, height: 28, borderRadius: 8, background: t.orange + (t.isLight ? "20" : "22"), color: t.orange, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 500, border: t.isLight ? `1px solid ${t.orange}35` : "none" },
     hookText: { fontSize: 14, color: t.textSecondary, lineHeight: 1.5, paddingTop: 3 },
     sayCol: { background: t.card, borderRadius: 12, border: `1px solid ${t.green}20`, padding: 16, transition: "background 0.3s", boxShadow: t.shadow },
     dontCol: { background: t.card, borderRadius: 12, border: `1px solid ${t.red}20`, padding: 16, transition: "background 0.3s", boxShadow: t.shadow },
-    sayH: (c) => ({ fontSize: 12, fontWeight: 800, color: c, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }),
+    sayH: (c) => ({ fontSize: 12, fontWeight: 500, color: c, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }),
     li: { fontSize: 13, color: t.textSecondary, lineHeight: 1.7, marginBottom: 6, paddingLeft: 2 },
-    mk: (c) => ({ color: c, fontWeight: 700, marginRight: 6 }),
+    mk: (c) => ({ color: c, fontWeight: 500, marginRight: 6 }),
     listItem: { background: t.card, borderRadius: 12, border: `1px solid ${t.border}`, padding: "16px 20px", marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.3s", boxShadow: t.shadow },
     empty: { textAlign: "center", padding: "80px 24px", color: t.textFaint },
   };
@@ -3960,14 +3960,14 @@ function UploadOldBrief({ onExtracted, t, extractionPrompt, aiKnowledge }) {
 
   return (
     <div style={{ marginBottom: 24, padding: 16, border: `2px dashed ${t.border}`, borderRadius: 12, textAlign: "center", background: t.cardAlt }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Import an Existing Brief</div>
+      <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 4 }}>Import an Existing Brief</div>
       <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
         Upload any old brief (PDF, image, or text) and our AI will rewrite it into Intake's format
       </div>
       {uploading ? (
         <div style={{ fontSize: 13, color: t.green }}>Reading brief and extracting fields...</div>
       ) : (
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
           Upload Brief
           <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.txt,.md,.doc,.docx" style={{ display: "none" }} onChange={handleUpload} />
         </label>
@@ -4057,7 +4057,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
             placeholder="One item per line"
           />
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
             <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
           </div>
         </div>
@@ -4085,7 +4085,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
             style={{ width: "100%", minHeight: 250, padding: 10, borderRadius: 8, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
             <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
           </div>
         </div>
@@ -4111,7 +4111,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
           />
           <div style={{ fontSize: 10, color: t.textFaint, marginTop: 4 }}>Edit as JSON. Keep the same structure.</div>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => saveEdit(field)} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
             <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
           </div>
         </div>
@@ -4121,7 +4121,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
       <div>
         {Object.entries(o).map(([key, val]) => (
           <div key={key} style={{ marginBottom: 12, padding: 10, background: t.cardAlt, borderRadius: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 4 }}>{key}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: t.green, marginBottom: 4 }}>{key}</div>
             {Array.isArray(val) ? val.map((v, i) => (
               <div key={i} style={{ fontSize: 12, color: t.textMuted, paddingLeft: 12, lineHeight: 1.6 }}>{`"${v}"`}</div>
             )) : (
@@ -4185,7 +4185,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
           alignItems: "center",
           cursor: "pointer",
           fontSize: homepage ? 16 : 14,
-          fontWeight: 700,
+          fontWeight: 500,
           color: t.text,
         }}
       >
@@ -4226,14 +4226,14 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
 
           {activeSection === "brand" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Brand Context Given to IB-Ai</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Brand Context Given to IB-Ai</div>
               {renderEditableText("brandContext", ak.brandContext || "")}
             </div>
           )}
 
           {activeSection === "products" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Intake Breathing Products</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Intake Breathing Products</div>
               {editing === "products" ? (
                 <div>
                   <textarea
@@ -4243,7 +4243,7 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
                     placeholder="One product per line (same text shown above; brief form uses the name before — )"
                   />
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <button type="button" onClick={() => saveEdit("products")} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
+                    <button type="button" onClick={() => saveEdit("products")} disabled={saving} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{saving ? "Saving..." : "Save"}</button>
                     <button type="button" onClick={() => setEditing(null)} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
                   </div>
                 </div>
@@ -4272,69 +4272,69 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
 
           {activeSection === "approved" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.green, marginBottom: 8 }}>✓ Creators CAN Say These</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.green, marginBottom: 8 }}>✓ Creators CAN Say These</div>
               {renderEditableList("approvedClaims", ak.approvedClaims, t.green, "✓")}
             </div>
           )}
 
           {activeSection === "banned" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#ef4444", marginBottom: 8 }}>✗ Creators Must NEVER Say These</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#ef4444", marginBottom: 8 }}>✗ Creators Must NEVER Say These</div>
               {renderEditableList("bannedClaims", ak.bannedClaims, "#ef4444", "✗")}
             </div>
           )}
 
           {activeSection === "rejections" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, marginBottom: 8 }}>⚠ Revision Required If...</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.orange, marginBottom: 8 }}>⚠ Revision Required If...</div>
               {renderEditableList("defaultRejections", ak.defaultRejections, t.orange, "⚠")}
             </div>
           )}
 
           {activeSection === "tones" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Tone Options & Example Hooks</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Tone Options & Example Hooks</div>
               {renderEditableJSON("toneHooks", ak.toneHooks)}
             </div>
           )}
 
           {activeSection === "platforms" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Platform Specifications</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Platform Specifications</div>
               {renderEditableJSON("platformNotes", ak.platformNotes)}
             </div>
           )}
 
           {activeSection === "lengths" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Video Length Pacing Guides</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Video Length Pacing Guides</div>
               {renderEditableJSON("lengthGuide", ak.lengthGuide)}
-              <div style={{ marginTop: 16, fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Personas</div>
+              <div style={{ marginTop: 16, fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Personas</div>
               <div style={{ marginTop: 8 }}>{renderEditableList("personas", ak.personas, t.blue, "•")}</div>
             </div>
           )}
 
           {activeSection === "scoring" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>IB Score Calculation (1-100)</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>IB Score Calculation (1-100)</div>
               {editing === "ibScoreWeights" ? renderEditableJSON("ibScoreWeights", ak.ibScoreWeights) : (
                 <div>
                   {Object.entries(ak.ibScoreWeights || {}).map(([key, val]) => (
                     <div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${t.border}10` }}>
                       <span style={{ fontSize: 12, color: t.text, textTransform: "capitalize" }}>{key.replace(/([A-Z])/g, " $1")}</span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: t.green }}>{val}%</span>
+                      <span style={{ fontSize: 16, fontWeight: 500, color: t.green }}>{val}%</span>
                     </div>
                   ))}
                   <button type="button" onClick={() => startEdit("ibScoreWeights", ak.ibScoreWeights)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Weights</button>
                 </div>
               )}
-              <div style={{ marginTop: 16, fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>Score Labels</div>
+              <div style={{ marginTop: 16, fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 6 }}>Score Labels</div>
               {editing === "ibScoreLabels" ? renderEditableJSON("ibScoreLabels", ak.ibScoreLabels) : (
                 <div>
                   {Object.entries(ak.ibScoreLabels || {}).map(([range, label]) => (
                     <div key={range} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
                       <span style={{ color: t.textMuted }}>{range}</span>
-                      <span style={{ fontWeight: 700, color: t.text }}>{label}</span>
+                      <span style={{ fontWeight: 500, color: t.text }}>{label}</span>
                     </div>
                   ))}
                   <button type="button" onClick={() => startEdit("ibScoreLabels", ak.ibScoreLabels)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Labels</button>
@@ -4345,22 +4345,22 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
 
           {activeSection === "rates" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Rate Calculator Parameters</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Rate Calculator Parameters</div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
                 <div style={{ background: t.cardAlt, borderRadius: 8, padding: 10, textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>CPM Cap</div>
                   {editing === "cpmCap" ? (
                     <div style={{ marginTop: 6 }}>
-                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 800 }} />
+                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 500 }} />
                       <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
-                        <button type="button" onClick={() => saveEdit("cpmCap")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
+                        <button type="button" onClick={() => saveEdit("cpmCap")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
                         <button type="button" onClick={() => setEditing(null)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 11, cursor: "pointer" }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>${ak.cpmCap ?? 25}</div>
+                      <div style={{ fontSize: 20, fontWeight: 500, color: t.green }}>${ak.cpmCap ?? 25}</div>
                       <button type="button" onClick={() => startEdit("cpmCap", ak.cpmCap ?? 25)} style={{ marginTop: 6, padding: "2px 8px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 10, cursor: "pointer" }}>✎</button>
                     </>
                   )}
@@ -4369,15 +4369,15 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
                   <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>Rate Floor</div>
                   {editing === "rateFloor" ? (
                     <div style={{ marginTop: 6 }}>
-                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 800 }} />
+                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 500 }} />
                       <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
-                        <button type="button" onClick={() => saveEdit("rateFloor")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
+                        <button type="button" onClick={() => saveEdit("rateFloor")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
                         <button type="button" onClick={() => setEditing(null)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 11, cursor: "pointer" }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>${ak.rateFloor ?? 50}</div>
+                      <div style={{ fontSize: 20, fontWeight: 500, color: t.text }}>${ak.rateFloor ?? 50}</div>
                       <button type="button" onClick={() => startEdit("rateFloor", ak.rateFloor ?? 50)} style={{ marginTop: 6, padding: "2px 8px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 10, cursor: "pointer" }}>✎</button>
                     </>
                   )}
@@ -4386,26 +4386,26 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
                   <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase" }}>Rate Ceiling</div>
                   {editing === "rateCeiling" ? (
                     <div style={{ marginTop: 6 }}>
-                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 800 }} />
+                      <input type="number" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", maxWidth: 120, padding: 6, borderRadius: 6, border: `1px solid ${t.green}`, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 500 }} />
                       <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
-                        <button type="button" onClick={() => saveEdit("rateCeiling")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
+                        <button type="button" onClick={() => saveEdit("rateCeiling")} disabled={saving} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>{saving ? "…" : "Save"}</button>
                         <button type="button" onClick={() => setEditing(null)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 11, cursor: "pointer" }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>${ak.rateCeiling ?? 500}</div>
+                      <div style={{ fontSize: 20, fontWeight: 500, color: t.text }}>${ak.rateCeiling ?? 500}</div>
                       <button type="button" onClick={() => startEdit("rateCeiling", ak.rateCeiling ?? 500)} style={{ marginTop: 6, padding: "2px 8px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 10, cursor: "pointer" }}>✎</button>
                     </>
                   )}
                 </div>
               </div>
 
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>CPM Tiers (by follower count)</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 6 }}>CPM Tiers (by follower count)</div>
               {(ak.cpmTiers || []).map((tier, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${t.border}10`, fontSize: 12 }}>
                   <span style={{ color: t.textMuted }}>{tier.label}</span>
-                  <span style={{ fontWeight: 700, color: t.green }}>${tier.cpm} CPM</span>
+                  <span style={{ fontWeight: 500, color: t.green }}>${tier.cpm} CPM</span>
                 </div>
               ))}
               <button type="button" onClick={() => startEdit("cpmTiers", ak.cpmTiers)} style={{ marginTop: 8, padding: "4px 12px", borderRadius: 6, border: `1px dashed ${t.border}`, background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>✎ Edit Tiers</button>
@@ -4414,23 +4414,23 @@ function IBAiSourceOfTruth({ t, aiKnowledge, onSave, homepage, startOpen }) {
 
           {activeSection === "outreach" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Outreach style</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Outreach style</div>
               {renderEditableText("outreachStyle", ak.outreachStyle || "")}
-              <div style={{ marginTop: 16, fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Creator analysis prompt</div>
+              <div style={{ marginTop: 16, fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Creator analysis prompt</div>
               {renderEditableText("creatorAnalysisPrompt", ak.creatorAnalysisPrompt || "")}
             </div>
           )}
 
           {activeSection === "competitors" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Competitor keywords</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Competitor keywords</div>
               {renderEditableList("competitorKeywords", ak.competitorKeywords || [], "#ef4444", "•")}
             </div>
           )}
 
           {activeSection === "alignment" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>Content alignment keywords</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 8 }}>Content alignment keywords</div>
               {renderEditableList("alignmentKeywords", ak.alignmentKeywords || [], t.green, "•")}
             </div>
           )}
@@ -4785,7 +4785,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
                             <button
                               type="button"
                               onClick={addCustomPlatform}
-                              style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+                              style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, cursor: "pointer", flexShrink: 0 }}
                             >
                               Add
                             </button>
@@ -4964,7 +4964,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         </div>
         <div style={S.cols2}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.green, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" size={14} color={t.green} />Approved Claims</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: t.green, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" size={14} color={t.green} />Approved Claims</div>
             {selectedApproved.map((c, i) => (
               <div key={`a-${i}-${c.slice(0, 24)}`} style={{ background: t.card, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${t.green}20` }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><Icon name="checkSm" size={14} color={t.green} /><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
@@ -4987,7 +4987,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
             />
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.red, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Icon name="ban" size={14} color={t.red} />Banned Claims</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: t.red, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Icon name="ban" size={14} color={t.red} />Banned Claims</div>
             {selectedBanned.map((c, i) => (
               <div key={`b-${i}-${c.slice(0, 24)}`} style={{ background: t.card, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${t.red}20` }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}><Icon name="x" size={14} color={t.red} /><span style={{ fontSize: 13, color: t.textSecondary, lineHeight: 1.5 }}>{c}</span></div>
@@ -5045,7 +5045,7 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
         <button style={{ ...S.genBtn, flex: 1, marginTop: 0 }} onClick={() => go("ai")}>IB-Ai</button>
-        <button style={{ ...S.genBtn, flex: 1, marginTop: 0, background: t.border, color: t.text, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => go("template")}><Icon name="zap" size={16} color={t.text} />Instant Draft</button>
+        <button style={{ ...S.genBtn, flex: 1, marginTop: 0, background: t.border, color: t.text, fontWeight: 500, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => go("template")}><Icon name="zap" size={16} color={t.text} />Instant Draft</button>
       </div>
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 8 }}>
         <div style={{ ...S.hint, margin: 0 }}>IB-Ai uses Claude to write original creative. Instant Draft uses templates — fast but generic.</div>
@@ -5562,7 +5562,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
       <div style={S.bSec}>
         <div style={S.bSecTitle}><Icon name="users" size={16} color={t.textFaint} /><span>Who You&apos;re Talking To</span></div>
         <div style={S.card}>
-          <EditableField editable={isManager} value={b.persona} style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: t.text }} t={t} />
+          <EditableField editable={isManager} value={b.persona} style={{ fontSize: 20, fontWeight: 500, marginBottom: 4, color: t.text }} t={t} />
           <EditableField editable={isManager} value={b.age} style={{ fontSize: 13, color: t.blue, fontWeight: 600, marginBottom: 10 }} t={t} />
           <EditableField editable={isManager} value={b.psycho} style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.6, marginBottom: 16 }} t={t} />
           <div style={S.cols2}>
@@ -5617,7 +5617,7 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
       {showAssignModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setShowAssignModal(false)} role="presentation">
           <div onClick={(e) => e.stopPropagation()} style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 24, width: "100%", maxWidth: 500, maxHeight: "80vh", overflow: "auto" }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>Assign Brief</div>
+            <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>Assign Brief</div>
             <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>Select creators to receive this brief</div>
             <input value={assignSearch} onChange={(e) => setAssignSearch(e.target.value)} placeholder="Search creators..." style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 12, outline: "none", boxSizing: "border-box" }} />
             {(creators || []).filter((c) => c.status === "Active" && (!assignSearch.trim() || `${c.handle} ${c.name} ${c.email}`.toLowerCase().includes(assignSearch.toLowerCase()))).map((c) => {
@@ -5654,12 +5654,12 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
                   onMouseEnter={(e) => { if (!assigned) e.currentTarget.style.background = t.cardAlt; }}
                   onMouseLeave={(e) => { if (!assigned) e.currentTarget.style.background = "transparent"; }}
                 >
-                  <div style={{ width: 32, height: 32, borderRadius: 16, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: t.textFaint, flexShrink: 0 }}>{(c.handle || "?").replace("@", "").charAt(0).toUpperCase()}</div>
+                  <div style={{ width: 32, height: 32, borderRadius: 16, background: t.cardAlt, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: t.textFaint, flexShrink: 0 }}>{(c.handle || "?").replace("@", "").charAt(0).toUpperCase()}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{c.handle}</div>
                     <div style={{ fontSize: 11, color: t.textFaint }}>{c.email || "no email"}</div>
                   </div>
-                  {assigned ? <span style={{ fontSize: 11, color: t.green, fontWeight: 700 }}>✓ Assigned</span> : <span style={{ fontSize: 11, color: t.textFaint }}>Click to assign</span>}
+                  {assigned ? <span style={{ fontSize: 11, color: t.green, fontWeight: 500 }}>✓ Assigned</span> : <span style={{ fontSize: 11, color: t.textFaint }}>Click to assign</span>}
                 </div>
               );
             })}
@@ -5770,8 +5770,8 @@ function ComingSoonPage({ title, message, onBack }) {
         }}
       >
         <div style={{ marginBottom: 16, display: "flex", justifyContent: "center" }}><Icon name="construction" size={40} color={t.orange} /></div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: t.orange, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Coming Soon</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 14 }}>{title}</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: t.orange, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Coming Soon</div>
+        <div style={{ fontSize: 22, fontWeight: 500, color: t.text, marginBottom: 14 }}>{title}</div>
         <div style={{ fontSize: 15, color: t.textMuted, lineHeight: 1.65 }}>{message}</div>
       </div>
     </div>
@@ -5783,7 +5783,7 @@ function ToolsPage({ onBack, onOpenVideo }) {
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
       <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
-      <div style={{ fontSize: 24, fontWeight: 800, color: t.text, marginBottom: 8 }}>Tools</div>
+      <div style={{ fontSize: 24, fontWeight: 500, color: t.text, marginBottom: 8 }}>Tools</div>
       <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 28 }}>Utilities for creators and media.</div>
       <div
         onClick={onOpenVideo}
@@ -5800,7 +5800,7 @@ function ToolsPage({ onBack, onOpenVideo }) {
         }}
       >
         <div style={{ marginBottom: 14 }}><CardIcon type="video" color={t.blue} /></div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
+        <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
           Paste a TikTok or Instagram URL or upload a file — download the original and use the ad format reference for Meta, YouTube, and TikTok placements
         </div>
@@ -6145,7 +6145,7 @@ function VideoReformatter({ onBack }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn 0.3s ease" }}>
       <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 20 }}>← Back to Tools</button>
-      <div style={{ fontSize: 24, fontWeight: 800, color: t.text, marginBottom: 6 }}>Video Reformatter</div>
+      <div style={{ fontSize: 24, fontWeight: 500, color: t.text, marginBottom: 6 }}>Video Reformatter</div>
       <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>Paste a URL to fetch a video, download the original, or reformat for different ad platforms.</div>
 
       {/* URL input */}
@@ -6210,11 +6210,11 @@ function VideoReformatter({ onBack }) {
 
             {/* Right: info */}
             <div style={{ flex: 1, minWidth: 200 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: video.platform === "TikTok" ? t.green + "15" : "#E1306C15", color: video.platform === "TikTok" ? t.green : "#E1306C" }}>
+              <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 10, background: video.platform === "TikTok" ? t.green + "15" : "#E1306C15", color: video.platform === "TikTok" ? t.green : "#E1306C" }}>
                 {video.platform}
               </span>
 
-              <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginTop: 8 }}>{video.author}</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginTop: 8 }}>{video.author}</div>
               <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 8 }}>@{video.authorHandle}</div>
 
               {video.caption ? (
@@ -6230,7 +6230,7 @@ function VideoReformatter({ onBack }) {
                   { label: "Shares", value: video.shares },
                 ].map((s) => (
                   <div key={s.label}>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{fmt(s.value)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: t.text }}>{fmt(s.value)}</div>
                     <div style={{ fontSize: 11, color: t.textFaint }}>{s.label}</div>
                   </div>
                 ))}
@@ -6286,7 +6286,7 @@ function VideoReformatter({ onBack }) {
                     background: video.cacheId ? t.green : t.cardAlt,
                     color: video.cacheId ? (t.isLight ? "#fff" : "#000") : t.textFaint,
                     fontSize: 14,
-                    fontWeight: 700,
+                    fontWeight: 500,
                     cursor: video.cacheId ? "pointer" : "not-allowed",
                     marginTop: 8,
                     width: "100%",
@@ -6321,7 +6321,7 @@ function VideoReformatter({ onBack }) {
 
       {(video?.cached || video?.cacheId) ? (
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginTop: 16, marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>Custom Ratio</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 4 }}>Custom Ratio</div>
           <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Enter any aspect ratio to download a custom reformat.</div>
 
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -6370,7 +6370,7 @@ function VideoReformatter({ onBack }) {
                 padding: "10px 20px", borderRadius: 8, border: "none",
                 background: customRatio.trim() ? t.green : t.cardAlt,
                 color: customRatio.trim() ? (t.isLight ? "#fff" : "#000") : t.textFaint,
-                fontSize: 13, fontWeight: 700,
+                fontSize: 13, fontWeight: 500,
                 cursor: customRatio.trim() ? "pointer" : "not-allowed",
                 whiteSpace: "nowrap",
               }}
@@ -6425,7 +6425,7 @@ function VideoReformatter({ onBack }) {
 
       {/* Format cards — always show as reference, clickable when video is fetched */}
       <div style={{ marginTop: video ? 0 : 32 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>
+        <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>
           {video ? "Individual Formats" : "Format Reference"}
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>
@@ -6434,7 +6434,7 @@ function VideoReformatter({ onBack }) {
 
         {VIDEO_REFORMAT_GROUPS.map((group) => (
           <div key={group.title} style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>{group.title}</div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>{group.title}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
               {group.items.map((item) => {
                 const isLoading = !!downloading[item.id];
@@ -6456,7 +6456,7 @@ function VideoReformatter({ onBack }) {
                     onMouseLeave={(e) => { if (canClick) { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.background = t.card; } }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{item.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{item.name}</span>
                       {isLoading ? (
                         <div style={{ width: 14, height: 14, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
                       ) : canClick ? (
@@ -6465,7 +6465,7 @@ function VideoReformatter({ onBack }) {
                     </div>
                     <div style={{ fontSize: 11, color: t.textMuted }}>{item.ratio} · {item.dimensions}</div>
                     <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{item.placement}</div>
-                    {item.recommended ? <div style={{ fontSize: 9, fontWeight: 700, color: t.green, marginTop: 4 }}>★ RECOMMENDED</div> : null}
+                    {item.recommended ? <div style={{ fontSize: 9, fontWeight: 500, color: t.green, marginTop: 4 }}>★ RECOMMENDED</div> : null}
                   </div>
                 );
               })}
@@ -6529,18 +6529,18 @@ function ExpandableInsight({ t, label, value, valueColor, valueFontSize = 14, ex
   const [open, setOpen] = useState(false);
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</div>
       <div
         onClick={() => setOpen(!open)}
         style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
       >
         {isAi ? <span style={{ fontSize: 10, color: t.green }}>✦</span> : null}
-        <span style={{ fontSize: valueFontSize, fontWeight: 700, color: valueColor || t.text }}>{value}</span>
+        <span style={{ fontSize: valueFontSize, fontWeight: 500, color: valueColor || t.text }}>{value}</span>
         <span style={{ fontSize: 10, color: t.textFaint, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0)" }}>▼</span>
       </div>
       {open ? (
         <div style={{ marginTop: 8, padding: 10, background: t.cardAlt, borderRadius: 6, fontSize: 12, color: t.textMuted, lineHeight: 1.5, border: `1px solid ${t.border}` }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>How IB-Ai determined this</div>
+          <div style={{ fontSize: 10, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>How IB-Ai determined this</div>
           {explanation}
         </div>
       ) : null}
@@ -6570,7 +6570,7 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: brandColor }}>{platform}</span>
+        <span style={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: brandColor }}>{platform}</span>
         <div style={{ display: "flex", gap: 4 }}>
           {url && !editing ? <span style={{ fontSize: 10, color: t.textFaint }}>↗</span> : null}
           <span
@@ -6601,7 +6601,7 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onHandleChange?.(draft); setEditing(false); }}
-              style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: brandColor, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+              style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: brandColor, color: "#fff", fontSize: 10, fontWeight: 500, cursor: "pointer" }}
             >Save</button>
           </div>
           <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>Enter to save · Esc to cancel</div>
@@ -6609,7 +6609,7 @@ function PlatformCard({ t, platform, brandColor, handle, url, followers, followe
       )}
 
       {/* Followers */}
-      <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 2 }}>
+      <div style={{ fontSize: 22, fontWeight: 500, color: t.text, marginBottom: 2 }}>
         {hasFollowers ? formatMetricShort(followers) : "—"}
       </div>
       <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>{followerLabel}</div>
@@ -6642,10 +6642,10 @@ class CreatorDetailErrorBoundary extends React.Component {
       return (
         <div style={{ maxWidth: 700, margin: "40px auto", padding: "0 24px" }}>
           <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 24, boxShadow: t.shadow }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: t.red || "#ef4444", marginBottom: 8 }}>Creator profile crashed</div>
+            <div style={{ fontSize: 18, fontWeight: 500, color: t.red || "#ef4444", marginBottom: 8 }}>Creator profile crashed</div>
             <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>This is a bug — the error has been logged. Try going back and clicking the creator again.</div>
             <pre style={{ background: t.inputBg, color: "#f97316", padding: 16, borderRadius: 8, fontSize: 11, overflow: "auto", maxHeight: 200, marginBottom: 16 }}>{this.state.error}</pre>
-            <button onClick={() => { this.setState({ error: null, errorInfo: null }); window.history.back(); }} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Go back</button>
+            <button onClick={() => { this.setState({ error: null, errorInfo: null }); window.history.back(); }} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Go back</button>
           </div>
         </div>
       );
@@ -7115,7 +7115,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
             if (attempts.length === 0) {
               return (
-                <div style={{ width: 48, height: 48, borderRadius: 24, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: t.textFaint, flexShrink: 0 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 24, background: t.cardAlt, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 500, color: t.textFaint, flexShrink: 0 }}>
                   {handleLetter}
                 </div>
               );
@@ -7150,12 +7150,12 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             );
           })()}
           <div style={{ minWidth: 0 }}>
-            <a href={primaryUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 800, color: t.text, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <a href={primaryUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 22, fontWeight: 500, color: t.text, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
               {c.handle}
-              <span style={{ fontSize: 9, fontWeight: 700, color: t.textFaint, padding: "2px 6px", borderRadius: 4, background: t.cardAlt, border: `1px solid ${t.border}` }}>{primaryLabel}</span>
+              <span style={{ fontSize: 9, fontWeight: 500, color: t.textFaint, padding: "2px 6px", borderRadius: 4, background: t.cardAlt, border: `1px solid ${t.border}` }}>{primaryLabel}</span>
             </a>
             {c.name?.trim() ? <div style={{ fontSize: 13, color: t.textMuted }}>{c.name.trim()}</div> : null}
-            <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, background: c.status === "Active" ? t.green + "18" : t.cardAlt, color: c.status === "Active" ? t.green : t.textMuted, marginTop: 4, display: "inline-block" }}>{c.status}</span>
+            <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 12, background: c.status === "Active" ? t.green + "18" : t.cardAlt, color: c.status === "Active" ? t.green : t.textMuted, marginTop: 4, display: "inline-block" }}>{c.status}</span>
             {creatorSince || lastEnrichedDisplay ? (
               <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6, lineHeight: 1.45 }}>
                 {creatorSince ? <span>Creator since {creatorSince}</span> : null}
@@ -7168,9 +7168,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
           <div style={{ width: 56, height: 56, borderRadius: "50%", background: Number.isFinite(ib) ? ibCol : t.border, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${t.border}` }}>
-            <span style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>{Number.isFinite(ib) ? Math.round(ib) : "—"}</span>
+            <span style={{ fontSize: 20, fontWeight: 500, color: "#fff" }}>{Number.isFinite(ib) ? Math.round(ib) : "—"}</span>
           </div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: ibCol, marginTop: 4 }}>{ibLabel || "IB Score"}</div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: ibCol, marginTop: 4 }}>{ibLabel || "IB Score"}</div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -7196,7 +7196,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50, background: t.card, border: "1px solid " + t.border, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", maxHeight: 300, overflowY: "auto" }}>
                 {teamMembers.filter(m => !getCreatorOwners(c.id).find(o => o.id === m.id)).map(m => (
                   <div key={m.id} onClick={async () => { await dbAssignCreatorMulti(c.id, m.id, "manager"); setCreatorAssignments(prev => [...prev, { creator_id: c.id, team_member_id: m.id, assigned_at: new Date().toISOString() }]); setOwnerDropdownOpen(false); }} style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                    {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: t.green }}>{m.name?.[0]}</div>}
+                    {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, color: t.green }}>{m.name?.[0]}</div>}
                     <div><div style={{ fontWeight: 600, color: t.text }}>{m.name}</div>{m.title ? <div style={{ fontSize: 10, color: t.textFaint }}>{m.title}</div> : null}</div>
                   </div>
                 ))}
@@ -7211,9 +7211,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; e.currentTarget.style.background = t.green + "12"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.green + "25"; e.currentTarget.style.background = t.green + "08"; }}
               title={"Open Slack DM with " + member.name + " — creator link copied to clipboard"}>
-              {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: t.green, flexShrink: 0 }}>{member.name?.[0]}</div>}
+              {member.avatar_url ? <img src={member.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 500, color: t.green, flexShrink: 0 }}>{member.name?.[0]}</div>}
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.2 }}>{member.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: t.text, lineHeight: 1.2 }}>{member.name}</div>
                 {member.title ? <div style={{ fontSize: 10, color: t.textFaint, lineHeight: 1.2 }}>{member.title}</div> : null}
               </div>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}><path d="M14.5 2C13.1 2 12 3.1 12 4.5V9h4.5C17.9 9 19 7.9 19 6.5S17.9 4 16.5 4H14.5V2zM9.5 2C8.1 2 7 3.1 7 4.5S8.1 7 9.5 7H12V4.5C12 3.1 10.9 2 9.5 2zM4.5 9C3.1 9 2 10.1 2 11.5S3.1 14 4.5 14H9v-5H4.5zM9 15H4.5C3.1 15 2 16.1 2 17.5S3.1 20 4.5 20c1.4 0 2.5-1.1 2.5-2.5V15zM15 15v2.5c0 1.4 1.1 2.5 2.5 2.5S20 18.9 20 17.5 18.9 15 17.5 15H15zM15 9v5h4.5c1.4 0 2.5-1.1 2.5-2.5S20.9 9 19.5 9H15z" fill={t.textMuted} opacity="0.6"/></svg>
@@ -7238,7 +7238,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                     : [...(c.programs || []), prog.id];
                   await updateCreator(c.id, { programs: newPrograms });
                 }} style={{
-                  padding: "3px 10px", borderRadius: 12, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                  padding: "3px 10px", borderRadius: 12, fontSize: 10, fontWeight: 500, cursor: "pointer",
                   border: isIn ? "2px solid " + prog.color : "1px solid " + t.border,
                   background: isIn ? prog.color + "15" : "transparent",
                   color: isIn ? prog.color : t.textFaint,
@@ -7264,8 +7264,8 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <div onClick={openMessages} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderRadius: showMessages ? "14px 14px 0 0" : 14, background: showMessages ? t.green + "08" : t.card, border: showMessages ? "2px solid " + t.green + "30" : "1px solid " + t.border, borderBottom: showMessages ? "none" : undefined, cursor: "pointer", boxShadow: t.shadow, transition: "all 0.2s ease" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={showMessages ? t.green : t.textMuted} strokeWidth="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            <span style={{ fontSize: 14, fontWeight: 700, color: showMessages ? t.green : t.text }}>Messages</span>
-            {msgList.length > 0 ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: t.green + "15", color: t.green, fontWeight: 700 }}>{msgList.length}</span> : null}
+            <span style={{ fontSize: 14, fontWeight: 500, color: showMessages ? t.green : t.text }}>Messages</span>
+            {msgList.length > 0 ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: t.green + "15", color: t.green, fontWeight: 500 }}>{msgList.length}</span> : null}
           </div>
           <span style={{ fontSize: 20, color: t.textFaint, transform: showMessages ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>{"\u25BE"}</span>
         </div>
@@ -7285,7 +7285,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                   <div key={msg.id} style={{ maxWidth: isNote ? "100%" : "70%", alignSelf: isOut ? "flex-end" : isNote ? "stretch" : "flex-start" }}>
                     <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 3, textAlign: isOut ? "right" : "left", padding: "0 4px" }}>{isNote ? "Internal note" : isOut ? "You \u00B7 " + (msg.channel || "") : "@" + (c.tiktokHandle || c.handle || "creator")}{msg.ai_generated ? " \u00B7 AI drafted" : ""}</div>
                     <div style={{ padding: isNote ? "10px 14px" : "12px 16px", borderRadius: isOut ? "18px 18px 4px 18px" : isNote ? 10 : "18px 18px 18px 4px", background: isNote ? (t.isLight ? "#fef9c3" : "#1a1a0a") : isOut ? t.green : (t.isLight ? "#e5e7eb" : "#262626"), color: isOut && !isNote ? (t.isLight ? "#fff" : "#000") : t.text, fontSize: 14, lineHeight: 1.6, wordBreak: "break-word", border: isNote ? "1px solid " + (t.isLight ? "#fde68a" : "#3d3d0f") : "none" }}>
-                      {msg.subject ? <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, opacity: isOut && !isNote ? 0.9 : 0.7 }}>{msg.subject}</div> : null}
+                      {msg.subject ? <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4, opacity: isOut && !isNote ? 0.9 : 0.7 }}>{msg.subject}</div> : null}
                       <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
                     </div>
                     <div style={{ display: "flex", justifyContent: isOut ? "flex-end" : "flex-start", alignItems: "center", gap: 6, marginTop: 3, padding: "0 4px" }}>
@@ -7382,7 +7382,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         if (stats.length === 0) return null;
         return (
           <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Quick Stats</div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Quick Stats</div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {stats.map((s, i) => (
                 <div
@@ -7397,7 +7397,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                     textAlign: "center",
                   }}
                 >
-                  <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{s.value}</div>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: t.text }}>{s.value}</div>
                   <div style={{ fontSize: 10, color: t.textFaint, marginTop: 2 }}>{s.label}</div>
                 </div>
               ))}
@@ -7408,7 +7408,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       <div id="creator-detail-content" style={{ marginBottom: 20 }}>
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Platforms</div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Platforms</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 
             {/* Instagram */}
@@ -7530,7 +7530,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             {/* Snapchat — display name from enrichment */}
             {c.snapchatData?.displayName && String(c.snapchatData.displayName).trim() ? (
               <div style={{ flex: "1 1 140px", minWidth: 140, background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#FFFC00", marginBottom: 6 }}>Snapchat</div>
+                <div style={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#FFFC00", marginBottom: 6 }}>Snapchat</div>
                 <div style={{ fontSize: 13, color: t.text }}>{c.snapchatData.displayName}</div>
               </div>
             ) : null}
@@ -7607,13 +7607,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           return (
             <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Content</div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Content</div>
 
               {bestHighlight && bestHighlight.url ? (
                 <a href={bestHighlight.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "flex", gap: 14, alignItems: "center", padding: "12px 16px", background: t.cardAlt, borderRadius: 10, marginBottom: 14, border: "1px solid " + t.border, transition: "border-color 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                   <div style={{ width: 8, height: 8, borderRadius: 4, background: t.green, flexShrink: 0 }}></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Top performer</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Top performer</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>
                       {bestHighlight.kind === "tt"
                         ? formatMetricShort(bestHighlight.views) + " views · " + formatMetricShort(bestHighlight.likes) + " likes"
@@ -7659,7 +7659,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: plat.color }}>{plat.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: plat.color }}>{plat.name}</span>
                         {plat.profileUrl ? (
                           <a href={plat.profileUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.textMuted, textDecoration: "none" }}>
                             @{plat.handle} ↗
@@ -7690,13 +7690,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                         <div style={{ width: 130, height: 170, position: "relative", background: t.cardAlt, overflow: "hidden" }}>
                           {item.cover ? <img key={item.cover} src={item.cover} alt="" referrerPolicy="no-referrer" loading="lazy" style={{ width: 130, height: 170, objectFit: "cover", display: "block", position: "relative", zIndex: 1 }} onError={(e) => { e.target.style.opacity = "0"; }} /> : null}
                           <div style={{ position: "absolute", top: 0, left: 0, width: 130, height: 170, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                            {item.views > 0 ? <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{formatMetricShort(item.views)}</div> : item.likes > 0 ? <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{formatMetricShort(item.likes)}</div> : null}
+                            {item.views > 0 ? <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>{formatMetricShort(item.views)}</div> : item.likes > 0 ? <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>{formatMetricShort(item.likes)}</div> : null}
                             <div style={{ fontSize: 10, color: t.textFaint }}>{item.views > 0 ? "views" : item.likes > 0 ? "likes" : ""}</div>
                             {item.date ? <div style={{ fontSize: 9, color: t.textFaint }}>{item.date}</div> : null}
                           </div>
                         </div>
                         <div style={{ padding: "6px 8px" }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{item.views > 0 ? formatMetricShort(item.views) + " views" : formatMetricShort(item.likes) + " likes"}</div>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: t.text }}>{item.views > 0 ? formatMetricShort(item.views) + " views" : formatMetricShort(item.likes) + " likes"}</div>
                           {item.views > 0 && item.likes > 0 ? <div style={{ fontSize: 10, color: t.textMuted }}>{formatMetricShort(item.likes)} likes</div> : item.comments > 0 ? <div style={{ fontSize: 10, color: t.textMuted }}>{formatMetricShort(item.comments)} comments</div> : null}
                           {item.date ? <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2 }}>{item.date}</div> : null}
                           {item.caption ? <div style={{ fontSize: 9, color: t.textFaint, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 114 }}>{item.caption.substring(0, 50)}</div> : null}
@@ -7723,17 +7723,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           return (
             <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Bios & Links</div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Bios & Links</div>
               <div style={{ background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16 }}>
                 {ttBio ? (
                   <div style={{ marginBottom: 10 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: t.green }}>TikTok:</span>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: t.green }}>TikTok:</span>
                     <span style={{ fontSize: 12, color: t.text, marginLeft: 6 }}>{ttBio}</span>
                     {isCommerce ? (
                       <span
                         style={{
                           fontSize: 9,
-                          fontWeight: 700,
+                          fontWeight: 500,
                           color: t.green,
                           marginLeft: 6,
                           padding: "1px 6px",
@@ -7748,13 +7748,13 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 ) : null}
                 {igBio ? (
                   <div style={{ marginBottom: 10 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#E1306C" }}>Instagram:</span>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: "#E1306C" }}>Instagram:</span>
                     <span style={{ fontSize: 12, color: t.text, marginLeft: 6 }}>{igBio}</span>
                     {isBusiness ? (
                       <span
                         style={{
                           fontSize: 9,
-                          fontWeight: 700,
+                          fontWeight: 500,
                           color: "#E1306C",
                           marginLeft: 6,
                           padding: "1px 6px",
@@ -7802,16 +7802,16 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         <>
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: t.text }}>IB Score</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: t.green, padding: "2px 8px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
+            <span style={{ fontSize: 16, fontWeight: 500, color: t.text }}>IB Score</span>
+            <span style={{ fontSize: 10, fontWeight: 500, color: t.green, padding: "2px 8px", borderRadius: 4, background: t.green + "12" }}>✦ IB-Ai</span>
           </div>
 
           <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 0 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-              <div style={{ width: 80, height: 80, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, color: "#fff" }}>
+              <div style={{ width: 80, height: 80, borderRadius: "50%", background: ibCol, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 500, color: "#fff" }}>
                 {Math.round(ib)}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: ibCol, marginTop: 6 }}>{ibLabel}</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: ibCol, marginTop: 6 }}>{ibLabel}</div>
             </div>
 
             <div style={{ flex: "1 1 300px", minWidth: 0 }}>
@@ -7829,7 +7829,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{label}</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: ibCol }}>{val}/{max}</span>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: ibCol }}>{val}/{max}</span>
                         {reason ? <span style={{ fontSize: 9, color: t.textFaint, transition: "transform 0.2s", transform: expandedBar === key ? "rotate(180deg)" : "rotate(0)" }}>▼</span> : null}
                       </div>
                     </div>
@@ -7849,10 +7849,10 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
 
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 16 }}>AI Insights</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 16 }}>AI Insights</div>
           {ai.whyIntake ? (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Why Intake</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Why Intake</div>
               <div style={{ fontSize: 14, fontWeight: 500, color: t.text, lineHeight: 1.6 }}>{ai.whyIntake}</div>
             </div>
           ) : null}
@@ -7868,7 +7868,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           {ai.risk && ai.risk !== "None identified" ? (
             <div style={{ marginBottom: 16, padding: 12, background: t.orange + "08", border: `1px solid ${t.orange}25`, borderRadius: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.orange, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Risk</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.orange, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Risk</div>
               <div style={{ fontSize: 13, color: t.orange, lineHeight: 1.5 }}>{ai.risk}</div>
               {ai.riskDetail && ai.riskDetail !== ai.risk ? (
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.5 }}>{ai.riskDetail}</div>
@@ -7882,11 +7882,11 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           {ai.suggestedCampaigns ? (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Suggested Campaigns</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Suggested Campaigns</div>
               {Array.isArray(ai.suggestedCampaigns) ? (
                 ai.suggestedCampaigns.map((camp, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
-                    <span style={{ fontSize: 12, color: t.green, fontWeight: 700, marginTop: 1, flexShrink: 0 }}>→</span>
+                    <span style={{ fontSize: 12, color: t.green, fontWeight: 500, marginTop: 1, flexShrink: 0 }}>→</span>
                     <div>
                       <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{typeof camp === "string" ? camp : camp?.name}</span>
                       {typeof camp === "object" && camp?.reason ? (
@@ -7898,7 +7898,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               ) : (
                 String(ai.suggestedCampaigns).split(",").map((x, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: t.green, fontWeight: 700 }}>→</span>
+                    <span style={{ fontSize: 12, color: t.green, fontWeight: 500 }}>→</span>
                     <span style={{ fontSize: 13, color: t.text }}>{x.trim()}</span>
                   </div>
                 ))
@@ -7908,11 +7908,11 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           {(ai.outreachDM || ai.outreachEmail) ? (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Suggested Outreach</div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Suggested Outreach</div>
               {ai.outreachDM ? (
                 <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#E1306C" }}>Instagram DM</span>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: "#E1306C" }}>Instagram DM</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -7937,7 +7937,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
               {ai.outreachEmail ? (
                 <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: t.blue }}>Email</span>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: t.blue }}>Email</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -7966,17 +7966,17 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
               {ai.competitorMentions ? (
                 <div style={{ flex: "1 1 200px", background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", marginBottom: 6 }}>Competitor Check</div>
+                  <div style={{ fontSize: 10, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", marginBottom: 6 }}>Competitor Check</div>
                   <div style={{ fontSize: 12, color: ai.competitorMentions === "None detected" ? t.green : t.orange }}>{ai.competitorMentions}</div>
                 </div>
               ) : null}
               {ai.brandSafety ? (
                 <div style={{ flex: "1 1 200px", background: t.card, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", marginBottom: 6 }}>Brand Safety</div>
+                  <div style={{ fontSize: 10, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", marginBottom: 6 }}>Brand Safety</div>
                   <div
                     style={{
                       fontSize: 12,
-                      fontWeight: 700,
+                      fontWeight: 500,
                       color: ai.brandSafety === "Safe" ? t.green : ai.brandSafety === "Review" ? t.orange : t.red,
                     }}
                   >
@@ -7991,7 +7991,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
         </div>
 
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 16 }}>Rate & platform</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 16 }}>Rate & platform</div>
 
           {(() => {
             const cpmData = c.cpmData || calculateCreatorCPM(c, ak);
@@ -8008,7 +8008,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
             return (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 28, fontWeight: 800, color: t.green }}>{cpmData.rateDisplay}</span>
+                  <span style={{ fontSize: 28, fontWeight: 500, color: t.green }}>{cpmData.rateDisplay}</span>
                   <span style={{ fontSize: 13, color: t.textMuted }}>avg per video</span>
                 </div>
                 <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 20 }}>
@@ -8018,7 +8018,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                 {platforms.map(function(plat) {
                   return (
                     <div key={plat.name} style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: plat.color, marginBottom: 8 }}>{plat.name}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: plat.color, marginBottom: 8 }}>{plat.name}</div>
                       <div style={{ display: "grid", gridTemplateColumns: plat.items.length > 2 ? "1fr 1fr 1fr" : "1fr 1fr", gap: 8 }}>
                         {plat.items.map(function(key) {
                           var rate = platformRates[key];
@@ -8034,7 +8034,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
                                 cursor: "pointer", transition: "all 0.2s",
                               }}>
                               <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>{rate.type}</div>
-                              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{rate.display}</div>
+                              <div style={{ fontSize: 16, fontWeight: 500, color: t.text }}>{rate.display}</div>
                             </div>
                           );
                         })}
@@ -8070,19 +8070,19 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
           {ai.bestPlatform ? (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Platform Strength</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Platform Strength</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 200px", padding: 12, background: t.green + "08", border: `1px solid ${t.green}25`, borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: t.green, marginBottom: 4 }}>★ PRIMARY</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{ai.bestPlatform}</div>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: t.green, marginBottom: 4 }}>★ PRIMARY</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>{ai.bestPlatform}</div>
                   {ai.bestPlatformReason ? (
                     <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.4 }}>{ai.bestPlatformReason}</div>
                   ) : null}
                 </div>
                 {ai.runnerUpPlatform ? (
                   <div style={{ flex: "1 1 200px", padding: 12, background: t.cardAlt, border: `1px solid ${t.border}`, borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 4 }}>RUNNER-UP</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{ai.runnerUpPlatform}</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, marginBottom: 4 }}>RUNNER-UP</div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>{ai.runnerUpPlatform}</div>
                     {ai.runnerUpReason ? (
                       <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4, lineHeight: 1.4 }}>{ai.runnerUpReason}</div>
                     ) : null}
@@ -8100,7 +8100,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 400px", minWidth: 280 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Profile</div>
+          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 12, color: t.text }}>Profile</div>
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
               Niche
@@ -8198,7 +8198,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
           </div>
         </div>
         <div style={{ flex: "1 1 280px", minWidth: 240 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: t.text }}>Contact & Links</div>
+          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 12, color: t.text }}>Contact & Links</div>
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Email</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -8338,9 +8338,9 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
       </div>
 
       <div id="creator-notes-section" style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8, color: t.text, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: t.text, display: "flex", alignItems: "center", gap: 8 }}>
           Notes
-          {af.notes ? <span style={{ fontSize: 10, fontWeight: 700, color: t.green }}>✦ IB-Ai seeded</span> : null}
+          {af.notes ? <span style={{ fontSize: 10, fontWeight: 500, color: t.green }}>✦ IB-Ai seeded</span> : null}
         </div>
         <textarea
           value={c.notes || ""}
@@ -8368,7 +8368,7 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
 
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, boxShadow: t.shadow }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Video Log</div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Video Log</div>
           <button type="button" onClick={() => setShowVideoForm((v) => !v)} style={{ ...S.btnP, padding: "8px 14px", fontSize: 12 }}>+ Add Video</button>
         </div>
         {showVideoForm ? (
@@ -9834,6 +9834,8 @@ export default function App() {
             --color-dark-grey: #737373;
             --color-grey: #C8C8C7;
             --color-light-grey: #EDEDED;
+            --color-card: #111111;
+            --color-card-border: #222222;
             --font-family: 'Inter', sans-serif;
             --cta-height: 50px;
             --cta-radius: 25px;
@@ -9849,6 +9851,35 @@ export default function App() {
             padding: 0 24px;
             border: none;
             cursor: pointer;
+            transition: opacity 0.15s ease;
+          }
+          .btn-primary:hover { opacity: 0.88; }
+          .btn-secondary {
+            background: transparent;
+            color: var(--color-white);
+            border: 1px solid #333333;
+            height: 40px;
+            border-radius: 8px;
+            font-family: var(--font-family);
+            font-weight: 400;
+            font-size: 14px;
+            padding: 0 16px;
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+          }
+          .btn-secondary:hover { border-color: var(--color-green); }
+          .section-label {
+            color: var(--color-green);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+          }
+          .card-base {
+            background: var(--color-card);
+            border: 1px solid var(--color-card-border);
+            border-radius: 12px;
+            padding: 24px;
           }
           @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
           @keyframes spin { to { transform: rotate(360deg) } }
@@ -10036,7 +10067,7 @@ export default function App() {
         {aiLoading && (
           <div style={{ maxWidth: 480, margin: "0 auto", padding: "80px 24px", animation: "fadeIn 0.3s ease" }}>
             <div style={{ textAlign: "center", marginBottom: 32 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 6 }}>IB-Ai is writing your brief</div>
+              <div style={{ fontSize: 22, fontWeight: 500, color: t.text, marginBottom: 6 }}>IB-Ai is writing your brief</div>
               <div style={{ fontSize: 13, color: t.textMuted }}>{elapsed}s elapsed</div>
             </div>
 
@@ -10118,7 +10149,7 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
                   <img src="/favicon-32.png" alt="" style={{ width: 32, height: 32 }} onError={(e) => { e.target.style.display = "none"; }} />
                   <div>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.03em" }}>Creator Partnerships</div>
+                    <div style={{ fontSize: 24, fontWeight: 500, color: t.text, letterSpacing: "-0.03em" }}>Creator Partnerships</div>
                     <div style={{ fontSize: 12, color: t.textFaint }}>Intake Breathing Technology</div>
                   </div>
                 </div>
@@ -10136,11 +10167,11 @@ export default function App() {
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, " + t.green + ", " + t.blue + ")" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Hub</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 4 }}>Creator Hub</div>
+                      <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.12em", color: t.green, textTransform: "uppercase", marginBottom: 6 }}>Hub</div>
+                      <div style={{ fontSize: 22, fontWeight: 500, color: t.text, marginBottom: 4 }}>Creator Hub</div>
                       <div style={{ fontSize: 13, color: t.textMuted }}>Manage all creators, programs, campaigns, and briefs</div>
                     </div>
-                    <div style={{ fontSize: 12, color: t.green, fontWeight: 700, padding: "6px 14px", borderRadius: 8, background: t.green + "10", border: "1px solid " + t.green + "25" }}>Open &rarr;</div>
+                    <div style={{ fontSize: 12, color: t.green, fontWeight: 500, padding: "6px 14px", borderRadius: 8, background: t.green + "10", border: "1px solid " + t.green + "25" }}>Open &rarr;</div>
                   </div>
                   <div style={{ display: "flex", gap: 24, marginTop: 20, paddingTop: 16, borderTop: "1px solid " + t.border }}>
                     {[
@@ -10151,7 +10182,7 @@ export default function App() {
                       { v: creators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0), l: "Videos tracked", c: t.text },
                     ].map((s, i) => (
                       <div key={i}>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: s.c }}>{s.v}</div>
+                        <div style={{ fontSize: 22, fontWeight: 500, color: s.c }}>{s.v}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, marginTop: 1 }}>{s.l}</div>
                       </div>
                     ))}
@@ -10167,7 +10198,7 @@ export default function App() {
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Channel Pipeline</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Channel Pipeline</div>
                       <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Performance and operations across all channels</div>
                     </div>
                     <div style={{ fontSize: 11, color: t.orange, fontWeight: 600 }}>8 tabs</div>
@@ -10180,7 +10211,7 @@ export default function App() {
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Tools</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Tools</div>
                       <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Video reformatter and team utilities</div>
                     </div>
                     <div style={{ fontSize: 11, color: t.blue, fontWeight: 600 }}>1 tool</div>
@@ -10193,7 +10224,7 @@ export default function App() {
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>IB-Ai Source of Truth</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>IB-Ai Source of Truth</div>
                       <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>Products, claims, scoring, outreach rules</div>
                     </div>
                     <div style={{ fontSize: 11, color: t.purple || "#8b6cc4", fontWeight: 600 }}>Editable</div>
@@ -10206,7 +10237,7 @@ export default function App() {
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Settings</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: t.text }}>Settings</div>
                       <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>API keys, team access, integrations</div>
                     </div>
                     <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 600 }}>v{APP_VERSION}</div>
@@ -10219,13 +10250,13 @@ export default function App() {
                 <button onClick={() => setFlowChartFullscreen(true)} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.card, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.blue; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Creator Flow Chart</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Creator Flow Chart</div>
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Interactive Lucidchart diagram</div>
                 </button>
                 <button onClick={() => window.open("https://www.canva.com/design/DAG6eUzBH8g/zCFsO_eLBK-A9L1C2xCxBQ/view", "_blank")} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.card, cursor: "pointer", textAlign: "left", transition: "border-color 0.15s" }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.orange; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>2025 In Review</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>2025 In Review</div>
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Opens in Canva</div>
                 </button>
               </div>
@@ -10235,7 +10266,7 @@ export default function App() {
 
               {flowChartFullscreen ? (
                 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: t.bg }}>
-                  <button onClick={() => setFlowChartFullscreen(false)} style={{ position: "fixed", top: 16, right: 16, zIndex: 10000, fontSize: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer", fontWeight: 700, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>Exit fullscreen</button>
+                  <button onClick={() => setFlowChartFullscreen(false)} style={{ position: "fixed", top: 16, right: 16, zIndex: 10000, fontSize: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer", fontWeight: 500, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>Exit fullscreen</button>
                   <iframe style={{ width: "100%", height: "100%", border: "none" }} src="https://lucid.app/documents/embedded/41a72a0b-5268-401c-933f-6e8a37895362" allowFullScreen />
                 </div>
               ) : null}
@@ -10274,7 +10305,7 @@ export default function App() {
         {!aiLoading && isCreatorViewAllowed && view === "sourceOfTruth" && (
           <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <button type="button" onClick={() => navigate("home")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
-            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>IB-Ai Source of Truth</div>
+            <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>IB-Ai Source of Truth</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Everything IB-Ai uses to generate briefs, score creators, calculate rates, and write outreach.</div>
             <IBAiSourceOfTruth t={t} aiKnowledge={aiKnowledge} onSave={saveAiKnowledge} startOpen />
           </div>
@@ -10300,7 +10331,7 @@ export default function App() {
         {!aiLoading && isCreatorViewAllowed && view === "changeRequests" && (
           <div style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
             <button type="button" onClick={() => navigate("home")} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 24 }}>← Back</button>
-            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Change Requests</div>
+            <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Change Requests</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>All open and completed requests from the team.</div>
             <ChangeRequestsPage t={t} S={S} navigate={navigate} refreshOpenCount={() => { supabase.from("change_requests").select("id").eq("status", "open").then(({ data }) => setOpenChangeRequests((data || []).length)); }} />
           </div>
@@ -10309,7 +10340,7 @@ export default function App() {
         {/* SETTINGS */}
         {!aiLoading && isCreatorViewAllowed && view === "settings" && (
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 80px", animation: "fadeIn 0.3s ease" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
+            <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.03em", marginBottom: 6, color: t.text }}>Settings</div>
             <div style={{ fontSize: 12, color: t.textFaint, fontWeight: 500, marginBottom: 8 }}>v{APP_VERSION}</div>
             <div style={{ fontSize: 14, color: t.textMuted, marginBottom: 32 }}>Configure API keys, team password, and database.</div>
 
@@ -10387,7 +10418,7 @@ export default function App() {
             minWidth: 0,
           };
           const ttLinkStyle = {
-            fontWeight: 800,
+            fontWeight: 500,
             fontSize: 10,
             color: t.textMuted,
             cursor: "pointer",
@@ -10474,7 +10505,7 @@ export default function App() {
                     : { minWidth: 0 }),
                   padding: "8px 10px",
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 500,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
                   color: labelColor,
@@ -10751,7 +10782,7 @@ export default function App() {
                           {member.avatar_url ? (
                             <img src={member.avatar_url} alt="" title={member.name} style={{ width: 24, height: 24, borderRadius: 12, objectFit: "cover", border: "2px solid " + t.card }} onError={(e) => { e.target.style.display = "none"; }} />
                           ) : (
-                            <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: t.green, border: "2px solid " + t.card }} title={member.name}>{member.name?.[0]}</div>
+                            <div style={{ width: 24, height: 24, borderRadius: 12, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 500, color: t.green, border: "2px solid " + t.card }} title={member.name}>{member.name?.[0]}</div>
                           )}
                         </div>
                       ))}
@@ -10800,7 +10831,7 @@ export default function App() {
                           alignItems: "center",
                           justifyContent: "center",
                           fontSize: 12,
-                          fontWeight: 700,
+                          fontWeight: 500,
                           color: t.textFaint,
                           position: "absolute",
                           left: 0,
@@ -10821,7 +10852,7 @@ export default function App() {
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: 12,
-                        fontWeight: 700,
+                        fontWeight: 500,
                         color: t.textFaint,
                         flexShrink: 0,
                       }}
@@ -10842,7 +10873,7 @@ export default function App() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hDisp}</span>
-                      {(() => { const ca = c.dateAdded || c.created_at; if (!ca) return null; if ((Date.now() - new Date(ca).getTime()) / 86400000 > 7) return null; return <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: "#3B82F6" + "15", color: "#3B82F6", fontWeight: 700 }}>New</span>; })()}
+                      {(() => { const ca = c.dateAdded || c.created_at; if (!ca) return null; if ((Date.now() - new Date(ca).getTime()) / 86400000 > 7) return null; return <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: "#3B82F6" + "15", color: "#3B82F6", fontWeight: 500 }}>New</span>; })()}
                       {c.onboarded ? <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: t.green + "12", color: t.green, fontWeight: 600 }}>Portal</span> : null}
                     </div>
                     {nm ? (
@@ -10853,9 +10884,9 @@ export default function App() {
                         {progs.map(prog => {
                           const p = CREATOR_PROGRAMS.find(x => x.id === prog);
                           if (!p) return null;
-                          return <span key={prog} style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: (p.color || "#888") + "15", color: p.color || "#888", fontWeight: 700 }}>{p.label}</span>;
+                          return <span key={prog} style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: (p.color || "#888") + "15", color: p.color || "#888", fontWeight: 500 }}>{p.label}</span>;
                         })}
-                        {tier ? <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: tier.color + "15", color: tier.color, fontWeight: 700 }}>{tier.label}</span> : null}
+                        {tier ? <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: tier.color + "15", color: tier.color, fontWeight: 500 }}>{tier.label}</span> : null}
                       </div>
                     ) : null}
                   </div>
@@ -11004,7 +11035,7 @@ export default function App() {
                           alignItems: "center",
                           justifyContent: "center",
                           fontSize: 10,
-                          fontWeight: 800,
+                          fontWeight: 500,
                           color: "#fff",
                         }}
                       >
@@ -11183,7 +11214,7 @@ export default function App() {
                   <button onClick={() => { setProgramFilter("all"); navigate("creatorHub"); }} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.textMuted, cursor: "pointer" }}>← Creator Hub</button>
                   <div style={{ width: 4, height: 24, borderRadius: 2, background: _activeMeta.color }} />
                   <div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{_activeMeta.name}</div>
+                    <div style={{ fontSize: 22, fontWeight: 500, color: t.text }}>{_activeMeta.name}</div>
                     <div style={{ fontSize: 12, color: t.textMuted }}>{_activeMeta.desc} · {_progCreators.length} creators</div>
                   </div>
                 </div>
@@ -11193,55 +11224,55 @@ export default function App() {
                   {programFilter === "ugc" ? (
                     <>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => c.ibScore != null).length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.green }}>{_progCreators.filter(c => c.ibScore != null).length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Scored</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.blue }}>{_progCreators.filter(c => Number(c.ibScore) >= 7).length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.blue }}>{_progCreators.filter(c => Number(c.ibScore) >= 7).length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Score 7+</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.orange }}>{_progCreators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0)}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.orange }}>{_progCreators.reduce((s, c) => s + Math.max((c.videoLog || []).length, c.totalVideos || 0), 0)}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Videos tracked</div>
                       </div>
                     </>
                   ) : programFilter === "tts" ? (
                     <>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#63B7BA" }}>{_progCreators.length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: "#63B7BA" }}>{_progCreators.length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>TTS creators</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => c.tiktokShopData).length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.green }}>{_progCreators.filter(c => c.tiktokShopData).length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>With shop data</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center" }}>
-                        <button onClick={() => { window.history.pushState(null, "", "/channel-pipeline/tts-native"); navigate("pipeline"); }} style={{ background: "none", border: "none", color: t.blue, fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 }}>View TTS Pipeline →</button>
+                        <button onClick={() => { window.history.pushState(null, "", "/channel-pipeline/tts-native"); navigate("pipeline"); }} style={{ background: "none", border: "none", color: t.blue, fontSize: 13, fontWeight: 500, cursor: "pointer", padding: 0 }}>View TTS Pipeline →</button>
                       </div>
                     </>
                   ) : (programFilter === "alist" || programFilter === "celebrity") ? (
                     <>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: _activeMeta.color }}>{_progCreators.length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: _activeMeta.color }}>{_progCreators.length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>{_activeMeta.name}</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => Number(c.tiktokData?.followers || 0) + Number(c.instagramData?.followers || 0) > 100000).length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.green }}>{_progCreators.filter(c => Number(c.tiktokData?.followers || 0) + Number(c.instagramData?.followers || 0) > 100000).length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>100K+ followers</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.orange }}>{_progCreators.filter(c => Number(c.tiktokData?.followers || 0) + Number(c.instagramData?.followers || 0) > 1000000).length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.orange }}>{_progCreators.filter(c => Number(c.tiktokData?.followers || 0) + Number(c.instagramData?.followers || 0) > 1000000).length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>1M+ followers</div>
                       </div>
                     </>
                   ) : (
                     <>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: _activeMeta.color }}>{_progCreators.length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: _activeMeta.color }}>{_progCreators.length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>In program</div>
                       </div>
                       <div style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: t.green }}>{_progCreators.filter(c => c.ibScore != null).length}</div>
+                        <div style={{ fontSize: 20, fontWeight: 500, color: t.green }}>{_progCreators.filter(c => c.ibScore != null).length}</div>
                         <div style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase" }}>Scored</div>
                       </div>
                     </>
@@ -11250,7 +11281,7 @@ export default function App() {
 
                 {/* Quick actions */}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => navigate("create")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", background: _activeMeta.color, color: "#fff", cursor: "pointer" }}>+ New Brief</button>
+                  <button onClick={() => navigate("create")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "none", background: _activeMeta.color, color: "#fff", cursor: "pointer" }}>+ New Brief</button>
                   <button onClick={() => navigate("campaigns")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid " + t.border, background: t.card, color: t.text, cursor: "pointer" }}>Launch Campaign</button>
                 </div>
               </div>
@@ -11261,7 +11292,7 @@ export default function App() {
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
                     <div>
-                      <div style={{ fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
+                      <div style={{ fontSize: 24, fontWeight: 500, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Creators</div>
                       <div style={{ fontSize: 13, color: t.textMuted }}>
                         {creators.filter((cr) => cr.status === "Active").length} active · {creators.filter((cr) => cr.ibScore != null).length} scored · {creators.length} total
                       </div>
@@ -11311,7 +11342,7 @@ export default function App() {
                 const count = prog.id === "all" ? creators.length : creators.filter(c => (c.programs || []).includes(prog.id)).length;
                 return (
                   <button key={prog.id} onClick={() => setProgramFilter(prog.id)} style={{
-                    padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer",
                     border: programFilter === prog.id ? "2px solid " + (prog.color || t.green) + "80" : "1px solid " + t.border,
                     background: programFilter === prog.id ? (prog.color || t.green) + "12" : t.card,
                     color: programFilter === prog.id ? (prog.color || t.green) : t.textMuted,
@@ -11433,7 +11464,7 @@ export default function App() {
                 }}
               >
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>
                     Enriching {bulkEnrichProgress.cur}/{bulkEnrichProgress.total} — @
                     {String(bulkEnrichProgress.handle || "").replace(/^@/, "")}
                   </div>
@@ -11453,7 +11484,7 @@ export default function App() {
                     }}
                   />
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: t.green, flexShrink: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 500, color: t.green, flexShrink: 0 }}>
                   {bulkEnrichProgress.total ? Math.round((bulkEnrichProgress.cur / bulkEnrichProgress.total) * 100) : 0}%
                 </div>
                 <button
@@ -11476,7 +11507,7 @@ export default function App() {
                 background: t.green + "10", border: "2px solid " + t.green + "40",
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: t.green }}>{selectedCreators.size} selected</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: t.green }}>{selectedCreators.size} selected</span>
                   <button onClick={() => setSelectedCreators(new Set())} style={{ fontSize: 11, color: t.textFaint, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Clear</button>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

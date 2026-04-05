@@ -349,7 +349,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
     <div style={{ maxWidth: 1400, margin: "0 auto", padding: "32px 24px 60px", animation: "fadeIn 0.3s ease" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Channel Pipeline</div>
+          <div style={{ fontSize: 28, fontWeight: 500, color: t.text, letterSpacing: "-0.02em", marginBottom: 4 }}>Channel Pipeline</div>
           <div style={{ fontSize: 13, color: t.textMuted }}>Live from Google Sheets — click a cell to edit (saves on Enter); cache ~2 min</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -428,7 +428,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
 
       {!loading && tab !== "sops" && tab !== "tts_native" && activeSheetName ? (
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 12 }}>{activeSheetName}</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 12 }}>{activeSheetName}</div>
           {renderSheetTable(activeSheetName, tab === "instagram" ? { headerRowIndex: 1 } : {})}
         </div>
       ) : null}
@@ -448,7 +448,7 @@ function ChannelPipeline({ navigate, creators: _creators, t, S: _S }) {
             }
             return (
               <div key={sopTab} style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 12 }}>{sopTab}</div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 12 }}>{sopTab}</div>
                 {renderSheetTable(sopTab)}
               </div>
             );

@@ -83,12 +83,12 @@ function ChangeRequestsPage({ t, S, navigate, refreshOpenCount }) {
             <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: filter === f ? "2px solid " + t.green + "60" : "1px solid " + t.border, background: filter === f ? t.green + "10" : t.card, color: filter === f ? t.green : t.textMuted, cursor: "pointer", textTransform: "capitalize" }}>{f.replace("_", " ")}</button>
           ))}
         </div>
-        <button onClick={() => setShowForm(!showForm)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: t.green, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showForm ? "Cancel" : "New request"}</button>
+        <button onClick={() => setShowForm(!showForm)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: t.green, color: "#000", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{showForm ? "Cancel" : "New request"}</button>
       </div>
 
       {showForm ? (
         <div style={{ background: t.card, border: "2px solid " + t.green + "60", borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: t.shadow }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 12 }}>Submit a request</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 12 }}>Submit a request</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Your name" style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
             <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Short title (optional)" style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13 }} />
@@ -106,7 +106,7 @@ function ChangeRequestsPage({ t, S, navigate, refreshOpenCount }) {
             </select>
           </div>
           <input value={form.customUrl} onChange={e => setForm(f => ({ ...f, customUrl: e.target.value }))} placeholder="Link or URL (optional)" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, marginBottom: 12, boxSizing: "border-box" }} />
-          <button onClick={submit} disabled={submitting} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{submitting ? "Submitting..." : "Submit request"}</button>
+          <button onClick={submit} disabled={submitting} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: t.green, color: "#000", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{submitting ? "Submitting..." : "Submit request"}</button>
         </div>
       ) : null}
 
@@ -132,7 +132,7 @@ function ChangeRequestsPage({ t, S, navigate, refreshOpenCount }) {
                 <div onClick={() => setExpandedId(isExpanded ? null : r.id)} style={{ padding: "16px 20px", cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>{r.title || r.description?.substring(0, 60)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 4 }}>{r.title || r.description?.substring(0, 60)}</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11 }}>
                         <span style={{ padding: "2px 8px", borderRadius: 5, background: catColor + "12", color: catColor, fontWeight: 600 }}>{r.category || "Other"}</span>
                         {r.priority && r.priority !== "normal" ? <span style={{ padding: "2px 8px", borderRadius: 5, background: priColor + "12", color: priColor, fontWeight: 600, textTransform: "capitalize" }}>{r.priority}</span> : null}
@@ -159,7 +159,7 @@ function ChangeRequestsPage({ t, S, navigate, refreshOpenCount }) {
 
                     {comments.length > 0 ? (
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 6 }}>Comments</div>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, marginBottom: 6 }}>Comments</div>
                         {comments.map((c, i) => (
                           <div key={i} style={{ padding: "8px 12px", background: t.cardAlt, borderRadius: 8, marginBottom: 4, fontSize: 12 }}>
                             <span style={{ fontWeight: 600, color: t.text }}>{c.name}</span>
@@ -233,14 +233,14 @@ function ChangeRequestWidget({ currentPage, t, navigate, refreshOpenCount }) {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(!open)} style={{ position: "fixed", bottom: 24, right: 24, padding: open ? "10px 16px" : "10px 18px", borderRadius: 10, background: open ? t.text : t.green, color: open ? t.bg : "#000", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 20px rgba(0,0,0,0.2)", zIndex: 1000 }}>
+      <button type="button" onClick={() => setOpen(!open)} style={{ position: "fixed", bottom: 24, right: 24, padding: open ? "10px 16px" : "10px 18px", borderRadius: 10, background: open ? t.text : t.green, color: open ? t.bg : "#000", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 20px rgba(0,0,0,0.2)", zIndex: 1000 }}>
         {open ? "Close" : "Request Changes"}
-        {!open && pageOpenBadge > 0 ? <span style={{ width: 18, height: 18, borderRadius: 9, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{pageOpenBadge}</span> : null}
+        {!open && pageOpenBadge > 0 ? <span style={{ width: 18, height: 18, borderRadius: 9, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center" }}>{pageOpenBadge}</span> : null}
       </button>
 
       {open ? (
         <div style={{ position: "fixed", bottom: 80, right: 24, width: 380, maxHeight: "70vh", overflowY: "auto", background: t.card, border: "1px solid " + t.border, borderRadius: 14, boxShadow: "0 8px 40px rgba(0,0,0,0.15)", zIndex: 999, padding: 20 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>Submit a request</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: t.text, marginBottom: 4 }}>Submit a request</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>Bug, feature idea, content change — anything goes.</div>
 
           <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Your name" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, marginBottom: 8, boxSizing: "border-box" }} />
@@ -264,7 +264,7 @@ function ChangeRequestWidget({ currentPage, t, navigate, refreshOpenCount }) {
           <input value={form.customUrl} onChange={e => setForm(f => ({ ...f, customUrl: e.target.value }))} placeholder="Link to page or screenshot (optional)" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, marginBottom: 12, boxSizing: "border-box" }} />
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={submit} disabled={submitting} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, border: "none", background: t.green, color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: submitting ? 0.6 : 1 }}>{submitting ? "Submitting..." : "Submit"}</button>
+            <button onClick={submit} disabled={submitting} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, border: "none", background: t.green, color: "#000", fontSize: 13, fontWeight: 500, cursor: "pointer", opacity: submitting ? 0.6 : 1 }}>{submitting ? "Submitting..." : "Submit"}</button>
             <button onClick={() => navigate("changeRequests")} style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>View all</button>
           </div>
 

@@ -43,13 +43,13 @@ function MessagingHub({ t, S, teamMembers, creators, navigate }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div><div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>Messaging</div><div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>{conversations.length} conversations · {totalMsgs} messages · {totalDrafts} drafts</div></div>
+        <div><div style={{ fontSize: 24, fontWeight: 500, color: t.text }}>Messaging</div><div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>{conversations.length} conversations · {totalMsgs} messages · {totalDrafts} drafts</div></div>
       </div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         {[{ label: "Conversations", value: conversations.length, color: t.text }, { label: "Sent", value: conversations.reduce((s, c) => s + (c.creator_messages || []).filter(m => m.status === "sent" && m.direction === "outbound").length, 0), color: t.green }, { label: "Drafts", value: totalDrafts, color: t.orange || "#d4890a" }, { label: "This week", value: sentThisWeek, color: t.blue }].map((stat, i) => (
           <div key={i} style={{ flex: 1, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "10px 14px", boxShadow: t.shadow }}>
             <div style={{ fontSize: 9, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{stat.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: stat.color, marginTop: 2 }}>{stat.value}</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: stat.color, marginTop: 2 }}>{stat.value}</div>
           </div>
         ))}
       </div>
@@ -67,10 +67,10 @@ function MessagingHub({ t, S, teamMembers, creators, navigate }) {
           const avatar = cr?.tiktokData?.avatarUrl || cr?.instagramData?.avatarUrl || "";
           return (
             <div key={conv.id} onClick={() => navigate("creatorDetail", cr?.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", borderBottom: ci < filtered.length - 1 ? "1px solid " + t.border + "60" : "none" }} onMouseEnter={(e) => { e.currentTarget.style.background = t.cardAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-              {avatar ? <img src={avatar} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 40, height: 40, borderRadius: 20, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: t.green, flexShrink: 0 }}>{name[0]}</div>}
+              {avatar ? <img src={avatar} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 40, height: 40, borderRadius: 20, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 500, color: t.green, flexShrink: 0 }}>{name[0]}</div>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{name} <span style={{ fontSize: 11, fontWeight: 400, color: t.textFaint }}>@{handle}</span></div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{name} <span style={{ fontSize: 11, fontWeight: 400, color: t.textFaint }}>@{handle}</span></div>
                   <span style={{ fontSize: 10, color: t.textFaint }}>{lastMsg?.sent_at ? new Date(lastMsg.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
                 </div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lastMsg ? (lastMsg.direction === "outbound" ? "You: " : "") + lastMsg.body.substring(0, 100) : "No messages yet"}</div>
