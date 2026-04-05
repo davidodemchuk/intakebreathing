@@ -199,18 +199,19 @@ function CreatorLogin({ navigate, t }) {
 
   if (checkingSession) return <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", color: t.textMuted }}>Loading...</div>;
 
-  const inp = { width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 15, outline: "none", boxSizing: "border-box" };
-  const btn = { width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 500, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1 };
-  const verifyBtn = (verifying) => ({ padding: "10px 18px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontSize: 13, fontWeight: 500, cursor: verifying ? "wait" : "pointer", opacity: verifying ? 0.6 : 1, whiteSpace: "nowrap" });
+  const inp = { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #333333", background: "#1a1a1a", color: "#FFFFFF", fontSize: 15, outline: "none", boxSizing: "border-box" };
+  const btn = { width: "100%", height: 50, borderRadius: 25, border: "none", background: "#00FEA9", color: "#000000", fontSize: 15, fontWeight: 400, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1, padding: "0 28px" };
+  const verifyBtn = (verifying) => ({ padding: "10px 18px", borderRadius: 8, border: "1px solid #333333", background: "transparent", color: "#FFFFFF", fontSize: 13, fontWeight: 400, cursor: verifying ? "wait" : "pointer", opacity: verifying ? 0.6 : 1, whiteSpace: "nowrap" });
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 460 }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ fontSize: 26, fontWeight: 500, color: t.text, letterSpacing: "-0.02em" }}>Creator Portal</div>
-          <div style={{ fontSize: 14, color: t.textMuted, marginTop: 6 }}>Intake Breathing Technology</div>
+          <div style={{ color: "#00FEA9", fontSize: 22, fontWeight: 500, letterSpacing: "0.05em", marginBottom: 8 }}>{"\u2B21"} intake creators</div>
+          <div style={{ fontSize: 24, fontWeight: 500, color: "#FFFFFF", letterSpacing: "-0.02em" }}>Creator Portal</div>
+          <div style={{ fontSize: 14, color: "#737373", marginTop: 6 }}>Intake Breathing Technology</div>
         </div>
-        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 16, padding: 32, boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
+        <div style={{ background: "#111111", border: "1px solid #222222", borderRadius: 16, padding: 40 }}>
           <div style={{ display: "flex", marginBottom: 24, borderRadius: 10, overflow: "hidden", border: "1px solid " + t.border }}>
             <button onClick={() => { setMode("login"); setStep(1); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: mode === "login" ? t.green : "transparent", color: mode === "login" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Log in</button>
             <button onClick={() => { setMode("signup"); setError(null); }} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: mode === "signup" ? t.green : "transparent", color: mode === "signup" ? (t.isLight ? "#fff" : "#000") : t.textMuted }}>Sign up</button>
@@ -228,10 +229,10 @@ function CreatorLogin({ navigate, t }) {
               {step === 1 ? (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 16 }}>Account details</div>
-                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Full name</div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus style={inp} /></div>
-                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" style={inp} /></div>
-                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" style={inp} /></div>
-                  <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Confirm password</div><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" onKeyDown={(e) => e.key === "Enter" && handleStep1Next()} style={inp} /></div>
+                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Full name</div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus style={inp} /></div>
+                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" style={inp} /></div>
+                  <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" style={inp} /></div>
+                  <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Confirm password</div><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" onKeyDown={(e) => e.key === "Enter" && handleStep1Next()} style={inp} /></div>
                   <button onClick={handleStep1Next} style={{ ...btn, cursor: "pointer", opacity: 1 }}>Continue</button>
                 </>
               ) : (
@@ -241,7 +242,7 @@ function CreatorLogin({ navigate, t }) {
 
                   {/* Instagram — required */}
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Instagram handle <span style={{ color: t.red || "#ef4444" }}>*</span></div>
+                    <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Instagram handle <span style={{ color: t.red || "#ef4444" }}>*</span></div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <input type="text" value={igHandle} onChange={(e) => { setIgHandle(e.target.value); setIgProfile(null); setIgError(null); }} placeholder="@yourhandle" style={{ ...inp, flex: 1 }} onKeyDown={(e) => e.key === "Enter" && verifySocial("instagram", igHandle, setIgProfile, setVerifyingIg, setIgError)} />
                       <button onClick={() => verifySocial("instagram", igHandle, setIgProfile, setVerifyingIg, setIgError)} disabled={verifyingIg} style={verifyBtn(verifyingIg)}>{verifyingIg ? "..." : igProfile ? "Re-verify" : "Verify"}</button>
@@ -252,7 +253,7 @@ function CreatorLogin({ navigate, t }) {
 
                   {/* TikTok — optional */}
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>TikTok handle <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+                    <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>TikTok handle <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <input type="text" value={ttHandle} onChange={(e) => { setTtHandle(e.target.value); setTtProfile(null); setTtError(null); }} placeholder="@yourhandle" style={{ ...inp, flex: 1 }} onKeyDown={(e) => e.key === "Enter" && ttHandle.trim() && verifySocial("tiktok", ttHandle, setTtProfile, setVerifyingTt, setTtError)} />
                       {ttHandle.trim() ? <button onClick={() => verifySocial("tiktok", ttHandle, setTtProfile, setVerifyingTt, setTtError)} disabled={verifyingTt} style={verifyBtn(verifyingTt)}>{verifyingTt ? "..." : ttProfile ? "Re-verify" : "Verify"}</button> : null}
@@ -263,18 +264,18 @@ function CreatorLogin({ navigate, t }) {
 
                   {/* YouTube — optional, no verify */}
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>YouTube channel <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+                    <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>YouTube channel <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
                     <input type="text" value={ytHandle} onChange={(e) => setYtHandle(e.target.value)} placeholder="@channel or URL" style={inp} />
                   </div>
 
                   {/* Other platforms */}
                   <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Other platforms <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
+                    <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Other platforms <span style={{ fontSize: 10, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
                     <input type="text" value={otherPlatforms} onChange={(e) => setOtherPlatforms(e.target.value)} placeholder="Snapchat, Twitter, etc." style={inp} />
                   </div>
 
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button onClick={() => { setStep(1); setError(null); }} style={{ flex: "0 0 auto", padding: "14px 20px", borderRadius: 10, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Back</button>
+                    <button onClick={() => { setStep(1); setError(null); }} style={{ flex: "0 0 auto", padding: "14px 20px", borderRadius: 10, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 14, fontWeight: 500, cursor: "pointer" }}>Back</button>
                     <button onClick={handleSignUpStep2} disabled={loading} style={{ ...btn, flex: 1 }}>{loading ? "Creating account..." : "Create account"}</button>
                   </div>
                 </>
@@ -282,8 +283,8 @@ function CreatorLogin({ navigate, t }) {
             </>
           ) : (
             <>
-              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoFocus style={inp} /></div>
-              <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, fontWeight: 600 }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" onKeyDown={(e) => e.key === "Enter" && handleLogin()} style={inp} /></div>
+              <div style={{ marginBottom: 14 }}><div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Email</div><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoFocus style={inp} /></div>
+              <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Password</div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" onKeyDown={(e) => e.key === "Enter" && handleLogin()} style={inp} /></div>
               <button onClick={handleLogin} disabled={loading} style={btn}>{loading ? "Signing in..." : "Sign in"}</button>
               <button onClick={handleForgotPassword} style={{ width: "100%", marginTop: 10, padding: 10, border: "none", background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>Forgot password?</button>
             </>
@@ -347,7 +348,7 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
     navigate("creatorDashboard");
   };
 
-  const inpStyle = { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" };
+  const inpStyle = { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #333333", background: "#1a1a1a", color: "#FFFFFF", fontSize: 15, outline: "none", boxSizing: "border-box" };
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, padding: 24 }}>
@@ -365,7 +366,7 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: ttHandle ? 8 : 0 }}>
                 {igData.avatarUrl ? <img src={igData.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>@{igHandle}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{igHandle}</div>
                   <div style={{ fontSize: 11, color: t.textFaint }}>Instagram{igData.followers ? " \u00b7 " + Number(igData.followers).toLocaleString() + " followers" : ""}</div>
                 </div>
               </div>
@@ -374,7 +375,7 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {ttData.avatarUrl ? <img src={ttData.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : null}
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>@{ttHandle}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{ttHandle}</div>
                   <div style={{ fontSize: 11, color: t.textFaint }}>TikTok{ttData.followers ? " \u00b7 " + Number(ttData.followers).toLocaleString() + " followers" : ""}</div>
                 </div>
               </div>
@@ -382,35 +383,35 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
           </div>
         ) : null}
 
-        <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, padding: 24 }}>
+        <div style={{ background: "#111111", border: "1px solid #222222", borderRadius: 12, padding: 24 }}>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>Content niches</div>
+            <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Content niches</div>
             <input value={form.niche} onChange={(e) => upd("niche", e.target.value)} placeholder="e.g. Fitness, Lifestyle, Health, Sports" style={inpStyle} />
           </div>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>What size Intake do you wear?</div>
+            <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>What size Intake do you wear?</div>
             <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 8 }}>Select yours or "Not sure yet" — we'll send the right fit.</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 6 }}>
               {["Small", "Medium", "Large", "XL", "Not sure"].map(sz => (
                 <button key={sz} onClick={() => upd("intakeSize", sz)} style={{
-                  padding: "10px 6px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  border: form.intakeSize === sz ? "2px solid " + t.green : "1px solid " + t.border,
-                  background: form.intakeSize === sz ? t.green + "10" : "transparent",
-                  color: form.intakeSize === sz ? t.green : t.textMuted,
+                  padding: "10px 6px", borderRadius: 8, fontSize: 12, fontWeight: 400, cursor: "pointer",
+                  border: form.intakeSize === sz ? "2px solid #00FEA9" : "1px solid #333333",
+                  background: form.intakeSize === sz ? "rgba(0,254,169,0.1)" : "#1a1a1a",
+                  color: form.intakeSize === sz ? "#00FEA9" : "#737373",
                 }}>{sz}</button>
               ))}
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>Rate per video ($)</div>
+            <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Rate per video ($)</div>
             <input value={form.costPerVideo} onChange={(e) => upd("costPerVideo", e.target.value)} placeholder="e.g. 100" style={inpStyle} />
           </div>
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>Shipping address</div>
+            <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Shipping address</div>
             <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>We'll send you Intake product to create content with</div>
             <textarea value={form.address} onChange={(e) => upd("address", e.target.value)} placeholder="Street, City, State, ZIP" rows={3} style={{ ...inpStyle, fontFamily: "inherit", resize: "vertical" }} />
           </div>
-          <button onClick={save} disabled={saving} style={{ width: "100%", padding: 14, borderRadius: 10, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 15, fontWeight: 500, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>
+          <button onClick={save} disabled={saving} style={{ width: "100%", height: 50, borderRadius: 25, border: "none", background: "#00FEA9", color: "#000000", fontSize: 15, fontWeight: 400, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1, padding: "0 28px" }}>
             {saving ? "Saving..." : "Complete setup"}
           </button>
         </div>
@@ -447,23 +448,23 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg }}>
-      <div style={{ background: t.card, borderBottom: "1px solid " + t.border, padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: "#0a0a0a", borderBottom: "1px solid #222222", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", height: 56 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: t.text, padding: "14px 0" }}>Intake</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.05em" }}>{"\u2B21"} intake</span>
           <div style={{ display: "flex", gap: 2 }}>
             {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent" }}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent" }}>
                 {tab.label}{tab.count > 0 ? <span style={{ marginLeft: 4, fontSize: 9, padding: "1px 5px", borderRadius: 8, background: t.green, color: "#fff", fontWeight: 500 }}>{tab.count}</span> : null}
               </button>
             ))}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => navigate("creatorProfile")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => navigate("creatorProfile")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.text, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
             <div style={{ width: 22, height: 22, borderRadius: 11, background: t.green + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 500, color: t.green }}>{(cp?.name || "C")[0]}</div>
             {cp?.name?.split(" ")[0] || "Profile"}
           </button>
-          <button onClick={async () => { await supabase.auth.signOut(); navigate("creatorLogin"); }} style={{ padding: "6px 10px", borderRadius: 6, border: "none", background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer" }}>Sign Out</button>
+          <button onClick={async () => { await supabase.auth.signOut(); navigate("creatorLogin"); }} style={{ padding: "0 16px", height: 32, borderRadius: 8, border: "1px solid #333333", background: "transparent", color: "#FFFFFF", fontSize: 12, fontWeight: 400, cursor: "pointer" }}>Sign Out</button>
         </div>
       </div>
 
@@ -473,7 +474,7 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
             <div style={{ background: "linear-gradient(135deg, " + t.green + "15, " + t.blue + "10)", border: "1px solid " + t.green + "25", borderRadius: 14, padding: "20px 24px", marginBottom: 20 }}>
               <div style={{ fontSize: 20, fontWeight: 500, color: t.text }}>Hey, {cp?.name?.split(" ")[0] || "Creator"}</div>
               <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Welcome to your Intake Breathing dashboard</div>
-              {pendingCampaigns.length > 0 ? <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: t.orange + "15", border: "1px solid " + t.orange + "30", fontSize: 12, color: t.orange, fontWeight: 600, cursor: "pointer" }} onClick={() => setActiveTab("campaigns")}>{pendingCampaigns.length} campaign invite{pendingCampaigns.length > 1 ? "s" : ""} waiting</div> : null}
+              {pendingCampaigns.length > 0 ? <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: t.orange + "15", border: "1px solid " + t.orange + "30", fontSize: 12, color: t.orange, fontWeight: 500, cursor: "pointer" }} onClick={() => setActiveTab("campaigns")}>{pendingCampaigns.length} campaign invite{pendingCampaigns.length > 1 ? "s" : ""} waiting</div> : null}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
               {[{ v: assignments.length, l: "Briefs", c: t.blue }, { v: activeCampaigns.length, l: "Active campaigns", c: t.green }, { v: pendingCampaigns.length, l: "Pending invites", c: t.orange }].map((s, i) => (
@@ -483,7 +484,7 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
                 </div>
               ))}
             </div>
-            {assignments.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Recent briefs</div>{assignments.slice(0, 3).map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div><div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</div> : null}
+            {assignments.length > 0 ? <div style={{ marginBottom: 20 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Recent briefs</div>{assignments.slice(0, 3).map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "12px 16px", marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</div> : null}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div onClick={() => navigate("creatorMessages")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Messages</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Chat with your manager</div></div>
               <div onClick={() => navigate("creatorProfile")} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "16px 20px", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.green + "50"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Edit profile</div><div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Update your info</div></div>
@@ -491,10 +492,10 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
           </>
         ) : null}
         {activeTab === "briefs" ? (
-          <>{assignments.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}><div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No briefs yet</div><div style={{ fontSize: 12 }}>Your manager will assign briefs when campaigns are ready.</div></div> : assignments.map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</>
+          <>{assignments.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>No briefs yet</div><div style={{ fontSize: 12 }}>Your manager will assign briefs when campaigns are ready.</div></div> : assignments.map(a => { const br = a.briefs; const sc = { assigned: t.blue, viewed: t.orange, submitted: t.purple || "#8b6cc4", approved: t.green }[a.status] || t.textFaint; return <div key={a.id} onClick={() => navigate("creatorBriefView", { assignmentId: a.id, briefId: br?.id })} style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{br?.name || "Brief"}</div><div style={{ fontSize: 11, color: t.textFaint }}>{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : ""}</div></div><span style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, textTransform: "uppercase" }}>{a.status === "assigned" ? "New" : a.status}</span></div>; })}</>
         ) : null}
         {activeTab === "campaigns" ? (
-          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div>{camp?.brief_id ? <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: t.blue + "08", border: "1px solid " + t.blue + "20" }}><div style={{ fontSize: 10, fontWeight: 600, color: t.blue, textTransform: "uppercase" }}>Brief included</div><div style={{ fontSize: 12, color: t.text, marginTop: 2 }}>Accept to view the full brief and content requirements</div></div> : null}<div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); if (camp?.brief_id) { await supabase.from("brief_assignments").insert({ creator_id: cp.id, brief_id: camp.brief_id, campaign_id: camp.id, status: "assigned", assigned_at: new Date().toISOString() }); const { data: ra } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false }); if (ra) setAssignments(ra); } }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div></div>; })}</div> : null}</>}</>
+          <>{campaigns.length === 0 ? <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 32, textAlign: "center", color: t.textFaint }}>No campaigns yet.</div> : <>{pendingCampaigns.length > 0 ? <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, fontWeight: 500, color: t.orange, textTransform: "uppercase", marginBottom: 8 }}>Waiting for response</div>{pendingCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "2px solid " + t.orange + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.description?.substring(0, 150) || ""}</div>{camp?.brief_id ? <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: t.blue + "08", border: "1px solid " + t.blue + "20" }}><div style={{ fontSize: 10, fontWeight: 500, color: t.blue, textTransform: "uppercase" }}>Brief included</div><div style={{ fontSize: 12, color: t.text, marginTop: 2 }}>Accept to view the full brief and content requirements</div></div> : null}<div style={{ display: "flex", gap: 8, marginTop: 10 }}><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "accepted" } : c)); if (camp?.brief_id) { await supabase.from("brief_assignments").insert({ creator_id: cp.id, brief_id: camp.brief_id, campaign_id: camp.id, status: "assigned", assigned_at: new Date().toISOString() }); const { data: ra } = await supabase.from("brief_assignments").select("*, briefs(*)").eq("creator_id", cp.id).order("assigned_at", { ascending: false }); if (ra) setAssignments(ra); } }} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: t.green, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Accept</button><button onClick={async () => { await supabase.from("campaign_creators").update({ status: "declined", responded_at: new Date().toISOString() }).eq("id", cc.id); setCampaigns(prev => prev.map(c => c.id === cc.id ? { ...c, status: "declined" } : c)); }} style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, fontSize: 12, cursor: "pointer" }}>Decline</button></div></div>; })}</div> : null}{activeCampaigns.length > 0 ? <div><div style={{ fontSize: 12, fontWeight: 500, color: t.green, textTransform: "uppercase", marginBottom: 8 }}>Active</div>{activeCampaigns.map(cc => { const camp = cc.campaigns; return <div key={cc.id} style={{ background: t.card, border: "1px solid " + t.green + "30", borderRadius: 10, padding: "14px 16px", marginBottom: 6 }}><div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>{camp?.name || "Campaign"}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{camp?.product || "Intake"}</div></div>; })}</div> : null}</>}</>
         ) : null}
       </div>
     </div>
@@ -524,7 +525,7 @@ function CreatorBriefView({ navigate, t, BriefDisplay }) {
   return (
     <div style={{ minHeight: "100vh", background: t.bg }}>
       <div style={{ padding: "12px 24px", borderBottom: "1px solid " + t.border, display: "flex", alignItems: "center", gap: 12 }}>
-        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>&larr; Back to Dashboard</button>
+        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>&larr; Back to Dashboard</button>
         <span style={{ fontSize: 13, color: t.textMuted }}>Viewing brief</span>
       </div>
       <BriefDisplay brief={brief} formData={formData || {}} currentRole={ROLES.CREATOR} creators={[]} onBack={() => navigate("creatorDashboard")} onRegenerate={() => {}} onRegenerateAI={() => {}} />
@@ -574,7 +575,7 @@ function CreatorMessages({ creatorProfile: cp, navigate, t }) {
   return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "12px 24px", borderBottom: "1px solid " + t.border, display: "flex", alignItems: "center", gap: 12 }}>
-        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>&larr; Back</button>
+        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>&larr; Back</button>
         <span style={{ fontSize: 14, fontWeight: 500, color: t.text }}>Messages</span>
       </div>
 
@@ -650,7 +651,7 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
 
   const inp = (label, key, ph, opts) => (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
       {opts?.multi ? (
         <textarea value={form[key]} onChange={(e) => upd(key, e.target.value)} placeholder={ph} rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
       ) : (
@@ -662,7 +663,7 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
   return (
     <div style={{ minHeight: "100vh", background: t.bg, padding: 24 }}>
       <div style={{ maxWidth: 480, margin: "0 auto", paddingTop: 24 }}>
-        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 20 }}>&larr; Back</button>
+        <button type="button" onClick={() => navigate("creatorDashboard")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, fontSize: 12, fontWeight: 500, cursor: "pointer", marginBottom: 20 }}>&larr; Back</button>
         <div style={{ fontSize: 20, fontWeight: 500, color: t.text, marginBottom: 20 }}>Your Profile</div>
         <div style={{ background: t.card, border: "1px solid " + t.border, borderRadius: 14, padding: 24 }}>
           {inp("Name", "name", "Your name")}
@@ -675,11 +676,11 @@ function CreatorProfileEdit({ creatorProfile: cp, navigate, t, onProfileUpdate }
           {inp("Niches", "niche", "Fitness, Lifestyle...")}
           {inp("Rate / video ($)", "costPerVideo", "100")}
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 4 }}>Intake Size</div>
+            <div style={{ fontSize: 11, color: "#737373", marginBottom: 6, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" }}>Intake Size</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 6 }}>
               {["Small", "Medium", "Large", "XL", "Not sure"].map(sz => (
                 <button key={sz} type="button" onClick={() => upd("intakeSize", sz)} style={{
-                  padding: "8px 4px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  padding: "8px 4px", borderRadius: 8, fontSize: 11, fontWeight: 500, cursor: "pointer",
                   border: form.intakeSize === sz ? "2px solid " + t.green : "1px solid " + t.border,
                   background: form.intakeSize === sz ? t.green + "10" : "transparent",
                   color: form.intakeSize === sz ? t.green : t.textMuted,
