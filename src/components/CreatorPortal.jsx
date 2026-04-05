@@ -1,6 +1,17 @@
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../supabase.js";
 
+const IntakeLogo = ({ size = 28, showWordmark = true, color = "#FFFFFF" }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: showWordmark ? 8 : 0, userSelect: "none" }}>
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 2L35.588 11V29L20 38L4.412 29V11L20 2Z" fill={color} />
+      <path d="M20 10L28.66 15V25L20 30L11.34 25V15L20 10Z" fill={color === "#FFFFFF" ? "#000000" : "#FFFFFF"} />
+      <path d="M11.34 25L20 30L20 38L4.412 29V20L11.34 25Z" fill={color} />
+    </svg>
+    {showWordmark ? <span style={{ fontFamily: "'Inter', sans-serif", fontSize: size * 0.6, fontWeight: 500, color, letterSpacing: "-0.01em", lineHeight: 1 }}>intake</span> : null}
+  </div>
+);
+
 const ROLES = { MANAGER: "manager", CREATOR: "creator" };
 
 function ProfilePreview({ profile, platform, t }) {
@@ -207,7 +218,7 @@ function CreatorLogin({ navigate, t }) {
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 460 }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ color: "#00FEA9", fontSize: 22, fontWeight: 500, letterSpacing: "0.05em", marginBottom: 8 }}>{"\u2B21"} intake creators</div>
+          <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}><IntakeLogo size={32} showWordmark={true} color="#00FEA9" /></div>
           <div style={{ fontSize: 24, fontWeight: 500, color: "#FFFFFF", letterSpacing: "-0.02em" }}>Creator Portal</div>
           <div style={{ fontSize: 14, color: "#737373", marginTop: 6 }}>Intake Breathing Technology</div>
         </div>
@@ -450,7 +461,7 @@ function CreatorDashboard({ creatorProfile: cp, navigate, t }) {
     <div style={{ minHeight: "100vh", background: t.bg }}>
       <div style={{ background: "#0a0a0a", borderBottom: "1px solid #222222", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", height: 56 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "#00FEA9", letterSpacing: "0.05em" }}>{"\u2B21"} intake</span>
+          <IntakeLogo size={24} showWordmark={true} color="#00FEA9" />
           <div style={{ display: "flex", gap: 2 }}>
             {[{ id: "home", label: "Home" }, { id: "briefs", label: "Briefs", count: newBriefs.length }, { id: "campaigns", label: "Campaigns", count: pendingCampaigns.length }].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none", background: "transparent", color: activeTab === tab.id ? t.green : t.textMuted, borderBottom: activeTab === tab.id ? "2px solid " + t.green : "2px solid transparent" }}>

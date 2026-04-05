@@ -58,6 +58,17 @@ import { supabase } from "./supabase.js";
 
 // FUTURE: Arrow keys to navigate between cells, Tab to move right, Enter to edit
 
+const IntakeLogo = ({ size = 28, showWordmark = true, color = "#FFFFFF" }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: showWordmark ? 8 : 0, userSelect: "none" }}>
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 2L35.588 11V29L20 38L4.412 29V11L20 2Z" fill={color} />
+      <path d="M20 10L28.66 15V25L20 30L11.34 25V15L20 10Z" fill={color === "#FFFFFF" ? "#000000" : "#FFFFFF"} />
+      <path d="M11.34 25L20 30L20 38L4.412 29V20L11.34 25Z" fill={color} />
+    </svg>
+    {showWordmark ? <span style={{ fontFamily: "'Inter', sans-serif", fontSize: size * 0.6, fontWeight: 500, color, letterSpacing: "-0.01em", lineHeight: 1 }}>intake</span> : null}
+  </div>
+);
+
 const CREATOR_COLUMNS = [
   { key: "select", label: "", width: 28, sortable: false },
   { key: "status", label: "Status", width: 100, filterable: true, sortable: true },
@@ -10037,17 +10048,10 @@ export default function App() {
           if (currentRole === ROLES.CREATOR) {
             return (
               <div className="no-print" style={S.nav}>
-                <div style={S.navLogo}>
-                  <img
-                    src="/favicon-32.png"
-                    alt="Intake"
-                    style={{ width: 28, height: 28, cursor: "pointer" }}
-                    onError={(e) => { e.target.style.display = "none"; }}
-                    onClick={() => navigate("library")}
-                  />
-                  <div onClick={() => navigate("library")} style={{ cursor: "pointer" }}>
-                    <div style={S.navTitle}>Intake Breathing</div>
-                    <div style={S.navSub}>{NAV_SUB_LABELS.creatorHub}</div>
+                <div style={S.navLogo} onClick={() => navigate("library")}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <IntakeLogo size={26} showWordmark={true} color="#FFFFFF" />
+                    <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1, paddingLeft: 2 }}>{NAV_SUB_LABELS.creatorHub}</span>
                   </div>
                 </div>
                 <div style={S.navLinks}>
@@ -10061,17 +10065,10 @@ export default function App() {
           const dashBtn = { ...S.navBtn(false), color: t.textFaint, fontWeight: 600 };
           return (
             <div className="no-print" style={S.nav}>
-              <div style={S.navLogo}>
-                <img
-                  src="/favicon-32.png"
-                  alt="Intake"
-                  style={{ width: 28, height: 28, cursor: "pointer" }}
-                  onError={(e) => { e.target.style.display = "none"; }}
-                  onClick={() => navigate("home")}
-                />
-                <div onClick={() => navigate("home")} style={{ cursor: "pointer" }}>
-                  <div style={S.navTitle}>Intake Breathing</div>
-                  <div style={S.navSub}>{navSubText}</div>
+              <div style={S.navLogo} onClick={() => navigate("home")}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <IntakeLogo size={26} showWordmark={true} color="#FFFFFF" />
+                  <span style={{ fontSize: 9, fontWeight: 500, color: "#737373", letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1, paddingLeft: 2 }}>{navSubText}</span>
                 </div>
               </div>
               <div style={S.navLinks}>
