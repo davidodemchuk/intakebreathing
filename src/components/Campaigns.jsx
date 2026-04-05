@@ -73,7 +73,7 @@ function CampaignsPage({ t, S, teamMembers, creators, navigate, briefs = [] }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div><div style={{ fontSize: 24, fontWeight: 500, color: t.text }}>Campaigns</div><div style={{ fontSize: 12, color: t.textFaint, marginTop: 4 }}>{campaigns.length} campaigns · {campaigns.filter(c => c.status === "active").length} active</div></div>
-        <button onClick={async () => { const result = await dbSaveCampaign({ name: "Untitled Campaign", status: "draft" }); if (result.data?.id) navigate("campaignDetail", { campaignId: result.data.id }); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New campaign</button>
+        <button onClick={async () => { const result = await dbSaveCampaign({ name: "Name your campaign/brief", status: "draft" }); if (result.data?.id) navigate("campaignDetail", { campaignId: result.data.id }); }} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>+ New campaign</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: selectedCampaign ? "1fr 2fr" : "1fr", gap: 16 }}>

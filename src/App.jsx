@@ -5829,7 +5829,7 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <div contentEditable suppressContentEditableWarning onBlur={(e) => updateField("name", e.currentTarget.textContent)} style={{ fontSize: 24, fontWeight: 500, color: t.text, outline: "none", letterSpacing: "-0.02em" }}>{campaign.name || "Untitled Campaign"}</div>
+          <div contentEditable suppressContentEditableWarning onBlur={(e) => updateField("name", e.currentTarget.textContent)} onFocus={(e) => { if (e.currentTarget.textContent === "Name your campaign/brief") { const range = document.createRange(); range.selectNodeContents(e.currentTarget); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); } }} style={{ fontSize: 24, fontWeight: 500, color: t.text, outline: "none", letterSpacing: "-0.02em" }}>{campaign.name || "Name your campaign/brief"}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
             <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 10, background: statusC.bg, color: statusC.text }}>{(campaign.status || "draft").charAt(0).toUpperCase() + (campaign.status || "draft").slice(1)}</span>
             <span style={{ fontSize: 12, color: t.textFaint }}>Created {campaign.created_at ? new Date(campaign.created_at).toLocaleDateString() : ""}</span>
@@ -5849,10 +5849,20 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
       {activeTab === "brief" ? (
         brief && !editingBrief ? (
           <div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            {campaign.status !== "complete" ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <button onClick={() => setEditingBrief(true)} style={{ ...S.btnS, fontSize: 12, padding: "8px 16px" }}>Edit Brief</button>
-            </div>
+              <button onClick={() => setActiveTab("creators")} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer", fontWeight: 500 }}>Go to Creators &rarr;</button>
+            </div> : <div style={{ marginBottom: 16 }}><button onClick={() => setEditingBrief(true)} style={{ ...S.btnS, fontSize: 12, padding: "8px 16px" }}>Edit Brief</button></div>}
             <BriefDisplay brief={brief.brief || brief.brief_data} formData={brief.formData || brief.form_data || {}} currentRole="manager" creators={creators} onBack={() => {}} onRegenerate={() => setEditingBrief(true)} onRegenerateAI={() => setEditingBrief(true)} />
+            {campaign.status === "draft" && (
+              <div style={{ marginTop: 24, padding: "20px 24px", background: t.green + "08", border: "1px solid " + t.green + "25", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 2 }}>Brief ready — next step: assign creators</div>
+                  <div style={{ fontSize: 12, color: t.textMuted }}>Select creators from your roster to work on this campaign</div>
+                </div>
+                <button onClick={() => setActiveTab("creators")} style={{ background: t.green, color: t.isLight ? "#fff" : "#000", height: 40, borderRadius: 20, fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 13, padding: "0 24px", border: "none", cursor: "pointer", transition: "opacity 0.15s ease", whiteSpace: "nowrap" }} onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>Assign Creators &rarr;</button>
+              </div>
+            )}
           </div>
         ) : (
           <div>
@@ -5860,6 +5870,15 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
             <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 20 }}>Use IB-Ai to generate a brief or start from a template. The brief will be linked to this campaign.</div>
             <BriefForm key={"camp-bf-" + formKey} prefill={briefPrefill || (brief?.formData || brief?.form_data) || undefined} onGenerate={async (fd) => {
               await handleGenerate(fd);
+              // After generation, link the newest brief to this campaign
+              setTimeout(async () => {
+                const { data: latestBriefs } = await supabase.from("briefs").select("id").order("created_at", { ascending: false }).limit(1);
+                if (latestBriefs?.[0]?.id && campaign) {
+                  await dbSaveCampaign({ id: campaign.id, brief_id: latestBriefs[0].id });
+                  setCampaign(prev => prev ? { ...prev, brief_id: latestBriefs[0].id } : prev);
+                  setEditingBrief(false);
+                }
+              }, 1000);
             }} aiKnowledge={aiKnowledge} />
             {!brief ? <button onClick={() => setActiveTab("creators")} style={{ marginTop: 12, background: "none", border: "none", color: t.textFaint, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>Skip brief for now &rarr;</button> : <button onClick={() => setEditingBrief(false)} style={{ marginTop: 12, background: "none", border: "none", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>&larr; Back to brief</button>}
           </div>
