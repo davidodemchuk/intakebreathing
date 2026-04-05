@@ -5673,9 +5673,10 @@ function BriefDisplay({ brief: b, formData: fd, onBack, onRegenerate, onRegenera
 
 function CreatorHubHero({ stats, onOpen, onNav, isDark = true }) {
   const c = { sectionBg: isDark ? "#000000" : "#F5F5F0", sectionBorder: isDark ? "1px solid #0f0f0f" : "1px solid #E8E8E2", heading: isDark ? "#FFFFFF" : "#0A0A0A", subtitle: isDark ? "#00FEA9" : "#008F5E", desc: isDark ? "#555555" : "#666666", cardBg: isDark ? "#0a0a0a" : "#FFFFFF", cardBorder: isDark ? "1px solid #1c1c1c" : "1px solid #E0E0DA", cardNum: isDark ? "#FFFFFF" : "#0A0A0A", cardLabel: isDark ? "#555555" : "#888888", cardAction: isDark ? "#00FEA9" : "#008F5E", hBg: isDark ? "#111111" : "#F8F8F4", hBorder: isDark ? "#2a2a2a" : "#C8C8C0", btnBg: isDark ? "#00FEA9" : "#0A0A0A", btnColor: isDark ? "#000000" : "#FFFFFF", briefHoverBg: isDark ? "rgba(0,254,169,0.04)" : "rgba(0,143,94,0.04)", briefHoverBorder: isDark ? "rgba(0,254,169,0.2)" : "rgba(0,143,94,0.2)" };
-  const cd = { background: c.cardBg, border: c.cardBorder, borderRadius: 12, padding: "28px 28px 24px", cursor: "pointer", transition: "all 0.18s ease" };
-  const cIn = (e) => { e.currentTarget.style.background = c.hBg; e.currentTarget.style.borderColor = c.hBorder; };
-  const cOut = (e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); };
+  const accent = c.subtitle;
+  const cardS = (a) => ({ background: c.cardBg, border: "2px solid " + a + "60", borderRadius: 14, padding: 22, cursor: "pointer", boxShadow: "0 2px 8px " + a + "08", transition: "border-color 0.2s, box-shadow 0.2s" });
+  const hIn = (e, a) => { e.currentTarget.style.borderColor = a; e.currentTarget.style.boxShadow = "0 4px 16px " + a + "15"; };
+  const hOut = (e, a) => { e.currentTarget.style.borderColor = a + "60"; e.currentTarget.style.boxShadow = "0 2px 8px " + a + "08"; };
   return (
     <div className="homepage-section" style={{ background: c.sectionBg, padding: "28px 56px", borderBottom: c.sectionBorder, boxSizing: "border-box" }}>
       <div className="homepage-top-row" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
@@ -5684,30 +5685,30 @@ function CreatorHubHero({ stats, onOpen, onNav, isDark = true }) {
       <div className="homepage-display-heading" style={{ fontFamily: "'Inter', sans-serif", fontSize: 44, fontWeight: 500, color: c.heading, lineHeight: 1.06, letterSpacing: "-0.025em", marginBottom: 4 }}>Creator Hub</div>
       <div className="homepage-subtitle" style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 400, color: c.subtitle, lineHeight: 1.4, marginBottom: 4, letterSpacing: "-0.01em" }}>Creator Partnerships.</div>
       <div className="homepage-description" style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 400, color: c.desc, lineHeight: 1.6, marginBottom: 16, maxWidth: 420 }}>Creators, programs, briefs, and campaigns — managed in one place.</div>
-      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-        <div className="stat-card" onClick={() => onNav("creators")} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>Active Creators</div>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.cardNum, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{stats.creators ?? "\u2014"}</div>
-          </div>
+      <div className="creator-hub-card-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+        <div className="stat-card" onClick={() => onNav("creators")} style={cardS(accent)} onMouseEnter={(e) => hIn(e, accent)} onMouseLeave={(e) => hOut(e, accent)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="creator" color={accent} /></div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Active Creators</div>
+          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>View, search, and manage your creator roster</div>
+          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{stats.creators ?? "\u2014"} active</div>
         </div>
-        <div className="stat-card" onClick={onOpen} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>Programs</div>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.cardNum, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{stats.programs ?? "\u2014"}</div>
-          </div>
+        <div className="stat-card" onClick={onOpen} style={cardS(accent)} onMouseEnter={(e) => hIn(e, accent)} onMouseLeave={(e) => hOut(e, accent)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={accent} /></div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Programs</div>
+          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Creator tiers, onboarding flows, and scoring</div>
+          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{stats.programs ?? "\u2014"} programs</div>
         </div>
-        <div className="stat-card" onClick={() => onNav("create")} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={(e) => { e.currentTarget.style.background = c.briefHoverBg; e.currentTarget.style.borderColor = c.briefHoverBorder; }} onMouseLeave={(e) => { e.currentTarget.style.background = c.cardBg; e.currentTarget.style.borderColor = c.cardBorder.split(" ").pop(); }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>New Brief</div>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.subtitle, letterSpacing: "-0.02em", lineHeight: 1.1 }}>+</div>
-          </div>
+        <div className="stat-card" onClick={() => onNav("create")} style={cardS(accent)} onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.briefHoverBorder; e.currentTarget.style.boxShadow = "0 4px 16px " + accent + "15"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = accent + "60"; e.currentTarget.style.boxShadow = "0 2px 8px " + accent + "08"; }}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="brief" color={accent} /></div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>New Brief</div>
+          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Create a UGC creator brief with IB-Ai</div>
+          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>IB-Ai powered</div>
         </div>
-        <div className="stat-card" onClick={() => onNav("campaigns")} style={{ ...cd, padding: "16px 18px" }} onMouseEnter={cIn} onMouseLeave={cOut}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 400, color: c.cardLabel, letterSpacing: "0.03em", textTransform: "uppercase" }}>Campaigns</div>
-            <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: c.cardNum, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{stats.campaigns ?? "\u2014"}</div>
-          </div>
+        <div className="stat-card" onClick={() => onNav("campaigns")} style={cardS(accent)} onMouseEnter={(e) => hIn(e, accent)} onMouseLeave={(e) => hOut(e, accent)}>
+          <div style={{ marginBottom: 14 }}><CardIcon type="influencer" color={accent} /></div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: c.heading, marginBottom: 4 }}>Campaigns</div>
+          <div style={{ fontSize: 13, color: c.cardLabel, lineHeight: 1.5, marginBottom: 14 }}>Create campaigns, invite creators, track results</div>
+          <div style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{stats.campaigns ?? "\u2014"} campaigns</div>
         </div>
       </div>
     </div>
