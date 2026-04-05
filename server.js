@@ -500,6 +500,7 @@ app.post("/api/slack-notify", async (req, res) => {
   else if (type === "creator_replied") text = ":incoming_envelope: *@" + (data.creatorHandle || "creator") + " replied!*\n<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|View conversation>";
   else if (type === "draft_ready") text = ":pencil2: *AI draft ready for @" + (data.creatorHandle || "creator") + "*\n<https://www.intakecreators.com/creator/" + (data.creatorHandle || "") + "|Review and send>";
   else if (type === "new_creator_signup") text = data.text || ":tada: New creator signed up!";
+  else if (type === "creator_onboarded") text = data.text || ":white_check_mark: Creator onboarding complete!";
   else if (type === "test") text = data.text || ":white_check_mark: *Intake Creators Bot connected!*\nSlack notifications are working.";
   else text = data.text || ":bell: Notification from Intake Creators";
 

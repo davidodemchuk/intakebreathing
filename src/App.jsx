@@ -102,7 +102,7 @@ function buildCreatorGridTemplate(colWidths) {
 // Format: { version: "X.Y.Z", date: "YYYY-MM-DD", changes: ["what changed"] }
 // notifySlack, notifyOwners moved to utils/notifications.js
 
-const APP_VERSION = "6.67.0";
+const APP_VERSION = "6.68.0";
 const CHANGELOG = [
   { version: "6.46.0", date: "2026-04-04", changes: [
     "TTS: auto-fill indicators on API-destined fields, manual override locks prevent API overwrites",
@@ -9534,6 +9534,10 @@ export default function App() {
           valA = a.quality === "High" ? 0 : 1;
           valB = b.quality === "High" ? 0 : 1;
           break;
+        case "dateAdded":
+          valA = new Date(a.dateAdded || a.created_at || 0).getTime();
+          valB = new Date(b.dateAdded || b.created_at || 0).getTime();
+          break;
         default:
           valA = (a.handle || "").toLowerCase();
           valB = (b.handle || "").toLowerCase();
@@ -10588,30 +10592,13 @@ export default function App() {
               return (
                 <div key={col.key} style={{ ...base }} title={nm ? `${hDisp} · ${nm}` : hDisp}>
                   <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: t.text,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {hDisp}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hDisp}</span>
+                      {(() => { const ca = c.dateAdded || c.created_at; if (!ca) return null; if ((Date.now() - new Date(ca).getTime()) / 86400000 > 7) return null; return <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: "#3B82F6" + "15", color: "#3B82F6", fontWeight: 700 }}>New</span>; })()}
+                      {c.onboarded ? <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: t.green + "12", color: t.green, fontWeight: 600 }}>Portal</span> : null}
                     </div>
                     {nm ? (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: t.textFaint,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {nm}
-                      </div>
+                      <div style={{ fontSize: 11, color: t.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nm}</div>
                     ) : null}
                     {(progs.length > 0 || tier) ? (
                       <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>
@@ -11096,6 +11083,12 @@ export default function App() {
                 placeholder="Search creators..."
                 style={{ flex: 1, maxWidth: 300, height: 34, padding: "0 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
               />
+              <select value={sortCol} onChange={(e) => { setSortCol(e.target.value); setSortDir(e.target.value === "dateAdded" ? "desc" : "desc"); }} style={{ height: 34, padding: "0 8px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11, cursor: "pointer" }}>
+                <option value="ibScore">Sort: IB Score</option>
+                <option value="dateAdded">Sort: Newest</option>
+                <option value="handle">Sort: Handle</option>
+                <option value="status">Sort: Status</option>
+              </select>
               <label style={{ fontSize: 12, color: t.textMuted, display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
                 <span>Skip if enriched within:</span>
                 <select

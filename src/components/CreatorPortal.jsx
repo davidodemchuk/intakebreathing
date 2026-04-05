@@ -324,6 +324,26 @@ function CreatorOnboard({ creatorProfile: cp, navigate, t }) {
     }).eq("id", cp.id);
     setSaving(false);
     if (error) { alert("Save failed: " + error.message); return; }
+    try {
+      await fetch("/api/slack-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "creator_onboarded",
+          data: {
+            text: ":white_check_mark: *Creator onboarding complete!*\n"
+              + "Name: " + (cp?.name || "Unknown") + "\n"
+              + "Instagram: @" + igHandle + "\n"
+              + (ttHandle ? "TikTok: @" + ttHandle + "\n" : "")
+              + "Size: " + (form.intakeSize || "Not selected") + "\n"
+              + "Niche: " + (form.niche || "Not set") + "\n"
+              + "Rate: $" + (form.costPerVideo || "Not set") + "/video\n"
+              + "Address: " + (form.address ? "Provided" : "Not provided") + "\n"
+              + "<https://www.intakecreators.com/creator-hub/creator?id=" + cp.id + "|Review in Creator Hub>",
+          },
+        }),
+      });
+    } catch (e) { console.log("[onboard] Slack notify failed:", e.message); }
     navigate("creatorDashboard");
   };
 
