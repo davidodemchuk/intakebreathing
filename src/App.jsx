@@ -5782,6 +5782,63 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
   const [loading, setLoading] = useState(true);
   const [creatorSearch, setCreatorSearch] = useState("");
   const [editingBrief, setEditingBrief] = useState(false);
+  const [draftingFor, setDraftingFor] = useState(null);
+  const [previewDraft, setPreviewDraft] = useState(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [editingDraft, setEditingDraft] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(null);
+
+  const generateInviteDraft = async (cc, cr) => {
+    setDraftingFor(cc.id);
+    try {
+      const apiKey = await dbGetSetting("anthropic-api-key");
+      if (!apiKey) { alert("No API key."); setDraftingFor(null); return; }
+      const ibSettings = await fetchIBSettings().catch(() => ({})) || {};
+      const bc = ibSettings.ai_brand_context || {};
+      const th = ibSettings.ai_tone_hooks || {};
+      const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : {};
+      const outreachStyle = ak.outreachStyle || "Casual, authentic, personalized.";
+      const cn = cr.tiktokData?.displayName || cr.instagramData?.fullName || cr.handle || "Creator";
+      const ch = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
+      const brandBlock = bc.positioning ? "BRAND: " + bc.positioning + ". " + (bc.mission || "") + ". Product: " + (bc.product_description || "") : "BRAND: Intake Breathing — magnetic external nasal dilator for better breathing, sleep, and athletic performance.";
+      const toneBlock = th.primary_tones ? "TONE: " + (Array.isArray(th.primary_tones) ? th.primary_tones.join(", ") : "") + ". AVOID: " + (Array.isArray(th.voice_dont) ? th.voice_dont.join(", ") : "") : "";
+      const prompt = "You are a creator partnerships manager at Intake Breathing.\n\n" + brandBlock + "\n\nOUTREACH STYLE: " + outreachStyle + "\n\n" + (toneBlock ? toneBlock + "\n\n" : "") + "Write a personalized campaign invite to this creator.\n\nCAMPAIGN: " + (campaign?.name || "") + "\nDESCRIPTION: " + (campaign?.description || "") + "\nPRODUCT: " + (campaign?.product || "Intake Breathing Starter Kit") + "\n\nCREATOR: " + cn + " (@" + ch + ")\nTikTok followers: " + (cr.tiktokData?.followers || "unknown") + "\nIG followers: " + (cr.instagramData?.followers || "unknown") + "\nIB Score: " + (cr.ibScore || "not scored") + "\nNiche: " + (cr.niche || "unknown") + "\n\nWrite a short authentic invite under 120 words. Reference their content style. Sound human, not corporate. Write ONLY the message body.";
+      const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 500, messages: [{ role: "user", content: prompt }] }) });
+      if (!res.ok) throw new Error("API " + res.status);
+      const data = await res.json();
+      const draft = data.content?.[0]?.text || "";
+      await dbUpdateCampaignCreator(cc.id, { ai_invite_draft: draft });
+      setCampCreators(prev => prev.map(x => x.id === cc.id ? { ...x, ai_invite_draft: draft } : x));
+      setPreviewDraft(cc.id);
+      setEditDraft(draft);
+    } catch (e) { alert("Draft failed: " + e.message); }
+    setDraftingFor(null);
+  };
+
+  const sendInvite = async (cc, cr, text) => {
+    const ch = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
+    try {
+      const conv = await dbGetOrCreateConversation(cr.id);
+      if (conv) await dbSaveMessage({ conversation_id: conv.id, creator_id: cr.id, direction: "outbound", channel: "email", subject: "You\u2019re invited: " + (campaign?.name || "Campaign"), body: text, status: "sent", sent_at: new Date().toISOString(), ai_generated: true, campaign_id: campaign?.id });
+      notifyOwners(cr.id, ch, "campaign_invite", { campaignName: campaign?.name });
+      setPreviewDraft(null);
+    } catch (e) { alert("Send failed: " + e.message); }
+  };
+
+  const generateAllDrafts = async () => {
+    const needDraft = campCreators.filter(cc => !cc.ai_invite_draft);
+    if (needDraft.length === 0) { alert("All creators already have drafts."); return; }
+    setBatchProgress({ current: 0, total: needDraft.length });
+    for (let i = 0; i < needDraft.length; i++) {
+      const cc = needDraft[i];
+      const cr = creators.find(c => c.id === cc.creator_id);
+      if (!cr) continue;
+      setBatchProgress({ current: i + 1, total: needDraft.length });
+      await generateInviteDraft(cc, cr);
+      if (i < needDraft.length - 1) await new Promise(r => setTimeout(r, 500));
+    }
+    setBatchProgress(null);
+  };
 
   useEffect(() => {
     if (!campaignId) { setLoading(false); return; }
@@ -5930,7 +5987,10 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
           </div>
 
           {/* Assigned creators */}
-          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 8 }}>Assigned ({campCreators.length})</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>Assigned ({campCreators.length})</div>
+            {campCreators.length > 0 ? <button onClick={generateAllDrafts} disabled={!!batchProgress} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer", fontWeight: 500 }}>{batchProgress ? "Generating " + batchProgress.current + "/" + batchProgress.total + "..." : "\u2726 Generate All Drafts"}</button> : null}
+          </div>
           {campCreators.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center", color: t.textFaint, background: t.card, borderRadius: 12, border: "1px solid " + t.border, marginBottom: 20 }}>No creators assigned yet. Search your roster below to add creators.</div>
           ) : <div style={{ marginBottom: 20 }}>{campCreators.map(cc => {
@@ -5939,15 +5999,40 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
             const h = cr.tiktokHandle || cr.instagramHandle || cr.handle || "";
             const sc = statusColors[cc.status] || t.textFaint;
             const rate = cc.estimated_rate || getEstRate(cr);
+            const hasDraft = !!cc.ai_invite_draft;
+            const isDrafting = draftingFor === cc.id;
+            const showPreview = previewDraft === cc.id;
             return (
-              <div key={cc.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid " + t.border + "30" }}>
-                {av ? <img src={av} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: t.green }}>{(h || "?")[0].toUpperCase()}</div>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{h}</div>
-                  <div style={{ fontSize: 10, color: t.textFaint }}>{cr.ibScore != null ? "IB " + cr.ibScore + " \u00b7 " : ""}{rate ? "$" + rate + "/video" : "Rate TBD"}</div>
+              <div key={cc.id}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: showPreview ? "none" : "1px solid " + t.border + "30" }}>
+                  {av ? <img src={av} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: t.green + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: t.green }}>{(h || "?")[0].toUpperCase()}</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>@{h}</div>
+                    <div style={{ fontSize: 10, color: t.textFaint }}>{cr.ibScore != null ? "IB " + cr.ibScore + " \u00b7 " : ""}{rate ? "$" + rate + "/video" : "Rate TBD"}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    {isDrafting ? <span style={{ fontSize: 10, color: t.green }}>Drafting...</span> : !hasDraft ? <button onClick={() => generateInviteDraft(cc, cr)} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: "1px solid " + t.green + "30", background: t.green + "06", color: t.green, cursor: "pointer" }}>{"\u2726"} Draft</button> : <button onClick={() => { setPreviewDraft(showPreview ? null : cc.id); setEditDraft(cc.ai_invite_draft); setEditingDraft(false); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>{showPreview ? "Hide" : "Preview"}</button>}
+                    <button onClick={() => { const link = "https://www.intakecreators.com/creator/campaign?id=" + campaign.id; navigator.clipboard.writeText(link); dbUpdateCampaignCreator(cc.id, { invite_link: link }); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, cursor: "pointer" }} title="Copy invite link">{"\uD83D\uDCCB"}</button>
+                  </div>
+                  <button onClick={() => advanceStatus(cc)} style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, border: "none", cursor: "pointer", textTransform: "uppercase" }}>{cc.status || "invited"}</button>
+                  <button onClick={() => { if (window.confirm("Remove @" + h + " from this campaign?")) removeCreator(cc.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 14 }} title="Remove">&times;</button>
                 </div>
-                <button onClick={() => advanceStatus(cc)} style={{ fontSize: 10, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: sc + "15", color: sc, border: "none", cursor: "pointer", textTransform: "uppercase" }}>{cc.status || "invited"}</button>
-                <button onClick={() => { if (window.confirm("Remove @" + h + " from this campaign?")) removeCreator(cc.id); }} style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", fontSize: 14 }} title="Remove">&times;</button>
+                {showPreview && cc.ai_invite_draft ? (
+                  <div style={{ background: t.cardAlt, border: "1px solid " + t.border, borderRadius: 10, padding: 16, margin: "0 14px 8px 14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, textTransform: "uppercase", letterSpacing: "0.06em" }}>Campaign invite draft</span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => generateInviteDraft(cc, cr)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>{"\u21BB"} Regen</button>
+                        <button onClick={() => { navigator.clipboard.writeText(editingDraft ? editDraft : cc.ai_invite_draft); }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>Copy</button>
+                      </div>
+                    </div>
+                    {editingDraft ? <textarea value={editDraft} onChange={(e) => setEditDraft(e.target.value)} style={{ width: "100%", minHeight: 120, padding: 12, borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, lineHeight: 1.6, resize: "vertical", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} /> : <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{cc.ai_invite_draft}</div>}
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button onClick={() => { if (editingDraft) { dbUpdateCampaignCreator(cc.id, { ai_invite_draft: editDraft }); setCampCreators(prev => prev.map(x => x.id === cc.id ? { ...x, ai_invite_draft: editDraft } : x)); } setEditingDraft(!editingDraft); }} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>{editingDraft ? "Save edits" : "\u270E Edit"}</button>
+                      <button onClick={() => sendInvite(cc, cr, editingDraft ? editDraft : cc.ai_invite_draft)} style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer", fontWeight: 500 }}>Send invite &rarr;</button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             );
           })}</div>}
