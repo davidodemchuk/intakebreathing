@@ -42,6 +42,7 @@ import {
   dbLoadCampaignCreators,
   dbSaveCampaignCreator,
   dbDeleteCampaignCreator,
+  fetchIBSettings,
 } from "./supabaseDb.js";
 import { parseCSVLine, formatMetricShort, medianOf, fmtDollar, genShareId, formatCount, durationToSeconds, gcd, aspectRatioLabel } from "./utils/helpers.js";
 import { CreatorLogin, CreatorOnboard, CreatorDashboard, CreatorBriefView, CreatorMessages, CreatorProfileEdit, PublicBriefView } from "./components/CreatorPortal.jsx";
@@ -3564,6 +3565,93 @@ function mergeAiKnowledge(partial) {
   };
 }
 
+function buildAIPrompt(d, knowledge, ibSettings) {
+  const k = knowledge && typeof knowledge === "object" ? knowledge : null;
+  const s = ibSettings && typeof ibSettings === "object" ? ibSettings : {};
+  const bc = s.ai_brand_context || {};
+  const th = s.ai_tone_hooks || {};
+  const ac = Array.isArray(s.ai_approved_claims) ? s.ai_approved_claims : (k?.approvedClaims || APPROVED_CLAIMS);
+  const ban = Array.isArray(s.ai_banned_claims) ? s.ai_banned_claims : (k?.bannedClaims || BANNED_CLAIMS);
+  const rej = Array.isArray(s.ai_default_rejections) ? s.ai_default_rejections : (k?.defaultRejections || DEFAULT_REJECTIONS);
+  const pn = s.ai_platform_notes || {};
+  const lg = s.ai_length_guide || {};
+  const personas = Array.isArray(s.ai_personas) ? s.ai_personas : (k?.personas || PERSONAS);
+
+  const plats = normalizePlatforms(d);
+  const platLine = plats.map(p => p === "Other" && (d.customPlatform || "").trim() ? "Other (" + (d.customPlatform || "").trim() + ")" : p).join(", ");
+  const toneResolved = d.tone === "Other" ? (d.customTone || "").trim() : (d.tone || "");
+  const productResolved = d.productName === "Other" ? (d.customProductName || "").trim() : d.productName;
+  const vibeResolved = d.vibe === "Other" ? (d.customVibe || "").trim() : d.vibe;
+  const prob = (d.problem ?? d._problem ?? d.customProblem ?? "").trim();
+  const mgrName = managerDisplayName(d);
+  const qtyVideos = String(d.contentQuantity ?? "1").trim() || "1";
+  const rawBudget = String(d.budgetPerVideo ?? "").trim().replace(/^\$/, "");
+  const budgetStr = rawBudget ? "$" + rawBudget : "TBD";
+  const supVal = d.supervisionLevel || "full";
+  const supEntry = SUPERVISION_LEVELS.find(sv => sv.value === supVal) || SUPERVISION_LEVELS[0];
+  const rejectionsLine = Array.isArray(d._rejections) && d._rejections.length ? d._rejections.join(". ") : buildRejectionsArray(d, rej).join(". ");
+  const ageR = d.ageRange || "25-34";
+  const gen = d.gender || "Men & Women";
+
+  // Build brand context block from ibSettings or fall back to aiKnowledge
+  const brandCtx = bc.positioning
+    ? "BRAND CONTEXT:\nPositioning: " + (bc.positioning || "") + "\nMission: " + (bc.mission || "") + "\nProduct: " + (bc.product_description || "") + "\nKey facts:\n" + (Array.isArray(bc.key_product_facts) ? bc.key_product_facts.map(f => "- " + f).join("\n") : "")
+    : k?.brandContext ? "BRAND CONTEXT:\n" + String(k.brandContext) : "";
+
+  const toneBlock = th.primary_tones
+    ? "TONE — always write with these qualities:\n" + (Array.isArray(th.primary_tones) ? th.primary_tones.join(", ") : "") + "\n\nDO in your writing:\n" + (Array.isArray(th.voice_do) ? th.voice_do.map(x => "- " + x).join("\n") : "") + "\n\nDO NOT in your writing:\n" + (Array.isArray(th.voice_dont) ? th.voice_dont.map(x => "- " + x).join("\n") : "")
+    : "";
+
+  const claimsBlock = "APPROVED CLAIMS — you may use these:\n" + ac.map(c => "- " + c).join("\n") + "\n\nBANNED CLAIMS — NEVER use these, not even paraphrased:\n" + ban.map(c => "- " + c).join("\n");
+
+  const rejBlock = "HARD REJECTION TRIGGERS — if any of these words appear in output, remove and rewrite:\n" + rej.join(", ");
+
+  const platformBlock = pn.primary_platform
+    ? "PRIMARY PLATFORM: " + pn.primary_platform + "\nContent style: " + (pn.content_style || "") + "\nCPM cap: $25 maximum"
+    : "";
+
+  const lengthBlock = lg.ugc_hook_words
+    ? "LENGTH GUIDE:\n- Hook: " + (lg.ugc_hook_words || "") + "\n- Full script: " + (lg.ugc_script_duration || "") + "\n- Caption: " + (lg.caption_length || "")
+    : "";
+
+  const personaBlock = personas.length
+    ? "TARGET PERSONAS:\n" + personas.map(p => typeof p === "object" ? "- " + (p.name || "") + ": " + (p.content_angle || "") : "- " + p).join("\n")
+    : "";
+
+  return "You are IB-Ai, the official UGC brief writer for Intake Breathing Technology.\n\n"
+    + brandCtx + "\n\n"
+    + "ARCHETYPE: Hero — bold, aspirational, empowering. Comparable to Nike, Adidas, Eightsleep.\n\n"
+    + toneBlock + "\n\n"
+    + claimsBlock + "\n\n"
+    + rejBlock + "\n\n"
+    + platformBlock + "\n\n"
+    + lengthBlock + "\n\n"
+    + personaBlock + "\n\n"
+    + "Always write in second person (you/your). Always end scripts with a CTA.\nNever include passive voice. Never make medical or clinical claims.\n\n"
+    + "CAMPAIGN DETAILS:\n"
+    + "PRODUCT: " + productResolved + " by Intake Breathing\n"
+    + "CAMPAIGN NAME: " + (d.campaignName || "Untitled") + "\n"
+    + "CAMPAIGN VIBE: " + vibeResolved + "\n"
+    + "MISSION: " + (d.mission || "N/A") + "\n"
+    + "SUBMITTED BY: " + mgrName + "\n"
+    + "CONTENT QUANTITY: " + qtyVideos + " videos needed\n"
+    + "BUDGET: " + budgetStr + " per video\n"
+    + "SUPERVISION LEVEL: " + supEntry.label + " — " + supEntry.desc + "\n"
+    + "TARGET AUDIENCE: " + gen + " " + ageR + "\n"
+    + "CORE PROBLEM: " + prob + "\n"
+    + "APPROVED CLAIMS (form): " + (d._approved || "") + "\n"
+    + "BANNED CLAIMS (form): " + (d._banned || "") + "\n"
+    + "REVISION CRITERIA: " + rejectionsLine + "\n"
+    + "PLATFORMS: " + platLine + "\n"
+    + "VIDEO LENGTH: " + (d.videoLength || "") + "\n"
+    + "TONE: " + toneResolved + "\n"
+    + "CREATIVE NOTES: " + (d.notes || "None") + "\n\n"
+    + "TONE DIRECTION: The creative tone for this brief is \"" + toneResolved + "\". Match this voice consistently in hooks, delivery, pacing, overlay text, and every line of copy.\n\n"
+    + "Write the brief as JSON. Be CREATIVE and SPECIFIC to this campaign — not generic. Write hooks that stop mid-scroll. Write riff lines that sound like a real person. Overlay ideas should be specific visual directions.\n\n"
+    + "Return ONLY this JSON (no other text):\n"
+    + '{"mission":"one line mission statement","persona":"creative persona name for the target viewer","age":"age range","psycho":"2-3 sentences describing their mindset, fears, desires","theyAre":["4 psychographic traits"],"theyAreNot":["4 things this viewer is NOT"],"probInst":"directive for the PROBLEM beat","probLines":["3 specific lines for the problem beat"],"probOverlays":["3 overlay/visual ideas"],"agInst":"directive for the AGITATE beat","agLines":["3 agitate lines"],"agOverlays":["3 overlay ideas"],"solInst":"directive for the SOLUTION beat","solLines":["3 solution lines"],"solOverlays":["3 overlay ideas"],"hooks":["4 scroll-stopping hooks"],"sayThis":["5 approved phrases"],"notThis":["5 banned phrases"],"rejections":["revision-required rules"],"platNotes":"platform-specific tips for ' + platLine + ' at ' + (d.videoLength || "") + '","deliverables":"what creators need to submit"}';
+}
+
 function normalizePlatforms(d) {
   if (Array.isArray(d.platforms) && d.platforms.length) return d.platforms;
   if (d.platform) return [d.platform];
@@ -4959,7 +5047,10 @@ Select the most relevant approved claims (5-7) and banned claims (5-7) for this 
         <button style={{ ...S.genBtn, flex: 1, marginTop: 0 }} onClick={() => go("ai")}>IB-Ai</button>
         <button style={{ ...S.genBtn, flex: 1, marginTop: 0, background: t.border, color: t.text, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => go("template")}><Icon name="zap" size={16} color={t.text} />Instant Draft</button>
       </div>
-      <div style={{ ...S.hint, textAlign: "center", marginTop: 8 }}>IB-Ai uses Claude to write original creative. Instant Draft uses templates — fast but generic.</div>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 8 }}>
+        <div style={{ ...S.hint, margin: 0 }}>IB-Ai uses Claude to write original creative. Instant Draft uses templates — fast but generic.</div>
+        <span style={{ background: "transparent", border: "1px solid #00FEA9", color: "#00FEA9", borderRadius: 4, fontSize: 10, padding: "2px 8px", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{"\u2B21"} IB-Ai Source of Truth</span>
+      </div>
     </div>
   );
 });
@@ -8329,6 +8420,26 @@ export default function App() {
   const [formKey, setFormKey] = useState(0);
   const [briefPrefill, setBriefPrefill] = useState(null);
   const [aiKnowledge, setAiKnowledge] = useState(() => getDefaultAiKnowledge());
+  const [ibSettings, setIbSettings] = useState(null);
+  const ibSettingsFetchedRef = useRef(0);
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await fetchIBSettings();
+        setIbSettings(s);
+        ibSettingsFetchedRef.current = Date.now();
+      } catch (e) { console.warn("[ib-settings] fetch failed:", e.message); }
+    })();
+  }, []);
+  const ensureIbSettings = useCallback(async () => {
+    if (ibSettings && Date.now() - ibSettingsFetchedRef.current < 300000) return ibSettings;
+    try {
+      const s = await fetchIBSettings();
+      setIbSettings(s);
+      ibSettingsFetchedRef.current = Date.now();
+      return s;
+    } catch { return ibSettings; }
+  }, [ibSettings]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -9443,6 +9554,7 @@ export default function App() {
 
     let deferredSuccess = false;
     try {
+      const liveIbSettings = await ensureIbSettings();
       const response = await Promise.race([
         fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -9455,7 +9567,7 @@ export default function App() {
           body: JSON.stringify({
             model: "claude-sonnet-4-20250514",
             max_tokens: 3000,
-            messages: [{ role: "user", content: buildAIPrompt(formData, aiKnowledge) }],
+            messages: [{ role: "user", content: buildAIPrompt(formData, aiKnowledge, liveIbSettings) }],
           }),
         }),
         new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 60000)),

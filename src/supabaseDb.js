@@ -311,6 +311,21 @@ export async function dbGetSetting(key) {
   return data?.value ?? null;
 }
 
+export async function fetchIBSettings() {
+  const keys = [
+    "ai_brand_context", "ai_approved_claims", "ai_banned_claims",
+    "ai_tone_hooks", "ai_personas", "ai_length_guide",
+    "ai_default_rejections", "ai_platform_notes",
+  ];
+  const { data } = await supabase.from("app_settings").select("key, value").in("key", keys);
+  const settings = {};
+  data?.forEach(row => {
+    try { settings[row.key] = JSON.parse(row.value); }
+    catch { settings[row.key] = row.value; }
+  });
+  return settings;
+}
+
 export async function dbLoadTeamMembers() {
   const { data, error } = await supabase.from("team_members").select("*").order("name");
   if (error) { console.error("[db] Load team members error:", error); return []; }
