@@ -7093,10 +7093,18 @@ function CreatorDetailView({ c, updateCreator, library, navigate, scrapeKey, api
     try {
       const apiKey = await dbGetSetting("anthropic-api-key");
       if (!apiKey) { alert("No API key."); setMsgDrafting(false); return; }
+      const liveIbSettings = await ensureIbSettings();
+      const s = liveIbSettings && typeof liveIbSettings === "object" ? liveIbSettings : {};
+      const ak = aiKnowledge && typeof aiKnowledge === "object" ? aiKnowledge : {};
+      const bc = s.ai_brand_context || {};
+      const th = s.ai_tone_hooks || {};
+      const outreachStyle = ak.outreachStyle || "Casual, authentic, personalized. Reference something specific about their content. Mention Intake Breathing by name.";
+      const brandBlock = bc.positioning ? "BRAND: " + (bc.positioning || "") + ". " + (bc.mission || "") + ". Product: " + (bc.product_description || "") : "BRAND: Intake Breathing — magnetic external nasal dilator for better breathing, sleep, and athletic performance.";
+      const toneBlock = th.primary_tones ? "TONE: " + (Array.isArray(th.primary_tones) ? th.primary_tones.join(", ") : "") + ". " + (Array.isArray(th.voice_dont) ? "AVOID: " + th.voice_dont.join(", ") : "") : "";
       const cn = c.tiktokData?.displayName || c.instagramData?.fullName || c.handle || "Creator";
       const ch = c.tiktokHandle || c.instagramHandle || c.handle || "";
-      const prev = msgList.slice(-5).map(m => m.direction + ": " + m.body.substring(0, 200)).join("\n");
-      const prompt = "You are a creator partnerships manager at Intake Breathing. Write a friendly, authentic outreach message to a TikTok/Instagram creator. Reference their specific content. Keep under 150 words.\n\nCREATOR: " + cn + " (@" + ch + ")\nTikTok followers: " + (c.tiktokData?.followers || "unknown") + "\nIG followers: " + (c.instagramData?.followers || "unknown") + "\nIB Score: " + (c.ibScore?.overall || "not scored") + "\n" + (prev ? "\nPREVIOUS MESSAGES:\n" + prev : "First outreach.") + "\n\nWrite ONLY the message body.";
+      const prev = msgList.slice(-5).map(m => m.direction + ": " + (m.body || "").substring(0, 200)).join("\n");
+      const prompt = "You are a creator partnerships manager at Intake Breathing.\n\n" + brandBlock + "\n\nOUTREACH STYLE: " + outreachStyle + "\n\n" + (toneBlock ? toneBlock + "\n\n" : "") + "Write a friendly, authentic outreach message to this creator. Reference their specific content. Keep under 150 words.\n\nCREATOR: " + cn + " (@" + ch + ")\nTikTok followers: " + (c.tiktokData?.followers || "unknown") + "\nIG followers: " + (c.instagramData?.followers || "unknown") + "\nIB Score: " + (c.ibScore?.overall || "not scored") + "\n" + (prev ? "\nPREVIOUS MESSAGES:\n" + prev : "First outreach.") + "\n\nWrite ONLY the message body.";
       const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 500, messages: [{ role: "user", content: prompt }] }) });
       if (!res.ok) throw new Error("API " + res.status);
       const data = await res.json();
