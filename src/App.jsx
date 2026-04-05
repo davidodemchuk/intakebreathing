@@ -6222,76 +6222,122 @@ function ToolsPage({ onBack, onOpenVideo }) {
 
 function ReformatNotificationBar({ job, setJob, t }) {
   const [jobData, setJobData] = useState(job);
+  const [expanded, setExpanded] = useState(false);
+  const startTimeRef = useRef(Date.now());
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
+    startTimeRef.current = Date.now();
     setJobData(job);
+    setElapsed(0);
   }, [job?.id]);
 
   useEffect(() => {
     if (!job?.id || jobData?.status === "complete" || jobData?.status === "failed") return;
-    const interval = setInterval(async () => {
+    const pollInterval = setInterval(async () => {
       try {
         const res = await fetch("/api/reformat-job/" + job.id);
         const data = await res.json();
         setJobData(data);
-        if (data.status === "complete" || data.status === "failed") clearInterval(interval);
-      } catch (e) { console.warn("[reformat-poll] failed:", e.message); }
+        if (data.status === "complete" || data.status === "failed") clearInterval(pollInterval);
+      } catch (e) {}
     }, 3000);
-    return () => clearInterval(interval);
+    return () => clearInterval(pollInterval);
   }, [job?.id]);
+
+  useEffect(() => {
+    if (jobData?.status === "complete" || jobData?.status === "failed") return;
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [jobData?.status]);
 
   if (!jobData) return null;
   const progress = jobData.progress || {};
   const pct = progress.formats_total ? Math.round((progress.formats_done / progress.formats_total) * 100) : 0;
   const isComplete = jobData.status === "complete";
   const isFailed = jobData.status === "failed";
+  const isZipping = jobData.status === "zipping";
+  const est = jobData.estimated_seconds || 60;
+  const remaining = Math.max(0, est - elapsed);
+  const formatNames = ["16x9_Landscape", "1x1_Square", "4x5_Feed", "9x16_Story"];
 
   return (
     <div style={{
       position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
-      background: isComplete ? t.green + "18" : isFailed ? (t.red || "#ef4444") + "18" : t.card,
-      borderTop: "1px solid " + (isComplete ? t.green + "50" : isFailed ? (t.red || "#ef4444") + "50" : t.border),
-      padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between",
+      background: isComplete ? t.green + "12" : isFailed ? (t.red || "#ef4444") + "12" : t.card,
+      borderTop: "1px solid " + (isComplete ? t.green + "40" : isFailed ? (t.red || "#ef4444") + "40" : t.border),
       backdropFilter: "blur(12px)",
+      transition: "all 0.3s ease",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
-        {!isComplete && !isFailed && (
-          <div style={{ width: 16, height: 16, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
-        )}
-        {isComplete && <span style={{ fontSize: 18, color: t.green, flexShrink: 0 }}>✓</span>}
-        {isFailed && <span style={{ fontSize: 18, color: t.red || "#ef4444", flexShrink: 0 }}>✗</span>}
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>
-            {isComplete ? "All 4 formats ready — download the ZIP"
-              : isFailed ? "Reformat failed: " + (jobData.error_message || "unknown error")
-              : jobData.status === "zipping" ? "Zipping formats..."
-              : `Reformatting video… ${progress.formats_done || 0} of ${progress.formats_total || 4} formats done`}
-          </div>
-          {!isComplete && !isFailed && progress.current_format && progress.current_format !== "zipping" && (
+      {/* Main bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, cursor: (!isComplete && !isFailed) ? "pointer" : "default" }}
+          onClick={() => { if (!isComplete && !isFailed) setExpanded(e => !e); }}>
+          {!isComplete && !isFailed && (
+            <div style={{ width: 16, height: 16, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.green}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+          )}
+          {isComplete && <span style={{ fontSize: 16, color: t.green, flexShrink: 0 }}>✓</span>}
+          {isFailed && <span style={{ fontSize: 16, color: t.red || "#ef4444", flexShrink: 0 }}>✗</span>}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>
+              {isComplete ? "Video ready — Download ZIP"
+                : isFailed ? "Processing failed"
+                : isZipping ? "Zipping all formats..."
+                : `Reformatting... ${progress.formats_done || 0}/${progress.formats_total || 4} formats`}
+            </div>
             <div style={{ fontSize: 11, color: t.textFaint }}>
-              Processing: {progress.current_format.replace(/_/g, " ")}
-              {jobData.estimated_seconds ? ` · ~${jobData.estimated_seconds}s total` : ""}
+              {isComplete
+                ? (jobData.zip_size_bytes ? (jobData.zip_size_bytes / 1048576).toFixed(1) + " MB" : "")
+                : isFailed
+                  ? (jobData.error_message || "")
+                  : `${elapsed}s elapsed · ~${remaining}s remaining`}
+            </div>
+          </div>
+
+          {!isComplete && !isFailed && (
+            <div style={{ width: 100, height: 4, background: t.border, borderRadius: 2, flexShrink: 0 }}>
+              <div style={{ width: (isZipping ? 95 : pct) + "%", height: "100%", background: t.green, borderRadius: 2, transition: "width 0.5s ease" }} />
             </div>
           )}
+          {!isComplete && !isFailed && (
+            <span style={{ fontSize: 10, color: t.textFaint, flexShrink: 0 }}>{expanded ? "▲" : "▼"}</span>
+          )}
         </div>
-        {!isComplete && !isFailed && (
-          <div style={{ flex: "0 0 160px", height: 4, background: t.border, borderRadius: 2, marginLeft: 12 }}>
-            <div style={{ width: pct + "%", height: "100%", background: t.green, borderRadius: 2, transition: "width 0.5s ease" }} />
-          </div>
-        )}
+
+        <div style={{ display: "flex", gap: 8, marginLeft: 16, flexShrink: 0 }}>
+          {isComplete && (
+            <a href={"/api/reformat-job/" + jobData.id + "/download"} download
+              style={{ background: t.green, color: t.isLight ? "#fff" : "#000", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+              Download ZIP
+            </a>
+          )}
+          <button onClick={() => setJob(null)}
+            style={{ background: "transparent", border: "none", color: t.textFaint, fontSize: 18, cursor: "pointer", padding: "0 4px" }}>
+            ×
+          </button>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: 16, flexShrink: 0 }}>
-        {isComplete && (
-          <a href={"/api/reformat-job/" + jobData.id + "/download"} download
-            style={{ background: t.green, color: t.isLight ? "#fff" : "#000", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-            Download ZIP
-          </a>
-        )}
-        <button onClick={() => setJob(null)}
-          style={{ background: "transparent", border: "none", color: t.textFaint, fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>
-          ×
-        </button>
-      </div>
+
+      {/* Expanded per-format detail */}
+      {expanded && !isComplete && !isFailed && (
+        <div style={{ padding: "0 24px 12px", borderTop: `1px solid ${t.border}40` }}>
+          {formatNames.map((name, i) => {
+            const done = i < (progress.formats_done || 0);
+            const current = progress.current_format === name;
+            return (
+              <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 12 }}>
+                <span style={{ width: 16, color: done ? t.green : current ? t.orange : t.textFaint, flexShrink: 0 }}>
+                  {done ? "✓" : current ? "◉" : "○"}
+                </span>
+                <span style={{ color: done ? t.textMuted : current ? t.text : t.textFaint }}>
+                  {name.replace(/_/g, " ")}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -6528,7 +6574,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   };
 
   // Submit background reformat job → notification bar tracks it
-  const handleReformatJob = async () => {
+  const handleReformatJob = async (estimatedSecs) => {
     if (!video?.cacheId) return;
     setJobSubmitting(true);
     setDownloadError(null);
@@ -6543,7 +6589,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             cacheId: video.cacheId,
             videoUrls: video.videoUrls || [video.videoUrl],
           },
-          estimatedSeconds: Math.round((video.cachedDuration || 16) * 0.4 * 4 + 5),
+          estimatedSeconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * 4 + 3),
         }),
       });
       if (!res.ok) {
@@ -6556,7 +6602,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         status: "queued",
         progress: { formats_total: 4, formats_done: 0, current_format: null },
         video_filename: video.authorHandle || "video",
-        estimated_seconds: Math.round((video.cachedDuration || 16) * 0.4 * 4 + 5),
+        estimated_seconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * 4 + 3),
       });
     } catch (e) {
       setDownloadError("Failed to start job: " + e.message);
@@ -6722,27 +6768,6 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 {downloading.original ? "Downloading..." : "Download Original"}
               </button>
 
-              {/* Reformat All — submits background job */}
-              <button
-                type="button"
-                onClick={handleReformatJob}
-                disabled={!video.cacheId || jobSubmitting}
-                style={{
-                  padding: "12px 24px", borderRadius: 8, border: "none", marginTop: 8, width: "100%",
-                  background: video.cacheId ? t.green : t.cardAlt,
-                  color: video.cacheId ? (t.isLight ? "#fff" : "#000") : t.textFaint,
-                  fontSize: 14, fontWeight: 600,
-                  cursor: video.cacheId && !jobSubmitting ? "pointer" : "not-allowed",
-                  opacity: jobSubmitting ? 0.7 : 1,
-                }}
-              >
-                {jobSubmitting ? "Starting job..." : video.cacheId ? "Reformat All (16:9 · 1:1 · 4:5 · 9:16)" : video.cacheFailed ? "Unavailable — cache failed" : "Caching video..."}
-              </button>
-              {video.cacheId && !jobSubmitting && (
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4, textAlign: "center" }}>
-                  Processes in background — you can navigate away
-                </div>
-              )}
 
               <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
                 {video.cacheId ? (
@@ -6871,10 +6896,11 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         </div>
       ) : null}
 
-      {/* Per-format template picker */}
-      {templates.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 12 }}>Choose a background for each format</div>
+      {/* Per-format template picker + estimate + Reformat button */}
+      {video?.cacheId && (
+        <div>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 12 }}>Choose a background for each format</div>
           {[
             { ratio: "16:9", label: "16:9 Landscape", dims: "1920×1080" },
             { ratio: "1:1", label: "1:1 Square", dims: "1080×1080" },
@@ -6917,7 +6943,69 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             );
           })}
         </div>
-      )}
+
+        {/* Time estimate */}
+        {(() => {
+          const dur = video.cachedDuration || video.duration || 16;
+          const fmtEstimates = [
+            { ratio: "16:9", label: "16:9 Landscape" },
+            { ratio: "1:1", label: "1:1 Square" },
+            { ratio: "4:5", label: "4:5 Feed" },
+            { ratio: "9:16", label: "9:16 Story" },
+          ].map(f => {
+            const tid = selectedTemplates[f.ratio];
+            const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
+            const isBlur = !tmpl || tmpl.type === "blur";
+            const seconds = isBlur ? Math.round(dur * 0.35) + 2 : 3;
+            const method = isBlur ? "blur" : tmpl.type;
+            return { ...f, seconds, method };
+          });
+          const total = fmtEstimates.reduce((s, e) => s + e.seconds, 0) + 3;
+          const totalLabel = total < 60 ? total + "s" : Math.floor(total / 60) + "m " + (total % 60) + "s";
+          return (
+            <div style={{ padding: "14px 18px", borderRadius: 10, background: t.cardAlt, border: "1px solid " + t.border, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Estimated processing time</span>
+                <span style={{ fontSize: 15, fontWeight: 500, color: t.green }}>{totalLabel}</span>
+              </div>
+              {fmtEstimates.map(e => (
+                <div key={e.ratio} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.textFaint, padding: "2px 0" }}>
+                  <span>{e.label} ({e.method})</span>
+                  <span>~{e.seconds}s</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.textFaint, padding: "2px 0", borderTop: "1px solid " + t.border + "40", marginTop: 4 }}>
+                <span>ZIP bundling</span>
+                <span>~3s</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Reformat All button */}
+        {(() => {
+          const dur = video.cachedDuration || video.duration || 16;
+          const fmtEstimates = [
+            { ratio: "16:9" }, { ratio: "1:1" }, { ratio: "4:5" }, { ratio: "9:16" },
+          ].map(f => {
+            const tid = selectedTemplates[f.ratio];
+            const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
+            const isBlur = !tmpl || tmpl.type === "blur";
+            return isBlur ? Math.round(dur * 0.35) + 2 : 3;
+          });
+          const totalEst = fmtEstimates.reduce((s, n) => s + n, 0) + 3;
+          return (
+            <>
+              <button type="button" onClick={() => handleReformatJob(totalEst)} disabled={jobSubmitting}
+                style={{ width: "100%", padding: "12px 24px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 600, cursor: jobSubmitting ? "not-allowed" : "pointer", opacity: jobSubmitting ? 0.7 : 1, marginBottom: 6 }}>
+                {jobSubmitting ? "Starting job..." : "Reformat All (16:9 · 1:1 · 4:5 · 9:16)"}
+              </button>
+              <div style={{ fontSize: 11, color: t.textFaint, textAlign: "center" }}>Processes in background — you can navigate away</div>
+            </>
+          );
+        })()}
+      </div>
+    )}
 
     </div>
   );
