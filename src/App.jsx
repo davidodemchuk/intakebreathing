@@ -5789,26 +5789,6 @@ function ChannelPipelineFeature({ onOpen, onTabOpen, isDark = true }) {
   );
 }
 
-function SiteFooter({ isDark = true }) {
-  const c = { bg: isDark ? "#000000" : "#F5F5F0", border: isDark ? "1px solid #1a1a1a" : "1px solid #E8E8E2", brand: isDark ? "#FFFFFF" : "#0A0A0A", platLabel: isDark ? "#FFFFFF" : "#0A0A0A", link: isDark ? "#737373" : "#888888", linkHover: isDark ? "#00FEA9" : "#008F5E", tagline: isDark ? "#333333" : "#AAAAAA" };
-  return (
-    <footer className="site-footer-root" style={{ width: "100%", background: c.bg, borderTop: c.border, padding: "24px 48px", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, marginTop: "auto" }}>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: c.brand, letterSpacing: "-0.01em" }}>intake creators</div>
-      <div className="site-footer-platform" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-        <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: c.platLabel, letterSpacing: "0.04em", marginBottom: 10 }}>PLATFORM</div>
-        <div className="site-footer-platform-links" style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          {[{ label: "Creator Hub", href: "/creator-hub" }, { label: "Channel Pipeline", href: "/channel-pipeline" }, { label: "Campaigns", href: "/campaigns" }, { label: "Messaging Hub", href: "/messaging" }, { label: "Settings", href: "/settings" }].map((item, i) => (
-            <a key={i} href={item.href} style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 400, color: c.link, textDecoration: "none", transition: "color 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.color = c.linkHover; }} onMouseLeave={(e) => { e.currentTarget.style.color = c.link; }}>{item.label}</a>
-          ))}
-        </div>
-      </div>
-      <div className="site-footer-swatches" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {["#000000", "#FFFFFF", "#00FEA9", "#63B7BA"].map((hex, i) => (<div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: hex, border: hex === "#000000" ? "1px solid #333" : "none", flexShrink: 0 }} />))}
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: c.tagline, marginLeft: 6 }}>Life Changing Breathing.</span>
-      </div>
-    </footer>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════
 // CAMPAIGN DETAIL VIEW
@@ -10978,9 +10958,7 @@ export default function App() {
             .homepage-top-row{margin-bottom:16px!important}
             .open-hub-btn{height:38px!important;font-size:12px!important;padding:0 16px!important}
             .utility-grid-container{padding:24px 20px!important;grid-template-columns:1fr!important}
-            .site-footer-root{padding:16px 20px!important;flex-direction:column!important;align-items:flex-start!important;gap:12px!important}
-            .site-footer-platform-links{flex-direction:column!important;gap:10px!important;margin-top:8px!important}
-            .site-footer-swatches{display:none!important}
+
             .creator-nav-root{padding:0 20px!important;height:48px!important}
             .creator-nav-left-tabs{display:none!important}
             .creator-nav-center{position:static!important;transform:none!important}
@@ -12672,7 +12650,6 @@ export default function App() {
           const currentPage = pageNames[view] || view || "Unknown";
           return <ChangeRequestWidget currentPage={currentPage} t={t} navigate={navigate} refreshOpenCount={() => { supabase.from("change_requests").select("id").eq("status", "open").then(({ data }) => setOpenChangeRequests((data || []).length)); }} />;
         })()}
-        <SiteFooter isDark={isDark} />
         {activeReformatJob && <ReformatNotificationBar job={activeReformatJob} setJob={setActiveReformatJob} t={t} />}
       </div>
     </ThemeContext.Provider>
