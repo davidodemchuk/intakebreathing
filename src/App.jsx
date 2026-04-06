@@ -6214,7 +6214,11 @@ function ReformatNotificationBar({ job, setJob, t }) {
       const res = await fetch("/api/send-to-monday", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, itemName: jobData.video_filename ? `@${jobData.video_filename} — Studio Export` : "Studio Export" }),
+        body: JSON.stringify({
+          jobId,
+          creatorHandle: jobData.video_filename || "",
+          videoDescription: jobData.template_config?.variables?.campaign_name || "",
+        }),
       });
       const data = await res.json();
       if (data.error) { alert("Monday.com error: " + data.error); return; }
@@ -6370,7 +6374,12 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
   const containerRef = useRef(null);
   const [dragging, setDragging] = useState(null);
 
-  const dims = FORMAT_PREVIEW_DIMS[format.ratio];
+  const dims = FORMAT_PREVIEW_DIMS[format.ratio] || {
+    w: format.width || 1080,
+    h: format.height || 1080,
+    displayW: format.displayW || 200,
+    displayH: format.displayH || 200,
+  };
   const scale = dims.displayW / dims.w;
 
   // Video frame display size (letterboxed/pillarboxed into panel)
@@ -6517,8 +6526,6 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [video, setVideo] = useState(null);
   const [downloading, setDownloading] = useState({});
   const [downloadError, setDownloadError] = useState(null);
-  const [customRatio, setCustomRatio] = useState("");
-  const [customWidth, setCustomWidth] = useState("1080");
   const [templates, setTemplates] = useState([]);
   const [selectedTemplates, setSelectedTemplates] = useState({ "16:9": null, "1:1": null, "4:5": null, "9:16": null });
   const [jobSubmitting, setJobSubmitting] = useState(false);
@@ -6530,6 +6537,12 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [newTemplateName, setNewTemplateName] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
   const [selectedOverlayIndex, setSelectedOverlayIndex] = useState(null);
+  const [customFormats, setCustomFormats] = useState([]);
+  const [showCustomRatioInput, setShowCustomRatioInput] = useState(false);
+  const [customRatioInput, setCustomRatioInput] = useState("");
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [templatePacks, setTemplatePacks] = useState([]);
   const [captionData, setCaptionData] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -6542,6 +6555,30 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
       return next;
     });
   };
+
+  const addCustomFormat = (ratioStr) => {
+    const parts = ratioStr.trim().split(/[:/×x]/i).map(Number);
+    const rW = parts[0], rH = parts[1];
+    if (!rW || !rH || rW <= 0 || rH <= 0) return;
+    const baseW = 1080;
+    const rawH = Math.round(baseW * rH / rW);
+    const w = baseW % 2 === 0 ? baseW : baseW + 1;
+    const h = rawH % 2 === 0 ? rawH : rawH + 1;
+    const displayH = 240;
+    const displayW = Math.round(displayH * rW / rH);
+    const ratio = `${rW}:${rH}`;
+    if (customFormats.some(f => f.ratio === ratio)) return;
+    setCustomFormats(prev => [...prev, { ratio, label: `${ratio} Custom`, width: w, height: h, displayW, displayH }]);
+    setSelectedTemplates(prev => ({ ...prev, [ratio]: null }));
+    setEnabledFormats(prev => ({ ...prev, [ratio]: true }));
+  };
+
+  const removeCustomFormat = (ratio) => {
+    setCustomFormats(prev => prev.filter(f => f.ratio !== ratio));
+    setEnabledFormats(prev => { const next = { ...prev }; delete next[ratio]; return next; });
+    setSelectedTemplates(prev => { const next = { ...prev }; delete next[ratio]; return next; });
+  };
+
   const enabledCount = Object.values(enabledFormats).filter(Boolean).length;
 
   const handleTemplateUploadOnPage = async (e, formatRatio) => {
@@ -6960,6 +6997,10 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           estimatedSeconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * 4 + 3),
           captionId: captionData?.captionId || null,
           captionStyle: captionData ? captionStyle : null,
+          customFormats: customFormats.length > 0 ? customFormats : undefined,
+          trimStart: trimStart > 0 ? trimStart : undefined,
+          trimEnd: trimEnd || undefined,
+          playbackSpeed: playbackSpeed !== 1 ? playbackSpeed : undefined,
         }),
       });
       if (!res.ok) {
@@ -6970,53 +7011,14 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
       setActiveReformatJob({
         id: jobId,
         status: "queued",
-        progress: { formats_total: 4, formats_done: 0, current_format: null },
+        progress: { formats_total: enabledCount, formats_done: 0, current_format: null },
         video_filename: video.authorHandle || "video",
-        estimated_seconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * 4 + 3),
+        estimated_seconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * enabledCount + 3),
       });
     } catch (e) {
       setDownloadError("Failed to start job: " + e.message);
     } finally {
       setJobSubmitting(false);
-    }
-  };
-
-  // Custom ratio — still uses sync endpoint (one-off format, not the batch)
-  const reformatCustom = async (format) => {
-    if (!video || (!video.videoUrl && !video.cacheId)) return;
-    const [w, h] = String(format.dimensions).split(/[×x]/i).map(Number);
-    if (!w || !h) return;
-    setDownloading((prev) => ({ ...prev, [format.id]: true }));
-    setDownloadError(null);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180000);
-    try {
-      const res = await fetch("/api/reformat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cacheId: video.cacheId || null,
-          videoUrl: video.cacheId ? null : video.videoUrl,
-          videoUrls: video.cacheId ? undefined : (video.videoUrls || [video.videoUrl]),
-          width: w, height: h,
-          name: `${video.authorHandle || "video"}_${format.name.replace(/\s+/g, "_")}`,
-          templateId: null,
-        }),
-        signal: controller.signal,
-      });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `Server returned ${res.status}`); }
-      const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${video.authorHandle || "video"}_custom_${w}x${h}.mp4`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      if (e.name === "AbortError") { setDownloadError("Processing timed out. Try a shorter clip."); }
-      else { setDownloadError(`Custom reformat failed: ${e.message}`); }
-    } finally {
-      clearTimeout(timeout);
-      setDownloading((prev) => ({ ...prev, [format.id]: false }));
     }
   };
 
@@ -7164,107 +7166,53 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         </div>
       ) : null}
 
-      {(video?.cached || video?.cacheId) ? (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: 20, marginTop: 16, marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 4 }}>Custom Ratio</div>
-          <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 14 }}>Enter any aspect ratio to download a custom reformat.</div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 120px", minWidth: 100 }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Ratio (width:height)</div>
+      {video?.cacheId ? (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: "14px 20px", marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 130px" }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Trim start (s)</div>
               <input
-                value={customRatio}
-                onChange={(e) => setCustomRatio(e.target.value)}
-                placeholder="e.g. 1:2, 3:4, 21:9"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                type="number" min="0" step="0.5"
+                value={trimStart}
+                onChange={(e) => setTrimStart(Math.max(0, Number(e.target.value)))}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
               />
             </div>
-            <div style={{ flex: "0 0 100px" }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Base width (px)</div>
+            <div style={{ flex: "1 1 130px" }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Trim end (s) <span style={{ fontStyle: "italic" }}>(blank = full)</span></div>
               <input
-                value={customWidth}
-                onChange={(e) => setCustomWidth(e.target.value.replace(/\D/g, ""))}
-                placeholder="1080"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                type="number" min="0" step="0.5"
+                value={trimEnd || ""}
+                onChange={(e) => setTrimEnd(e.target.value ? Math.max(0, Number(e.target.value)) : null)}
+                placeholder={String(video.cachedDuration || video.duration || "end")}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
               />
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const parts = customRatio.trim().split(/[:/×x]/i).map(Number);
-                const rW = parts[0];
-                const rH = parts[1];
-                if (!rW || !rH || rW <= 0 || rH <= 0) {
-                  setDownloadError("Enter a valid ratio like 1:2, 3:4, or 21:9");
-                  return;
-                }
-                const baseW = Number(customWidth) || 1080;
-                const w = Math.round(baseW);
-                const h = Math.round(baseW * (rH / rW));
-                const finalW = w % 2 === 0 ? w : w + 1;
-                const finalH = h % 2 === 0 ? h : h + 1;
-                reformatCustom({
-                  id: `custom-${rW}x${rH}`,
-                  name: `Custom_${rW}x${rH}`,
-                  dimensions: `${finalW}×${finalH}`,
-                  ratio: `${rW}:${rH}`,
-                });
-              }}
-              disabled={!customRatio.trim() || Object.values(downloading).some(Boolean)}
-              style={{
-                padding: "10px 20px", borderRadius: 8, border: "none",
-                background: customRatio.trim() ? t.green : t.cardAlt,
-                color: customRatio.trim() ? (t.isLight ? "#fff" : "#000") : t.textFaint,
-                fontSize: 13, fontWeight: 500,
-                cursor: customRatio.trim() ? "pointer" : "not-allowed",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {(() => {
-                const parts = customRatio.trim().split(/[:/×x]/i).map(Number);
-                const rW = parts[0];
-                const rH = parts[1];
-                const id = rW && rH ? `custom-${rW}x${rH}` : "";
-                return id && downloading[id] ? "Processing..." : "Download";
-              })()}
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-            {["1:1", "4:5", "9:16", "16:9", "1:2", "2:3", "3:4", "21:9"].map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setCustomRatio(r)}
-                style={{
-                  padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                  border: `1px solid ${customRatio === r ? t.green + "50" : t.border}`,
-                  background: customRatio === r ? t.green + "10" : "transparent",
-                  color: customRatio === r ? t.green : t.textFaint,
-                  cursor: "pointer",
-                }}
+            <div style={{ flex: "1 1 130px" }}>
+              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Playback speed</div>
+              <select
+                value={playbackSpeed}
+                onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
               >
-                {r}
-              </button>
-            ))}
-          </div>
-
-          {(() => {
-            const parts = customRatio.trim().split(/[:/×x]/i).map(Number);
-            const rW = parts[0];
-            const rH = parts[1];
-            if (!rW || !rH || rW <= 0 || rH <= 0) return null;
-            const baseW = Number(customWidth) || 1080;
-            const w = Math.round(baseW);
-            const h = Math.round(baseW * (rH / rW));
-            const finalW = w % 2 === 0 ? w : w + 1;
-            const finalH = h % 2 === 0 ? h : h + 1;
-            return (
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 8 }}>
-                Output: {finalW} × {finalH}px
+                <option value={0.5}>0.5×</option>
+                <option value={0.75}>0.75×</option>
+                <option value={1}>1× (normal)</option>
+                <option value={1.25}>1.25×</option>
+                <option value={1.5}>1.5×</option>
+                <option value={2}>2×</option>
+              </select>
+            </div>
+            {(trimStart > 0 || trimEnd || playbackSpeed !== 1) && (
+              <div style={{ fontSize: 11, color: t.green, fontWeight: 500, alignSelf: "flex-end", paddingBottom: 6 }}>
+                {(() => {
+                  const dur = video.cachedDuration || video.duration || 16;
+                  const eff = ((trimEnd || dur) - trimStart) / playbackSpeed;
+                  return `Output: ~${Math.round(eff)}s`;
+                })()}
               </div>
-            );
-          })()}
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -7399,16 +7347,22 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 { ratio: "1:1", label: "1:1 Square", dims: "1080×1080" },
                 { ratio: "4:5", label: "4:5 Feed", dims: "1080×1350" },
                 { ratio: "9:16", label: "9:16 Story", dims: "1080×1920" },
+                ...customFormats.map(cf => ({ ratio: cf.ratio, label: cf.label, dims: `${cf.width}×${cf.height}`, isCustom: true, width: cf.width, height: cf.height, displayW: cf.displayW, displayH: cf.displayH })),
               ].map(fmt => {
                 const templateId = selectedTemplates[fmt.ratio];
                 const tmpl = templateId ? templates.find(x => x.id === templateId) : templates.find(x => x.is_default);
                 const enabled = enabledFormats[fmt.ratio];
                 return (
                   <div key={fmt.ratio} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                    {/* Format toggle — always clickable */}
-                    <div onClick={() => toggleFormat(fmt.ratio)} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", marginBottom: 5 }}>
-                      <div style={{ width: 15, height: 15, borderRadius: 3, border: "2px solid " + (enabled ? t.green : t.border), background: enabled ? t.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 700, transition: "all 0.15s", flexShrink: 0 }}>{enabled ? "✓" : ""}</div>
-                      <span style={{ fontSize: 10, color: enabled ? t.text : t.textFaint }}>{enabled ? "Included" : "Skipped"}</span>
+                    {/* Format header row: toggle + optional remove for custom */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 5 }}>
+                      <div onClick={() => toggleFormat(fmt.ratio)} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                        <div style={{ width: 15, height: 15, borderRadius: 3, border: "2px solid " + (enabled ? t.green : t.border), background: enabled ? t.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 700, transition: "all 0.15s", flexShrink: 0 }}>{enabled ? "✓" : ""}</div>
+                        <span style={{ fontSize: 10, color: enabled ? t.text : t.textFaint }}>{enabled ? "Included" : "Skipped"}</span>
+                      </div>
+                      {fmt.isCustom && (
+                        <button onClick={() => removeCustomFormat(fmt.ratio)} style={{ marginLeft: 2, padding: "0 4px", borderRadius: 4, border: "none", background: "transparent", color: t.textFaint, fontSize: 11, cursor: "pointer", lineHeight: 1 }} title="Remove format">✕</button>
+                      )}
                     </div>
                     {/* Panel — dimmed when disabled */}
                     <div style={{ opacity: enabled ? 1 : 0.3, pointerEvents: enabled ? "auto" : "none", transition: "opacity 0.2s" }}>
@@ -7434,11 +7388,40 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
               })}
 
               {/* Upload tile */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", alignSelf: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "center" }}>
                 <div onClick={() => { setUploadingFormat(uploadingFormat ? null : "picker"); setUploadStatus(""); }}
                   style={{ minWidth: 72, minHeight: 72, padding: 10, borderRadius: 10, cursor: "pointer", textAlign: "center", border: "2px dashed " + (uploadingFormat ? t.green : t.border), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, transition: "border-color 0.15s" }}>
                   <span style={{ fontSize: 22, color: uploadingFormat ? t.green : t.textFaint, lineHeight: 1 }}>+</span>
                   <span style={{ fontSize: 9, color: uploadingFormat ? t.green : t.textFaint, fontWeight: 500 }}>Upload</span>
+                </div>
+                {/* + Custom Format tile */}
+                <div style={{ position: "relative" }}>
+                  <div
+                    onClick={() => { setShowCustomRatioInput(v => !v); setCustomRatioInput(""); }}
+                    style={{ minWidth: 72, padding: "8px 10px", borderRadius: 10, cursor: "pointer", textAlign: "center", border: "2px dashed " + (showCustomRatioInput ? t.green : t.border), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, transition: "border-color 0.15s" }}
+                  >
+                    <span style={{ fontSize: 15, color: showCustomRatioInput ? t.green : t.textFaint, lineHeight: 1, fontWeight: 700 }}>+</span>
+                    <span style={{ fontSize: 8, color: showCustomRatioInput ? t.green : t.textFaint, fontWeight: 500, whiteSpace: "nowrap" }}>Custom</span>
+                  </div>
+                  {showCustomRatioInput && (
+                    <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 6, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: 12, zIndex: 50, minWidth: 160, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+                      <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 6 }}>Ratio (e.g. 1:2, 21:9)</div>
+                      <input
+                        autoFocus
+                        value={customRatioInput}
+                        onChange={(e) => setCustomRatioInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { addCustomFormat(customRatioInput); setShowCustomRatioInput(false); } if (e.key === "Escape") setShowCustomRatioInput(false); }}
+                        placeholder="e.g. 1:2"
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box", marginBottom: 8 }}
+                      />
+                      <button
+                        onClick={() => { addCustomFormat(customRatioInput); setShowCustomRatioInput(false); }}
+                        style={{ width: "100%", padding: "7px 0", borderRadius: 7, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                      >
+                        Add format
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -7568,22 +7551,24 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         {/* Time estimate */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
+          const effectiveDuration = ((trimEnd || dur) - (trimStart || 0)) / (playbackSpeed || 1);
           const hasTextOverlays = textOverlays.some(o => o.content.trim());
           const textOverhead = hasTextOverlays ? 2 : 0;
-          const fmtEstimates = [
+          const allFmtEstimates = [
             { ratio: "16:9", label: "16:9 Landscape" },
             { ratio: "1:1", label: "1:1 Square" },
             { ratio: "4:5", label: "4:5 Feed" },
             { ratio: "9:16", label: "9:16 Story" },
+            ...customFormats.map(cf => ({ ratio: cf.ratio, label: cf.label })),
           ].map(f => {
             const tid = selectedTemplates[f.ratio];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
-            const seconds = (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
+            const seconds = (isBlur ? Math.round(effectiveDuration * 0.35) + 2 : 3) + textOverhead;
             const method = isBlur ? "blur" : tmpl.type;
             return { ...f, seconds, method, enabled: enabledFormats[f.ratio] };
           });
-          const total = fmtEstimates.filter(e => e.enabled).reduce((s, e) => s + e.seconds, 0) + 3;
+          const total = allFmtEstimates.filter(e => e.enabled).reduce((s, e) => s + e.seconds, 0) + 3;
           const totalLabel = total < 60 ? total + "s" : Math.floor(total / 60) + "m " + (total % 60) + "s";
           return (
             <div style={{ padding: "14px 18px", borderRadius: 10, background: t.cardAlt, border: "1px solid " + t.border, marginBottom: 16 }}>
@@ -7591,7 +7576,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 <span style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Estimated processing time</span>
                 <span style={{ fontSize: 15, fontWeight: 500, color: t.green }}>{totalLabel}</span>
               </div>
-              {fmtEstimates.map(e => (
+              {allFmtEstimates.map(e => (
                 <div key={e.ratio} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: e.enabled ? t.textFaint : t.border, padding: "2px 0", textDecoration: e.enabled ? "none" : "line-through" }}>
                   <span>{e.label} ({e.method})</span>
                   <span>{e.enabled ? `~${e.seconds}s` : "skipped"}</span>
@@ -7608,19 +7593,18 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         {/* Reformat All button */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
+          const effectiveDuration = ((trimEnd || dur) - (trimStart || 0)) / (playbackSpeed || 1);
           const hasTextOverlays = textOverlays.some(o => o.content.trim());
           const textOverhead = hasTextOverlays ? 2 : 0;
-          const fmtEstimates = [
-            { ratio: "16:9" }, { ratio: "1:1" }, { ratio: "4:5" }, { ratio: "9:16" },
-          ].map(f => {
-            if (!enabledFormats[f.ratio]) return 0;
-            const tid = selectedTemplates[f.ratio];
+          const allRatios = ["16:9", "1:1", "4:5", "9:16", ...customFormats.map(cf => cf.ratio)];
+          const totalEst = allRatios.reduce((s, r) => {
+            if (!enabledFormats[r]) return s;
+            const tid = selectedTemplates[r];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
-            return (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
-          });
-          const totalEst = fmtEstimates.reduce((s, n) => s + n, 0) + 3;
-          const fmtLabels = ["16:9", "1:1", "4:5", "9:16"].filter(r => enabledFormats[r]).join(" · ");
+            return s + (isBlur ? Math.round(effectiveDuration * 0.35) + 2 : 3) + textOverhead;
+          }, 3);
+          const fmtLabels = allRatios.filter(r => enabledFormats[r]).join(" · ");
           return (
             <>
               <button type="button" onClick={() => handleReformatJob(totalEst)} disabled={jobSubmitting}

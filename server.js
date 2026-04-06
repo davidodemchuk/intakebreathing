@@ -1037,7 +1037,7 @@ app.delete("/api/template-packs/:id", async (req, res) => {
 // ── Monday.com Integration ──
 
 app.post("/api/send-to-monday", async (req, res) => {
-  const { jobId, boardId, groupId, itemName, columnValues } = req.body;
+  const { jobId, groupId, creatorHandle, videoDescription } = req.body;
 
   let mondayKeyValue;
   try {
@@ -1046,52 +1046,121 @@ app.post("/api/send-to-monday", async (req, res) => {
   } catch (_) {}
   if (!mondayKeyValue) return res.status(400).json({ error: "Monday.com API key not configured. Add it in Settings." });
 
+  let boardId;
+  try {
+    const { data: bd } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-board-id").single();
+    boardId = bd?.value;
+  } catch (_) {}
+  if (!boardId) return res.status(400).json({ error: "Monday.com board ID not configured. Add it in Settings." });
+
   const { data: job } = await supabaseServer.from("reformat_jobs").select("*").eq("id", jobId).single();
   if (!job || job.status !== "complete") return res.status(400).json({ error: "Job not complete" });
 
   try {
-    let targetBoard = boardId;
-    if (!targetBoard) {
-      try {
-        const { data: bd } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-board-id").single();
-        targetBoard = bd?.value;
-      } catch (_) {}
+    const apiKey = mondayKeyValue;
+
+    // Step 1: Discover column IDs and groups from the board
+    const colQuery = `{ boards(ids: [${boardId}]) { columns { id title type } groups { id title } } }`;
+    const colRes = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Authorization": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: colQuery }),
+    });
+    const colData = await colRes.json();
+    const columns = colData.data?.boards?.[0]?.columns || [];
+    const groups = colData.data?.boards?.[0]?.groups || [];
+
+    // Map column titles to IDs (case-insensitive partial match, first term wins)
+    const findCol = (...searchTerms) => {
+      for (const term of searchTerms) {
+        const col = columns.find(c => c.title.toLowerCase().includes(term.toLowerCase()));
+        if (col) return col;
+      }
+      return null;
+    };
+
+    const adTypeCol   = findCol("ad type", "ad_type");
+    const handleCol   = findCol("creator handle", "creator_handle", "handle");
+    const dateCol     = findCol("date added", "date_added", "date");
+    const priorityCol = findCol("priority");
+    const filesCol    = findCol("final files", "final_files", "files", "file");
+
+    // Build column values
+    const handle = creatorHandle || job.template_config?.variables?.creator_handle || job.video_filename || "";
+    const columnValues = {};
+
+    if (adTypeCol) {
+      columnValues[adTypeCol.id] = (adTypeCol.type === "status" || adTypeCol.type === "dropdown")
+        ? { label: "Creator" } : "Creator";
     }
-    if (!targetBoard) return res.status(400).json({ error: "No Monday.com board configured" });
+    if (handleCol) {
+      columnValues[handleCol.id] = handle ? `@${handle.replace(/^@/, "")}` : "";
+    }
+    if (dateCol) {
+      columnValues[dateCol.id] = { date: new Date().toISOString().split("T")[0] };
+    }
+    if (priorityCol && priorityCol.type === "status") {
+      columnValues[priorityCol.id] = { label: "Normal" };
+    }
 
-    const safeName = (itemName || job.video_filename || "Studio Export").replace(/"/g, '\\"');
-    const colJson = JSON.stringify(columnValues || {}).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    // Step 2: Determine target group (current month or first group)
+    let targetGroup = groupId;
+    if (!targetGroup && groups.length > 0) {
+      const monthNames = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+      const curMonth = monthNames[new Date().getMonth()];
+      const curYear = String(new Date().getFullYear());
+      const monthGroup = groups.find(g => g.title.toLowerCase().includes(curMonth) && g.title.includes(curYear));
+      targetGroup = monthGroup?.id || groups[0]?.id;
+    }
 
+    // Step 3: Create item
+    const handleDisplay = handle ? `@${handle.replace(/^@/, "")}` : null;
+    const descPart = videoDescription ? ` — ${videoDescription.substring(0, 50)}` : "";
+    const itemName = (handleDisplay ? handleDisplay + descPart : job.video_filename || "Studio Export");
+    const escapedName = itemName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const escapedValues = JSON.stringify(JSON.stringify(columnValues));
+
+    const createQuery = `mutation { create_item (board_id: ${boardId}${targetGroup ? `, group_id: "${targetGroup}"` : ""}, item_name: "${escapedName}", column_values: ${escapedValues}) { id } }`;
     const createRes = await fetch("https://api.monday.com/v2", {
       method: "POST",
-      headers: { "Authorization": mondayKeyValue, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: `mutation { create_item (board_id: ${targetBoard}, ${groupId ? `group_id: "${groupId}",` : ""} item_name: "${safeName}", column_values: "${colJson}") { id } }` }),
+      headers: { "Authorization": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: createQuery }),
     });
     const createData = await createRes.json();
+    if (createData.errors) throw new Error("Monday API error: " + JSON.stringify(createData.errors).substring(0, 300));
     const itemId = createData.data?.create_item?.id;
-    if (!itemId) throw new Error("Failed to create Monday item: " + JSON.stringify(createData.errors || createData).substring(0, 200));
+    if (!itemId) throw new Error("Failed to create Monday item: " + JSON.stringify(createData).substring(0, 200));
 
-    // Upload ZIP if it exists on disk
-    if (job.zip_path && fs.existsSync(job.zip_path)) {
+    // Step 4: Upload ZIP to discovered files column (non-fatal)
+    if (filesCol && job.zip_path && fs.existsSync(job.zip_path)) {
       try {
         const FormData = (await import("form-data")).default;
         const form = new FormData();
-        form.append("query", `mutation { add_file_to_column (file: "file", item_id: ${itemId}, column_id: "files") { id } }`);
+        form.append("query", `mutation ($file: File!) { add_file_to_column (file: $file, item_id: ${itemId}, column_id: "${filesCol.id}") { id } }`);
         form.append("variables[file]", fs.createReadStream(job.zip_path), path.basename(job.zip_path));
         const uploadRes = await fetch("https://api.monday.com/v2/file", {
           method: "POST",
-          headers: { "Authorization": mondayKeyValue, ...form.getHeaders() },
+          headers: { "Authorization": apiKey, ...form.getHeaders() },
           body: form,
         });
         const uploadData = await uploadRes.json();
         if (uploadData.errors) console.warn("[monday] File upload warning:", JSON.stringify(uploadData.errors));
       } catch (upErr) {
-        console.warn("[monday] File upload failed (item created):", upErr.message);
+        console.warn("[monday] File upload failed (item was still created):", upErr.message);
       }
     }
 
-    await supabaseServer.from("reformat_jobs").update({ monday_item_id: String(itemId), monday_sent_at: new Date().toISOString() }).eq("id", jobId);
-    res.json({ success: true, itemId, boardId: targetBoard });
+    // Step 5: Record on job
+    try {
+      await supabaseServer.from("reformat_jobs").update({
+        monday_item_id: String(itemId),
+        monday_sent_at: new Date().toISOString(),
+      }).eq("id", jobId);
+    } catch (e) {
+      console.warn("[monday] Failed to update job record:", e.message);
+    }
+
+    res.json({ success: true, itemId, boardId });
   } catch (err) {
     console.error("[monday] Error:", err.message);
     res.status(500).json({ error: err.message });
@@ -1113,6 +1182,28 @@ app.get("/api/monday-boards", async (req, res) => {
     });
     const data = await r.json();
     res.json(data.data?.boards || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/monday-columns/:boardId", async (req, res) => {
+  let mondayKeyValue;
+  try {
+    const { data } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-api-key").single();
+    mondayKeyValue = data?.value;
+  } catch (_) {}
+  if (!mondayKeyValue) return res.status(400).json({ error: "Monday.com API key not configured" });
+  try {
+    const query = `{ boards(ids: [${req.params.boardId}]) { columns { id title type settings_str } groups { id title } } }`;
+    const r = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Authorization": mondayKeyValue, "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    const data = await r.json();
+    const board = data.data?.boards?.[0];
+    res.json({ columns: board?.columns || [], groups: board?.groups || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1354,14 +1445,22 @@ async function processReformatJob(jobId) {
     if (vs) { srcW = vs.width || 1080; srcH = vs.height || 1920; srcDuration = parseFloat(vs.duration) || 16; }
   } catch (e) { console.log(`[job:${jobId}] Probe fallback:`, e.message); }
 
+  const customFmtConfigs = (config.customFormats || []).map(cf => ({
+    name: `custom_${String(cf.ratio).replace(":", "x")}`,
+    width: cf.width || 1080,
+    height: cf.height || 1080,
+    ratio: cf.ratio,
+  }));
   const allFormats = [
     { name: "16x9_Landscape", width: 1920, height: 1080, ratio: "16:9" },
     { name: "1x1_Square", width: 1080, height: 1080, ratio: "1:1" },
     { name: "4x5_Feed", width: 1080, height: 1350, ratio: "4:5" },
     { name: "9x16_Story", width: 1080, height: 1920, ratio: "9:16" },
+    ...customFmtConfigs,
   ];
   const enabledFormats = config.enabledFormats || { "16:9": true, "1:1": true, "4:5": true, "9:16": true };
-  const formats = allFormats.filter(f => enabledFormats[f.ratio] !== false);
+  // Custom formats are always enabled (they were explicitly added by the user)
+  const formats = allFormats.filter(f => customFmtConfigs.some(cf => cf.ratio === f.ratio) || enabledFormats[f.ratio] !== false);
 
   const outputDir = path.join(os.tmpdir(), `reformat-${jobId}`);
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -1423,22 +1522,39 @@ async function processReformatJob(jobId) {
     // Combine all drawtext filters (text overlays + captions)
     const allDrawtext = [textFilters, captionFilters].filter(Boolean).join(",");
 
+    // Playback speed
+    const speed = config.playbackSpeed || 1;
+    const speedFilter = speed !== 1 ? `setpts=PTS/${speed}` : "";
+
+    // Build video filter chain with all drawtext + optional speed
+    const videoSuffix = [allDrawtext, speedFilter].filter(Boolean).join(",");
+
     let finalFilterArgs = filterArgs;
-    if (allDrawtext) {
+    if (videoSuffix) {
       if (filterArgs[0] === "-vf") {
-        finalFilterArgs = ["-vf", filterArgs[1] + "," + allDrawtext];
+        finalFilterArgs = ["-vf", filterArgs[1] + "," + videoSuffix];
       } else {
         const fc = filterArgs[1];
         const fcLabeled = fc.replace(/overlay=\(W-w\)\/2:\(H-h\)\/2$/, "overlay=(W-w)/2:(H-h)/2[vtmp]");
-        finalFilterArgs = ["-filter_complex", fcLabeled + ";[vtmp]" + allDrawtext + "[vout]", "-map", "[vout]", "-map", "0:a?"];
+        finalFilterArgs = ["-filter_complex", fcLabeled + ";[vtmp]" + videoSuffix + "[vout]", "-map", "[vout]", "-map", "0:a?"];
       }
     }
 
+    // Trim: -ss before -i (fast seek), -t after all inputs
+    const trimStart = config.trimStart || 0;
+    const trimEnd = config.trimEnd || null;
+    const trimInputArgs = trimStart > 0 ? ["-ss", String(trimStart)] : [];
+    const trimDurationArgs = trimEnd ? ["-t", String(trimEnd - trimStart)] : [];
+
+    // Audio speed filter (atempo supports 0.5–2.0 range)
+    const clampedSpeed = Math.min(2.0, Math.max(0.5, speed));
+    const audioFilterArgs = speed !== 1 ? ["-af", `atempo=${clampedSpeed}`] : [];
+
     const outFile = path.join(outputDir, `${job.video_filename}_${fmt.name}.mp4`);
 
-    console.log(`[job:${jobId}] ${fmt.name} (${fmt.width}x${fmt.height})${textFilters ? " +text" : ""}...`);
+    console.log(`[job:${jobId}] ${fmt.name} (${fmt.width}x${fmt.height})${textFilters ? " +text" : ""}${speed !== 1 ? ` ${speed}x` : ""}${trimStart > 0 || trimEnd ? " trimmed" : ""}...`);
     await new Promise((ok, no) => {
-      execFile(FFMPEG, ["-i", inp, ...extraInputArgs, ...finalFilterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outFile],
+      execFile(FFMPEG, [...trimInputArgs, "-i", inp, ...extraInputArgs, ...trimDurationArgs, ...finalFilterArgs, ...audioFilterArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-threads", "1", "-y", outFile],
         { timeout: 120000, maxBuffer: 10485760 },
         (e, _, stderr) => e ? no(new Error(stderr?.substring(0, 200) || e.message)) : ok());
     });
@@ -1482,14 +1598,18 @@ async function processReformatJob(jobId) {
 }
 
 app.post("/api/reformat-job", async (req, res) => {
-  const { videoFilename, templateConfig, textOverlays, variables, estimatedSeconds, captionId, captionStyle } = req.body;
+  const { videoFilename, templateConfig, textOverlays, variables, estimatedSeconds, captionId, captionStyle, customFormats, trimStart, trimEnd, playbackSpeed } = req.body;
   const videoUrl = templateConfig?.videoUrls?.[0] || null;
-  // Merge textOverlays, variables, and captionId into template_config so processReformatJob can read them
+  // Merge textOverlays, variables, captionId, and phase-4 controls into template_config
   const fullConfig = {
     ...(templateConfig || {}),
     textOverlays: Array.isArray(textOverlays) ? textOverlays : [],
     variables: variables || {},
     captionId: captionId || null,
+    customFormats: Array.isArray(customFormats) ? customFormats : [],
+    trimStart: trimStart || 0,
+    trimEnd: trimEnd || null,
+    playbackSpeed: playbackSpeed || 1,
   };
   // Save caption_style onto the caption record so processReformatJob sees it
   if (captionId && captionStyle) {
@@ -1504,7 +1624,7 @@ app.post("/api/reformat-job", async (req, res) => {
       status: "queued",
       template_config: fullConfig,
       estimated_seconds: estimatedSeconds || 60,
-      progress: { formats_total: Object.values(templateConfig?.enabledFormats || {}).filter(Boolean).length || 4, formats_done: 0, current_format: null },
+      progress: { formats_total: (Object.values(templateConfig?.enabledFormats || {}).filter(Boolean).length || 4) + (Array.isArray(customFormats) ? customFormats.length : 0), formats_done: 0, current_format: null },
     }).select().single();
     if (error) throw error;
 
