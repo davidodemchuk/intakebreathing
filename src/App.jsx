@@ -6520,7 +6520,7 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
 
 function VideoReformatter({ onBack, setActiveReformatJob }) {
   const { t, S } = useContext(ThemeContext);
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState("https://www.tiktok.com/@cyclewithdavid/video/7327776876448025902");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [video, setVideo] = useState(null);
@@ -7031,30 +7031,48 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn 0.3s ease" }}>
-      <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 20 }}>← Back to Tools</button>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: t.text, letterSpacing: "-0.02em" }}>Intake Studio</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Transform creator content into branded, ad-ready assets</div>
-      </div>
+      {/* Hero */}
+      <div style={{ textAlign: "center", padding: "40px 20px 30px", marginBottom: 20 }}>
+        <div style={{ fontSize: 36, fontWeight: 800, color: t.text, letterSpacing: "-0.03em", marginBottom: 6 }}>
+          Intake Studio
+        </div>
+        <div style={{ fontSize: 15, color: t.textMuted, maxWidth: 500, margin: "0 auto 28px" }}>
+          Transform creator content into branded, ad-ready assets — multi-format, captioned, and pipeline-ready
+        </div>
 
-      {/* URL input */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => { setUrl(e.target.value); setError(null); setVideo(null); setDownloadError(null); }}
-          onKeyDown={(e) => { if (e.key === "Enter") fetchVideo(); }}
-          placeholder="https://www.tiktok.com/@creator/video/... or https://www.instagram.com/reel/..."
-          style={{ ...S.input, flex: 1, marginBottom: 0 }}
-        />
-        <button
-          type="button"
-          onClick={fetchVideo}
-          disabled={loading}
-          style={{ ...S.btnP, padding: "11px 20px", fontSize: 14, opacity: loading ? 0.6 : 1, whiteSpace: "nowrap" }}
-        >
-          {loading ? "Fetching..." : "Fetch Video"}
-        </button>
+        {/* URL input — full width, prominent */}
+        <div style={{ display: "flex", gap: 10, maxWidth: 700, margin: "0 auto", alignItems: "center" }}>
+          <div style={{ flex: 1, position: "relative" }}>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => { setUrl(e.target.value); setError(null); setVideo(null); setDownloadError(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") fetchVideo(); }}
+              placeholder="Paste a TikTok, Instagram, or YouTube link"
+              style={{ width: "100%", padding: "16px 20px", borderRadius: 14, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 16, boxSizing: "border-box", outline: "none" }}
+            />
+            {!video && url && (
+              <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: t.textFaint, pointerEvents: "none" }}>
+                Hit Fetch to preview →
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={fetchVideo}
+            disabled={loading}
+            style={{ padding: "16px 32px", borderRadius: 14, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 16, fontWeight: 600, border: "none", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap", opacity: loading ? 0.6 : 1 }}
+          >
+            {loading ? "Fetching..." : "Fetch Video"}
+          </button>
+        </div>
+
+        {/* Capability badges */}
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 16, flexWrap: "wrap" }}>
+          {["Multi-Format Export", "Auto-Captions", "Branded Templates", "Text Overlays", "Send to Monday.com"].map(cap => (
+            <span key={cap} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: t.green + "10", border: "1px solid " + t.green + "20", color: t.green, fontWeight: 500 }}>{cap}</span>
+          ))}
+        </div>
       </div>
 
       {/* Error */}
