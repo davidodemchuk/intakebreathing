@@ -6540,9 +6540,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [customFormats, setCustomFormats] = useState([]);
   const [showCustomRatioInput, setShowCustomRatioInput] = useState(false);
   const [customRatioInput, setCustomRatioInput] = useState("");
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(null);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [newTemplateFormat, setNewTemplateFormat] = useState("9:16");
   const [templatePacks, setTemplatePacks] = useState([]);
   const [captionData, setCaptionData] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -6660,6 +6658,13 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
     });
     const updated = await fetch("/api/template-packs").then(r => r.json());
     setTemplatePacks(Array.isArray(updated) ? updated : []);
+  };
+
+  const handleDeleteTemplate = async (id) => {
+    if (!confirm("Delete this template?")) return;
+    await fetch(`/api/reformat-templates/${id}`, { method: "DELETE" });
+    const updated = await fetch("/api/reformat-templates").then(r => r.json()).catch(() => []);
+    setTemplates(Array.isArray(updated) ? updated : []);
   };
 
   // Load saved overlays when template selection changes
@@ -6998,9 +7003,6 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           captionId: captionData?.captionId || null,
           captionStyle: captionData ? captionStyle : null,
           customFormats: customFormats.length > 0 ? customFormats : undefined,
-          trimStart: trimStart > 0 ? trimStart : undefined,
-          trimEnd: trimEnd || undefined,
-          playbackSpeed: playbackSpeed !== 1 ? playbackSpeed : undefined,
         }),
       });
       if (!res.ok) {
@@ -7184,87 +7186,25 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         </div>
       ) : null}
 
-      {video?.cacheId ? (
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 12, padding: "14px 20px", marginBottom: 16 }}>
-          <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 130px" }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Trim start (s)</div>
-              <input
-                type="number" min="0" step="0.5"
-                value={trimStart}
-                onChange={(e) => setTrimStart(Math.max(0, Number(e.target.value)))}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ flex: "1 1 130px" }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Trim end (s) <span style={{ fontStyle: "italic" }}>(blank = full)</span></div>
-              <input
-                type="number" min="0" step="0.5"
-                value={trimEnd || ""}
-                onChange={(e) => setTrimEnd(e.target.value ? Math.max(0, Number(e.target.value)) : null)}
-                placeholder={String(video.cachedDuration || video.duration || "end")}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ flex: "1 1 130px" }}>
-              <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4 }}>Playback speed</div>
-              <select
-                value={playbackSpeed}
-                onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.inputText, fontSize: 13 }}
-              >
-                <option value={0.5}>0.5×</option>
-                <option value={0.75}>0.75×</option>
-                <option value={1}>1× (normal)</option>
-                <option value={1.25}>1.25×</option>
-                <option value={1.5}>1.5×</option>
-                <option value={2}>2×</option>
-              </select>
-            </div>
-            {(trimStart > 0 || trimEnd || playbackSpeed !== 1) && (
-              <div style={{ fontSize: 11, color: t.green, fontWeight: 500, alignSelf: "flex-end", paddingBottom: 6 }}>
-                {(() => {
-                  const dur = video.cachedDuration || video.duration || 16;
-                  const eff = ((trimEnd || dur) - trimStart) / playbackSpeed;
-                  return `Output: ~${Math.round(eff)}s`;
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
 
       {/* Per-format template picker + estimate + Reformat button */}
       {video?.cacheId && (
         <div>
-          {/* Template packs */}
-          {templatePacks.length > 0 && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, marginBottom: 6 }}>Quick apply a template pack</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {templatePacks.map(pack => (
-                  <button key={pack.id} onClick={() => applyPack(pack)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "1px solid " + t.border, background: t.cardAlt, color: t.text }}>
-                    {pack.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Action bar */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 16px", marginBottom: 16, background: t.card, borderRadius: 12, border: "1px solid " + t.border }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginRight: 8 }}>Add to video:</div>
+            <button onClick={() => { addOverlay(); setSelectedOverlayIndex(textOverlays.length); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 10, background: t.green + "12", border: "1px solid " + t.green + "30", color: t.green, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              <span style={{ fontSize: 18, fontWeight: 800 }}>T</span> Add Text
+            </button>
+            <button onClick={handleTranscribe} disabled={isTranscribing} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 10, background: t.card, border: "1px solid " + t.border, color: t.text, fontSize: 14, fontWeight: 600, cursor: isTranscribing ? "not-allowed" : "pointer", opacity: isTranscribing ? 0.5 : 1 }}>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>CC</span> {isTranscribing ? "Transcribing..." : "Add Captions"}
+            </button>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, color: t.textFaint }}>Drag text on previews to reposition</span>
+          </div>
 
           {/* 4-panel live preview */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>Preview — what you'll get</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button onClick={() => { addOverlay(); setSelectedOverlayIndex(textOverlays.length); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: t.green + "15", border: "1px solid " + t.green + "40", color: t.green, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
-                  <span style={{ fontSize: 16, fontWeight: 700 }}>T</span> Add Text
-                </button>
-                <button onClick={handleTranscribe} disabled={isTranscribing || !video?.cacheId} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: t.card, border: "1px solid " + t.border, color: t.text, fontSize: 13, fontWeight: 500, cursor: (isTranscribing || !video?.cacheId) ? "not-allowed" : "pointer", opacity: (isTranscribing || !video?.cacheId) ? 0.5 : 1 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "monospace" }}>CC</span> {isTranscribing ? "Transcribing..." : "Add Captions"}
-                </button>
-                {previewFrame && <span style={{ fontSize: 11, color: t.textFaint }}>Drag text to reposition · click to select</span>}
-              </div>
-            </div>
 
             {/* Floating toolbar — shown when an overlay is selected */}
             {selectedOverlayIndex !== null && textOverlays[selectedOverlayIndex] && (
@@ -7405,92 +7345,34 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 );
               })}
 
-              {/* Upload tile */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "center" }}>
-                <div onClick={() => { setUploadingFormat(uploadingFormat ? null : "picker"); setUploadStatus(""); }}
-                  style={{ minWidth: 72, minHeight: 72, padding: 10, borderRadius: 10, cursor: "pointer", textAlign: "center", border: "2px dashed " + (uploadingFormat ? t.green : t.border), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, transition: "border-color 0.15s" }}>
-                  <span style={{ fontSize: 22, color: uploadingFormat ? t.green : t.textFaint, lineHeight: 1 }}>+</span>
-                  <span style={{ fontSize: 9, color: uploadingFormat ? t.green : t.textFaint, fontWeight: 500 }}>Upload</span>
-                </div>
-                {/* + Custom Format tile */}
-                <div style={{ position: "relative" }}>
-                  <div
-                    onClick={() => { setShowCustomRatioInput(v => !v); setCustomRatioInput(""); }}
-                    style={{ minWidth: 72, padding: "8px 10px", borderRadius: 10, cursor: "pointer", textAlign: "center", border: "2px dashed " + (showCustomRatioInput ? t.green : t.border), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, transition: "border-color 0.15s" }}
-                  >
-                    <span style={{ fontSize: 15, color: showCustomRatioInput ? t.green : t.textFaint, lineHeight: 1, fontWeight: 700 }}>+</span>
-                    <span style={{ fontSize: 8, color: showCustomRatioInput ? t.green : t.textFaint, fontWeight: 500, whiteSpace: "nowrap" }}>Custom</span>
-                  </div>
-                  {showCustomRatioInput && (
-                    <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 6, background: t.card, border: "1px solid " + t.border, borderRadius: 10, padding: 12, zIndex: 50, minWidth: 160, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
-                      <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 6 }}>Ratio (e.g. 1:2, 21:9)</div>
-                      <input
-                        autoFocus
-                        value={customRatioInput}
-                        onChange={(e) => setCustomRatioInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { addCustomFormat(customRatioInput); setShowCustomRatioInput(false); } if (e.key === "Escape") setShowCustomRatioInput(false); }}
-                        placeholder="e.g. 1:2"
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box", marginBottom: 8 }}
-                      />
-                      <button
-                        onClick={() => { addCustomFormat(customRatioInput); setShowCustomRatioInput(false); }}
-                        style={{ width: "100%", padding: "7px 0", borderRadius: 7, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                      >
-                        Add format
-                      </button>
+              {/* Custom Format button */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", alignSelf: "center", position: "relative" }}>
+                <button onClick={() => { setShowCustomRatioInput(v => !v); setCustomRatioInput(""); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: 100, minHeight: 120, borderRadius: 10, border: "2px dashed " + (showCustomRatioInput ? t.green : t.border), cursor: "pointer", gap: 6, background: "transparent" }}>
+                  <span style={{ fontSize: 20, color: showCustomRatioInput ? t.green : t.textFaint }}>+</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: showCustomRatioInput ? t.green : t.textFaint }}>Custom</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: showCustomRatioInput ? t.green : t.textFaint }}>Format</span>
+                </button>
+                {showCustomRatioInput && (
+                  <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 8, background: t.card, border: "1px solid " + t.border, borderRadius: 12, padding: 14, zIndex: 50, minWidth: 220, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 4 }}>Add a custom aspect ratio</div>
+                    <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 10 }}>Enter width:height (e.g. 21:9 for ultrawide)</div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
+                      {[{ ratio: "2:3", label: "2:3 Pinterest" }, { ratio: "3:4", label: "3:4" }, { ratio: "21:9", label: "21:9 Ultrawide" }, { ratio: "1:2", label: "1:2 Tall" }, { ratio: "3:2", label: "3:2" }].map(p => (
+                        <button key={p.ratio} onClick={() => { addCustomFormat(p.ratio); setShowCustomRatioInput(false); }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 10, fontWeight: 500, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, cursor: "pointer" }}>{p.label}</button>
+                      ))}
                     </div>
-                  )}
-                </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input autoFocus type="text" value={customRatioInput} onChange={(e) => setCustomRatioInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { addCustomFormat(customRatioInput); setShowCustomRatioInput(false); } if (e.key === "Escape") setShowCustomRatioInput(false); }}
+                        placeholder="e.g. 3:2"
+                        style={{ width: 70, padding: "8px 10px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, textAlign: "center" }} />
+                      <button onClick={() => { addCustomFormat(customRatioInput); setShowCustomRatioInput(false); }} style={{ padding: "8px 14px", borderRadius: 8, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer" }}>Add</button>
+                      <button onClick={() => setShowCustomRatioInput(false)} style={{ padding: "8px 10px", borderRadius: 8, background: "transparent", border: "1px solid " + t.border, color: t.textFaint, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Inline upload form — expands below the panels row */}
-            {uploadingFormat && (
-              <div style={{ padding: 16, borderRadius: 10, border: "1px solid " + t.border, background: t.card, marginTop: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 4 }}>Upload a new template</div>
-                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 10 }}>
-                  PNG/JPG at the format's native resolution. The video gets composited in the center automatically.
-                </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
-                  <div>
-                    <label style={{ fontSize: 10, color: t.textFaint, display: "block", marginBottom: 2 }}>Format</label>
-                    <select value={uploadingFormat === "picker" ? "" : uploadingFormat} onChange={(e) => setUploadingFormat(e.target.value || "picker")}
-                      style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                      <option value="">Select format…</option>
-                      <option value="16:9">16:9 Landscape (1920×1080)</option>
-                      <option value="1:1">1:1 Square (1080×1080)</option>
-                      <option value="4:5">4:5 Feed (1080×1350)</option>
-                      <option value="9:16">9:16 Story (1080×1920)</option>
-                      <option value="all">All formats</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: t.textFaint, display: "block", marginBottom: 2 }}>Template name</label>
-                    <input type="text" value={newTemplateName} onChange={(e) => setNewTemplateName(e.target.value)}
-                      placeholder="e.g. Intake Branded 9:16"
-                      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, width: 200, boxSizing: "border-box" }} />
-                  </div>
-                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: (uploadingFormat && uploadingFormat !== "picker") ? t.green : t.border, color: (uploadingFormat && uploadingFormat !== "picker") ? (t.isLight ? "#fff" : "#000") : t.textFaint, fontSize: 12, fontWeight: 500, cursor: (uploadingFormat && uploadingFormat !== "picker") ? "pointer" : "not-allowed" }}>
-                    Choose PNG
-                    <input type="file" accept=".png,.jpg,.jpeg,.webp" style={{ display: "none" }}
-                      disabled={!uploadingFormat || uploadingFormat === "picker"}
-                      onChange={(e) => handleTemplateUploadOnPage(e, uploadingFormat)} />
-                  </label>
-                  <button onClick={() => { setUploadingFormat(null); setNewTemplateName(""); setUploadStatus(""); }}
-                    style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>
-                    Cancel
-                  </button>
-                </div>
-                {uploadStatus && <div style={{ fontSize: 11, color: uploadStatus.startsWith("Error") || uploadStatus.startsWith("Upload failed") ? (t.red || "#e55") : t.green, marginTop: 4 }}>{uploadStatus}</div>}
-              </div>
-            )}
-          </div>
-
-          {/* Save as pack */}
-          <div style={{ marginTop: 8, textAlign: "right" }}>
-            <button onClick={saveAsPack} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>
-              Save current templates as a pack
-            </button>
           </div>
 
         {/* Caption editor — shown after transcription */}
@@ -7566,10 +7448,75 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           </div>
         )}
 
+        {/* Templates & Packs */}
+        <div style={{ padding: 20, borderRadius: 12, border: "1px solid " + t.border, background: t.card, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: t.text }}>Templates & Packs</div>
+              <div style={{ fontSize: 11, color: t.textFaint }}>Upload branded backgrounds or apply a saved pack to all formats at once</div>
+            </div>
+            <button onClick={saveAsPack} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 500, border: "1px solid " + t.border, background: t.cardAlt, color: t.text, cursor: "pointer" }}>Save current as pack</button>
+          </div>
+
+          {/* Quick apply packs */}
+          {templatePacks.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: t.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Quick Apply</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {templatePacks.map(pack => (
+                  <button key={pack.id} onClick={() => applyPack(pack)} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "1px solid " + t.green + "30", background: t.green + "08", color: t.green }}>
+                    {pack.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload a new template */}
+          <div style={{ padding: 16, borderRadius: 10, border: "2px dashed " + t.border, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 2 }}>Upload a branded template</div>
+              <div style={{ fontSize: 10, color: t.textFaint }}>PNG at the target resolution. Video composited in the center. 16:9 → 1920×1080 · 1:1 → 1080×1080 · 4:5 → 1080×1350 · 9:16 → 1080×1920</div>
+            </div>
+            <input type="text" value={newTemplateName} onChange={(e) => setNewTemplateName(e.target.value)}
+              placeholder="Template name"
+              style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, width: 160 }} />
+            <select value={newTemplateFormat} onChange={(e) => setNewTemplateFormat(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13 }}>
+              <option value="9:16">9:16 (1080×1920)</option>
+              <option value="16:9">16:9 (1920×1080)</option>
+              <option value="1:1">1:1 (1080×1080)</option>
+              <option value="4:5">4:5 (1080×1350)</option>
+            </select>
+            <label style={{ padding: "8px 20px", borderRadius: 8, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              Upload PNG
+              <input type="file" accept=".png,.jpg,.jpeg,.webp" style={{ display: "none" }} onChange={(e) => handleTemplateUploadOnPage(e, newTemplateFormat)} />
+            </label>
+          </div>
+          {uploadStatus && <div style={{ fontSize: 11, color: uploadStatus.startsWith("Error") || uploadStatus.startsWith("Upload failed") ? (t.red || "#e55") : t.green, marginBottom: 12 }}>{uploadStatus}</div>}
+
+          {/* Uploaded templates list */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: t.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Uploaded Templates</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {templates.filter(tmpl => tmpl.type === "image").map(tmpl => (
+                <div key={tmpl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.cardAlt }}>
+                  {tmpl.image_url && <img src={tmpl.image_url} alt="" style={{ width: 32, height: 18, objectFit: "cover", borderRadius: 3 }} />}
+                  <span style={{ fontSize: 11, color: t.text }}>{tmpl.name}</span>
+                  <span style={{ fontSize: 9, color: t.textFaint }}>{tmpl.format}</span>
+                  <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ fontSize: 13, color: t.textFaint, background: "transparent", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>×</button>
+                </div>
+              ))}
+              {templates.filter(tmpl => tmpl.type === "image").length === 0 && (
+                <span style={{ fontSize: 11, color: t.textFaint, fontStyle: "italic" }}>No custom templates uploaded yet</span>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Time estimate */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
-          const effectiveDuration = ((trimEnd || dur) - (trimStart || 0)) / (playbackSpeed || 1);
           const hasTextOverlays = textOverlays.some(o => o.content.trim());
           const textOverhead = hasTextOverlays ? 2 : 0;
           const allFmtEstimates = [
@@ -7582,7 +7529,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             const tid = selectedTemplates[f.ratio];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
-            const seconds = (isBlur ? Math.round(effectiveDuration * 0.35) + 2 : 3) + textOverhead;
+            const seconds = (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
             const method = isBlur ? "blur" : tmpl.type;
             return { ...f, seconds, method, enabled: enabledFormats[f.ratio] };
           });
@@ -7611,7 +7558,6 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         {/* Reformat All button */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
-          const effectiveDuration = ((trimEnd || dur) - (trimStart || 0)) / (playbackSpeed || 1);
           const hasTextOverlays = textOverlays.some(o => o.content.trim());
           const textOverhead = hasTextOverlays ? 2 : 0;
           const allRatios = ["16:9", "1:1", "4:5", "9:16", ...customFormats.map(cf => cf.ratio)];
@@ -7620,7 +7566,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             const tid = selectedTemplates[r];
             const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
             const isBlur = !tmpl || tmpl.type === "blur";
-            return s + (isBlur ? Math.round(effectiveDuration * 0.35) + 2 : 3) + textOverhead;
+            return s + (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
           }, 3);
           const fmtLabels = allRatios.filter(r => enabledFormats[r]).join(" · ");
           return (

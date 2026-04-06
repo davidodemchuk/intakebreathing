@@ -41,14 +41,6 @@ function SettingsPanel({
   const [savedDeepgramKey, setSavedDeepgramKey] = useState("");
   const [mondayApiKey, setMondayApiKey] = useState("");
   const [mondayBoardId, setMondayBoardId] = useState("");
-  const [reformatTemplates, setReformatTemplates] = useState([]);
-  const [tmplFormatTab, setTmplFormatTab] = useState("all");
-  const [tmplUploadName, setTmplUploadName] = useState("");
-  const [tmplUploading, setTmplUploading] = useState(false);
-
-  const loadTemplates = useCallback(() => {
-    fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(d => setReformatTemplates(Array.isArray(d) ? d : [])).catch(() => {});
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -61,7 +53,6 @@ function SettingsPanel({
       if (mKey) setMondayApiKey(mKey);
       if (mBoard) setMondayBoardId(mBoard);
     })();
-    loadTemplates();
   }, []);
 
   return (
@@ -313,154 +304,6 @@ function SettingsPanel({
             </div>
           </div>
 
-          {/* Video Templates */}
-          {(() => {
-            const FORMAT_TABS = [
-              { key: "all", label: "All Formats", dims: null },
-              { key: "16:9", label: "16:9 Landscape", dims: "1920×1080" },
-              { key: "1:1", label: "1:1 Square", dims: "1080×1080" },
-              { key: "4:5", label: "4:5 Feed", dims: "1080×1350" },
-              { key: "9:16", label: "9:16 Story", dims: "1080×1920" },
-            ];
-            const FORMAT_DIMS = { "16:9": [1920, 1080], "1:1": [1080, 1080], "4:5": [1080, 1350], "9:16": [1080, 1920] };
-            const activeTab = FORMAT_TABS.find(f => f.key === tmplFormatTab) || FORMAT_TABS[0];
-            const visibleTemplates = reformatTemplates.filter(tmpl =>
-              tmplFormatTab === "all" ? tmpl.format === "all" : (tmpl.format === tmplFormatTab || tmpl.format === "all")
-            );
-            return (
-              <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
-                <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 4 }}>Video Templates</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>Backgrounds applied per format during video reformatting.</div>
-
-                {/* Format tabs */}
-                <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 16, paddingBottom: 2 }}>
-                  {FORMAT_TABS.map(tab => (
-                    <button key={tab.key} onClick={() => setTmplFormatTab(tab.key)} style={{ padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid " + (tmplFormatTab === tab.key ? t.green + "60" : t.border), background: tmplFormatTab === tab.key ? t.green + "14" : "transparent", color: tmplFormatTab === tab.key ? t.green : t.textMuted, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Template list */}
-                {visibleTemplates.length === 0 ? (
-                  <div style={{ fontSize: 12, color: t.textFaint, padding: "10px 0", marginBottom: 14 }}>No templates for this format yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-                    {visibleTemplates.map(tmpl => {
-                      const previewBg = tmpl.type === "image" && tmpl.image_url
-                        ? `url(${tmpl.image_url}) center/cover`
-                        : tmpl.type === "gradient" && tmpl.color_primary && tmpl.color_secondary
-                          ? `linear-gradient(to bottom, ${tmpl.color_primary}, ${tmpl.color_secondary})`
-                          : tmpl.color_primary || "#333";
-                      const isBuiltIn = tmpl.is_default && (tmpl.type === "blur" || tmpl.type === "solid");
-                      return (
-                        <div key={tmpl.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid " + (tmpl.is_default ? t.green + "40" : t.border), background: t.cardAlt }}>
-                          {/* Preview swatch */}
-                          <div style={{ width: 40, height: 40, borderRadius: 6, background: previewBg, flexShrink: 0, overflow: "hidden" }}>
-                            {tmpl.type === "image" && tmpl.image_url && <img src={tmpl.image_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                          </div>
-                          {/* Info */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: 12, fontWeight: 500, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tmpl.name}</span>
-                              {tmpl.is_default && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 4, background: t.green + "20", color: t.green, fontWeight: 600 }}>DEFAULT</span>}
-                            </div>
-                            <div style={{ fontSize: 10, color: t.textFaint }}>{tmpl.type} · {tmpl.format}</div>
-                          </div>
-                          {/* Set default */}
-                          {!tmpl.is_default && (
-                            <button onClick={async () => {
-                              await fetch(`/api/reformat-templates/${tmpl.id}/default`, { method: "PUT" });
-                              loadTemplates();
-                            }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer", whiteSpace: "nowrap" }}>Set default</button>
-                          )}
-                          {/* Upload PNG (for image type) */}
-                          {tmpl.type === "image" && (
-                            <label style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, border: "1px solid " + t.border, cursor: "pointer", color: t.textMuted, whiteSpace: "nowrap" }}>
-                              {tmpl.image_url ? "Replace PNG" : "Upload PNG"}
-                              <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const fd = new FormData();
-                                fd.append("image", file);
-                                const res = await fetch(`/api/reformat-templates/${tmpl.id}/upload`, { method: "POST", body: fd });
-                                if (res.ok) loadTemplates();
-                                else { const d = await res.json().catch(() => ({})); alert("Upload failed: " + (d.error || "unknown")); }
-                              }} />
-                            </label>
-                          )}
-                          {/* Delete */}
-                          {!isBuiltIn && (
-                            <button onClick={async () => {
-                              if (!confirm(`Delete "${tmpl.name}"?`)) return;
-                              await fetch(`/api/reformat-templates/${tmpl.id}`, { method: "DELETE" });
-                              loadTemplates();
-                            }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, border: "1px solid " + t.border, background: "transparent", color: t.red || "#ef4444", cursor: "pointer" }}>Delete</button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Upload new image template */}
-                {tmplFormatTab !== "all" && (
-                  <div style={{ padding: "12px 14px", background: t.cardAlt, borderRadius: 10, border: "1px dashed " + t.border }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 4 }}>Upload a {activeTab.label} template</div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 10 }}>PNG · {activeTab.dims}. The video will be composited in the center.</div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input value={tmplUploadName} onChange={e => setTmplUploadName(e.target.value)} placeholder="Template name..." style={{ flex: 1, padding: "7px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
-                      <label style={{ padding: "7px 14px", borderRadius: 6, border: "none", background: tmplUploadName.trim() ? t.green : t.cardAlt, color: tmplUploadName.trim() ? (t.isLight ? "#fff" : "#000") : t.textFaint, fontSize: 12, fontWeight: 500, cursor: tmplUploadName.trim() && !tmplUploading ? "pointer" : "not-allowed", whiteSpace: "nowrap", opacity: tmplUploading ? 0.6 : 1 }}>
-                        {tmplUploading ? "Uploading..." : "Choose PNG"}
-                        <input type="file" accept="image/png,image/jpeg,image/webp" disabled={!tmplUploadName.trim() || tmplUploading} style={{ display: "none" }} onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file || !tmplUploadName.trim()) return;
-                          // Validate dimensions client-side
-                          const dims = FORMAT_DIMS[tmplFormatTab];
-                          if (dims) {
-                            await new Promise(resolve => {
-                              const img = new Image();
-                              const url = URL.createObjectURL(file);
-                              img.onload = () => {
-                                URL.revokeObjectURL(url);
-                                if (img.width !== dims[0] || img.height !== dims[1]) {
-                                  alert(`Image must be ${dims[0]}×${dims[1]}px. Yours is ${img.width}×${img.height}px.`);
-                                }
-                                resolve();
-                              };
-                              img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-                              img.src = url;
-                            });
-                          }
-                          setTmplUploading(true);
-                          try {
-                            // 1. Create template record
-                            const createRes = await fetch("/api/reformat-templates", {
-                              method: "POST", headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ name: tmplUploadName.trim(), type: "image", format: tmplFormatTab }),
-                            });
-                            if (!createRes.ok) { const d = await createRes.json().catch(() => ({})); throw new Error(d.error || "Create failed"); }
-                            const created = await createRes.json();
-                            // 2. Upload image
-                            const fd = new FormData();
-                            fd.append("image", file);
-                            const upRes = await fetch(`/api/reformat-templates/${created.id}/upload`, { method: "POST", body: fd });
-                            if (!upRes.ok) { const d = await upRes.json().catch(() => ({})); throw new Error(d.error || "Upload failed"); }
-                            setTmplUploadName("");
-                            loadTemplates();
-                          } catch (err) {
-                            alert("Error: " + err.message);
-                          } finally {
-                            setTmplUploading(false);
-                          }
-                        }} />
-                      </label>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Team Password */}
           <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
