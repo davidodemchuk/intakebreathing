@@ -6339,7 +6339,7 @@ const FORMAT_PREVIEW_DIMS = {
   "9:16": { w: 1080, h: 1920, displayW: 135, displayH: 240 },
 };
 
-function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onUpdateOverlayPosition, onTemplateChange, templates, selectedTemplateId, selectedOverlayIndex, onSelectOverlay }) {
+function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onUpdateOverlayPosition, onTemplateChange, templates, selectedTemplateId, selectedOverlayIndex, onSelectOverlay, captionData, captionStyle }) {
   const containerRef = useRef(null);
   const [dragging, setDragging] = useState(null);
 
@@ -6402,6 +6402,27 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
         {previewFrame && <img src={previewFrame} alt="" style={{ position: "absolute", left: vidLeft, top: vidTop, width: vidDisplayW, height: vidDisplayH, objectFit: "contain" }} />}
 
         {/* Text overlays — free-placed */}
+        {/* Caption preview — first 6 words as static preview */}
+        {captionData && captionData.words.length > 0 && (() => {
+          const previewWords = captionData.words.slice(0, Math.min(6, captionData.words.length));
+          const previewText = previewWords.map(w => w.word).join(" ");
+          const scaledFont = Math.max(7, Math.round((captionStyle?.fontSize || 42) * scale * 0.7));
+          const hasBg = captionStyle?.background && captionStyle.background !== "none";
+          return (
+            <div style={{
+              position: "absolute", bottom: Math.round(dims.displayH * 0.12),
+              left: "50%", transform: "translateX(-50%)",
+              fontSize: scaledFont, fontWeight: 900,
+              color: captionStyle?.color || "#FFFFFF",
+              background: hasBg ? captionStyle.background : "transparent",
+              padding: hasBg ? `${Math.round(3 * scale)}px ${Math.round(6 * scale)}px` : 0,
+              borderRadius: 3, textAlign: "center", whiteSpace: "nowrap",
+              maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis",
+              pointerEvents: "none",
+            }}>{previewText}</div>
+          );
+        })()}
+
         {textOverlays.map((overlay, origIdx) => {
           if (!overlay.content?.trim()) return null;
           if (overlay.applyTo !== "all" && overlay.applyTo !== format.ratio) return null;
@@ -6482,6 +6503,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [newTemplateName, setNewTemplateName] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
   const [selectedOverlayIndex, setSelectedOverlayIndex] = useState(null);
+  const [captionData, setCaptionData] = useState(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [captionStyle, setCaptionStyle] = useState({ fontSize: 42, color: "#FFFFFF", highlightColor: "#00FEA9", background: "rgba(0,0,0,0.7)" });
 
   const toggleFormat = (ratio) => {
     setEnabledFormats(prev => {
@@ -6524,6 +6548,25 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
       setTimeout(() => setUploadStatus(""), 3000);
     } catch (err) {
       setUploadStatus("Error: " + err.message);
+    }
+  };
+
+  const handleTranscribe = async () => {
+    if (!video?.cacheId) { alert("Fetch a video first"); return; }
+    setIsTranscribing(true);
+    try {
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cacheId: video.cacheId }),
+      });
+      const data = await res.json();
+      if (data.error) { alert("Transcription failed: " + data.error); return; }
+      setCaptionData(data);
+    } catch (err) {
+      alert("Transcription error: " + err.message);
+    } finally {
+      setIsTranscribing(false);
     }
   };
 
@@ -6864,6 +6907,8 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             date: new Date().toLocaleDateString(),
           },
           estimatedSeconds: estimatedSecs || Math.round((video.cachedDuration || 16) * 0.35 * 4 + 3),
+          captionId: captionData?.captionId || null,
+          captionStyle: captionData ? captionStyle : null,
         }),
       });
       if (!res.ok) {
@@ -7183,6 +7228,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 <button onClick={() => { addOverlay(); setSelectedOverlayIndex(textOverlays.length); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: t.green + "15", border: "1px solid " + t.green + "40", color: t.green, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <span style={{ fontSize: 16, fontWeight: 700 }}>T</span> Add Text
                 </button>
+                <button onClick={handleTranscribe} disabled={isTranscribing || !video?.cacheId} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: t.card, border: "1px solid " + t.border, color: t.text, fontSize: 13, fontWeight: 500, cursor: (isTranscribing || !video?.cacheId) ? "not-allowed" : "pointer", opacity: (isTranscribing || !video?.cacheId) ? 0.5 : 1 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "monospace" }}>CC</span> {isTranscribing ? "Transcribing..." : "Add Captions"}
+                </button>
                 {previewFrame && <span style={{ fontSize: 11, color: t.textFaint }}>Drag text to reposition · click to select</span>}
               </div>
             </div>
@@ -7312,6 +7360,8 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                         selectedTemplateId={templateId}
                         selectedOverlayIndex={selectedOverlayIndex}
                         onSelectOverlay={setSelectedOverlayIndex}
+                        captionData={captionData}
+                        captionStyle={captionStyle}
                       />
                     </div>
                   </div>
@@ -7369,6 +7419,62 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
               </div>
             )}
           </div>
+
+        {/* Caption editor — shown after transcription */}
+        {captionData && (
+          <div style={{ padding: 16, borderRadius: 12, border: "1px solid " + t.border, background: t.card, marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>Auto-Captions</div>
+                <div style={{ fontSize: 11, color: t.textFaint }}>{captionData.wordCount} words · {Math.round(captionData.duration)}s</div>
+              </div>
+              <button onClick={() => setCaptionData(null)} style={{ fontSize: 11, color: t.red || "#ef4444", background: "transparent", border: "none", cursor: "pointer" }}>Remove captions</button>
+            </div>
+
+            {/* Editable transcript */}
+            <textarea
+              value={captionData.words.map(w => w.word).join(" ")}
+              onChange={(e) => {
+                const newWords = e.target.value.split(/\s+/).filter(Boolean);
+                const updatedWords = newWords.map((word, i) => ({
+                  word,
+                  start: captionData.words[i]?.start ?? (captionData.words[captionData.words.length - 1]?.end || 0),
+                  end: captionData.words[i]?.end ?? ((captionData.words[captionData.words.length - 1]?.end || 0) + 0.3),
+                  confidence: captionData.words[i]?.confidence ?? 1,
+                }));
+                setCaptionData(prev => ({ ...prev, words: updatedWords, wordCount: updatedWords.length }));
+              }}
+              style={{ width: "100%", minHeight: 80, padding: 12, borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 14, lineHeight: 1.6, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }}
+            />
+            <div style={{ fontSize: 10, color: t.textFaint, marginTop: 4, marginBottom: 12 }}>Edit the transcript above. Timestamps are preserved from the original transcription.</div>
+
+            {/* Caption style controls */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Size</div>
+                <input type="number" value={captionStyle.fontSize} onChange={(e) => setCaptionStyle(prev => ({ ...prev, fontSize: Number(e.target.value) }))}
+                  style={{ width: 60, padding: "4px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Text Color</div>
+                <div style={{ display: "flex", gap: 3 }}>
+                  {["#FFFFFF", "#000000", "#FFD700"].map(c => (
+                    <div key={c} onClick={() => setCaptionStyle(prev => ({ ...prev, color: c }))} style={{ width: 22, height: 22, borderRadius: 4, background: c, cursor: "pointer", border: captionStyle.color === c ? "2px solid " + t.green : "1px solid " + t.border }} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 4 }}>Background</div>
+                <select value={captionStyle.background} onChange={(e) => setCaptionStyle(prev => ({ ...prev, background: e.target.value }))}
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                  <option value="rgba(0,0,0,0.7)">Dark box</option>
+                  <option value="rgba(0,0,0,0.4)">Subtle dark</option>
+                  <option value="none">No background</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Text overlay list — mini summary chips so user knows what's added */}
         {textOverlays.length > 0 && (

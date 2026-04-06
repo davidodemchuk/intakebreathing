@@ -38,6 +38,7 @@ function SettingsPanel({
   const [savedTwilioSid, setSavedTwilioSid] = useState("");
   const [savedTwilioToken, setSavedTwilioToken] = useState("");
   const [savedTwilioPhone, setSavedTwilioPhone] = useState("");
+  const [savedDeepgramKey, setSavedDeepgramKey] = useState("");
   const [reformatTemplates, setReformatTemplates] = useState([]);
   const [tmplFormatTab, setTmplFormatTab] = useState("all");
   const [tmplUploadName, setTmplUploadName] = useState("");
@@ -49,11 +50,12 @@ function SettingsPanel({
 
   useEffect(() => {
     (async () => {
-      const [r, s, tk, p] = await Promise.all([dbGetSetting("resend-api-key"), dbGetSetting("twilio-account-sid"), dbGetSetting("twilio-auth-token"), dbGetSetting("twilio-phone-number")]);
+      const [r, s, tk, p, dg] = await Promise.all([dbGetSetting("resend-api-key"), dbGetSetting("twilio-account-sid"), dbGetSetting("twilio-auth-token"), dbGetSetting("twilio-phone-number"), dbGetSetting("deepgram-api-key")]);
       if (r) setSavedResend(r);
       if (s) setSavedTwilioSid(s);
       if (tk) setSavedTwilioToken(tk);
       if (p) setSavedTwilioPhone(p);
+      if (dg) setSavedDeepgramKey(dg);
     })();
     loadTemplates();
   }, []);
@@ -254,6 +256,27 @@ function SettingsPanel({
               <div style={{ display: "flex", gap: 8 }}>
                 <input id={instanceId + "-twilio-from"} type="text" defaultValue={savedTwilioPhone} placeholder="+15551234567" style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid " + (savedTwilioPhone ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
                 <button onClick={async () => { const sid = document.getElementById(instanceId + "-twilio-sid")?.value?.trim(); const tok = document.getElementById(instanceId + "-twilio-token")?.value?.trim(); const from = document.getElementById(instanceId + "-twilio-from")?.value?.trim(); if (!sid || !tok || !from) { alert("Fill all 3 Twilio fields."); return; } await dbSetSetting("twilio-account-sid", sid); await dbSetSetting("twilio-auth-token", tok); await dbSetSetting("twilio-phone-number", from); const testPhone = prompt("Enter a phone number to test SMS:", from); if (!testPhone) return; try { const r = await fetch("/api/test-sms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: testPhone }) }); r.ok ? alert("Twilio saved & test SMS sent!") : alert("Saved but test failed: " + (await r.json().catch(() => ({}))).error); } catch (e) { alert("Saved. Test failed: " + e.message); } }} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save & Test</button>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Services — Deepgram */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 4 }}>AI Services</div>
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: t.text, marginBottom: 2 }}>Auto-Captions (Deepgram)</div>
+              <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 8 }}>Powers auto-transcription in Intake Studio. Sign up at deepgram.com — $200 free credit included.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input id={instanceId + "-deepgram-key"} type="password" defaultValue={savedDeepgramKey}
+                  placeholder="dg_..."
+                  style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid " + (savedDeepgramKey ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box" }} />
+                <button onClick={async () => {
+                  const v = document.getElementById(instanceId + "-deepgram-key")?.value?.trim();
+                  if (!v) return;
+                  await dbSetSetting("deepgram-api-key", v);
+                  setSavedDeepgramKey(v);
+                  alert("Deepgram key saved");
+                }} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save</button>
               </div>
             </div>
           </div>

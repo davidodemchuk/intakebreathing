@@ -1009,7 +1009,134 @@ app.delete("/api/reformat-templates/:id", async (req, res) => {
   }
 });
 
+// ── Auto-captions: audio extraction + Deepgram transcription ──
+
+app.post("/api/transcribe", async (req, res) => {
+  const { cacheId } = req.body;
+  if (!cacheId) return res.status(400).json({ error: "cacheId required" });
+
+  let dgKeyValue;
+  try {
+    const { data: dgKey } = await supabaseServer.from("app_settings").select("value").eq("key", "deepgram-api-key").single();
+    dgKeyValue = dgKey?.value;
+  } catch (_) {}
+  if (!dgKeyValue) return res.status(400).json({ error: "Deepgram API key not configured. Add it in Settings." });
+
+  // Find cached video file
+  const entry = videoCache.get(cacheId);
+  if (!entry?.filePath || !fs.existsSync(entry.filePath)) {
+    return res.status(404).json({ error: "Cached video not found. Re-fetch the video first." });
+  }
+  const videoPath = entry.filePath;
+
+  const audioPath = path.join(os.tmpdir(), `audio-${cacheId}.wav`);
+  try {
+    // Extract audio as 16kHz mono WAV
+    await new Promise((resolve, reject) => {
+      execFile(FFMPEG, ["-i", videoPath, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", "-y", audioPath],
+        { timeout: 60000 }, (err) => err ? reject(err) : resolve());
+    });
+
+    const audioBuffer = fs.readFileSync(audioPath);
+
+    const dgResponse = await fetch(
+      "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&words=true",
+      {
+        method: "POST",
+        headers: { "Authorization": "Token " + dgKeyValue, "Content-Type": "audio/wav" },
+        body: audioBuffer,
+      }
+    );
+    if (!dgResponse.ok) {
+      const errText = await dgResponse.text();
+      throw new Error("Deepgram error " + dgResponse.status + ": " + errText.substring(0, 200));
+    }
+
+    const dgResult = await dgResponse.json();
+    const channels = dgResult.results?.channels || [];
+    const alternatives = channels[0]?.alternatives || [];
+    const dgWords = alternatives[0]?.words || [];
+    const transcript = alternatives[0]?.transcript || "";
+    const duration = dgResult.metadata?.duration || 0;
+
+    const words = dgWords.map(w => ({
+      word: w.punctuated_word || w.word || "",
+      start: w.start,
+      end: w.end,
+      confidence: w.confidence,
+    }));
+
+    // Save to reformat_captions
+    let captionId = null;
+    try {
+      const { data: caption } = await supabaseServer.from("reformat_captions").insert({
+        video_url: videoPath,
+        transcript: words,
+        status: "ready",
+        duration_seconds: duration,
+        word_count: words.length,
+      }).select("id").single();
+      captionId = caption?.id || null;
+    } catch (_) {}
+
+    try { fs.unlinkSync(audioPath); } catch (_) {}
+
+    res.json({ captionId, words, transcript, duration, wordCount: words.length });
+  } catch (err) {
+    try { fs.unlinkSync(audioPath); } catch (_) {}
+    console.error("[transcribe] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Background Reformat Jobs ──
+
+function buildCaptionFilters(caption, targetW, targetH) {
+  const words = caption.transcript || [];
+  if (words.length === 0) return "";
+  const style = caption.caption_style || {};
+  const fontSize = style.fontSize || 42;
+  const fontColor = (style.color || "#FFFFFF").replace("#", "0x");
+  const bgColor = style.background && style.background !== "none"
+    ? (() => {
+        const m = style.background.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (m) {
+          const r = parseInt(m[1]).toString(16).padStart(2, "0");
+          const g = parseInt(m[2]).toString(16).padStart(2, "0");
+          const b = parseInt(m[3]).toString(16).padStart(2, "0");
+          const a = m[4] != null ? parseFloat(m[4]).toFixed(2) : "0.70";
+          return `0x${r}${g}${b}@${a}`;
+        }
+        return "black@0.70";
+      })()
+    : null;
+
+  const y = Math.round(targetH * 0.82);
+  const x = "(w-text_w)/2";
+
+  // Group words into lines of max 6 words or at sentence boundaries
+  const lines = [];
+  let current = [];
+  words.forEach(w => {
+    current.push(w);
+    if (current.length >= 6 || /[.?!]$/.test(w.word)) {
+      lines.push([...current]);
+      current = [];
+    }
+  });
+  if (current.length > 0) lines.push(current);
+
+  const filters = lines.map(lineWords => {
+    const lineText = lineWords.map(w => w.word).join(" ")
+      .replace(/\\/g, "\\\\").replace(/'/g, "\u2019").replace(/:/g, "\\:");
+    const startTime = lineWords[0].start;
+    const endTime = lineWords[lineWords.length - 1].end;
+    const boxOpts = bgColor ? `:box=1:boxcolor=${bgColor}:boxborderw=12` : "";
+    return `drawtext=text='${lineText}':fontsize=${fontSize}:fontcolor=${fontColor}:x=${x}:y=${y}${boxOpts}:enable='between(t,${startTime},${endTime})'`;
+  });
+
+  return filters.join(",");
+}
 
 function buildTextOverlayFilters(overlays, targetW, targetH, videoDuration, formatRatio) {
   if (!Array.isArray(overlays) || overlays.length === 0) return "";
@@ -1173,16 +1300,28 @@ async function processReformatJob(jobId) {
     const resolvedOverlays = rawOverlays.map(o => ({ ...o, content: resolveVars(o.content || "") }));
     const textFilters = buildTextOverlayFilters(resolvedOverlays, fmt.width, fmt.height, srcDuration, fmt.ratio);
 
+    // Load captions if a captionId was saved in template_config
+    let captionFilters = "";
+    if (config.captionId) {
+      try {
+        const { data: caption } = await supabaseServer.from("reformat_captions").select("*").eq("id", config.captionId).single();
+        if (caption && Array.isArray(caption.transcript) && caption.transcript.length > 0) {
+          captionFilters = buildCaptionFilters(caption, fmt.width, fmt.height);
+        }
+      } catch (_) {}
+    }
+
+    // Combine all drawtext filters (text overlays + captions)
+    const allDrawtext = [textFilters, captionFilters].filter(Boolean).join(",");
+
     let finalFilterArgs = filterArgs;
-    if (textFilters) {
+    if (allDrawtext) {
       if (filterArgs[0] === "-vf") {
-        // Simple scale/pad chain — just append drawtext
-        finalFilterArgs = ["-vf", filterArgs[1] + "," + textFilters];
+        finalFilterArgs = ["-vf", filterArgs[1] + "," + allDrawtext];
       } else {
-        // -filter_complex: label the composite output, then chain drawtext into [vout]
         const fc = filterArgs[1];
         const fcLabeled = fc.replace(/overlay=\(W-w\)\/2:\(H-h\)\/2$/, "overlay=(W-w)/2:(H-h)/2[vtmp]");
-        finalFilterArgs = ["-filter_complex", fcLabeled + ";[vtmp]" + textFilters + "[vout]", "-map", "[vout]", "-map", "0:a?"];
+        finalFilterArgs = ["-filter_complex", fcLabeled + ";[vtmp]" + allDrawtext + "[vout]", "-map", "[vout]", "-map", "0:a?"];
       }
     }
 
@@ -1234,14 +1373,21 @@ async function processReformatJob(jobId) {
 }
 
 app.post("/api/reformat-job", async (req, res) => {
-  const { videoFilename, templateConfig, textOverlays, variables, estimatedSeconds } = req.body;
+  const { videoFilename, templateConfig, textOverlays, variables, estimatedSeconds, captionId, captionStyle } = req.body;
   const videoUrl = templateConfig?.videoUrls?.[0] || null;
-  // Merge textOverlays and variables into template_config so processReformatJob can read them
+  // Merge textOverlays, variables, and captionId into template_config so processReformatJob can read them
   const fullConfig = {
     ...(templateConfig || {}),
     textOverlays: Array.isArray(textOverlays) ? textOverlays : [],
     variables: variables || {},
+    captionId: captionId || null,
   };
+  // Save caption_style onto the caption record so processReformatJob sees it
+  if (captionId && captionStyle) {
+    try {
+      await supabaseServer.from("reformat_captions").update({ caption_style: captionStyle }).eq("id", captionId);
+    } catch (_) {}
+  }
   try {
     const { data: job, error } = await supabaseServer.from("reformat_jobs").insert({
       video_url: videoUrl,
