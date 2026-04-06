@@ -6494,6 +6494,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [savingOverlays, setSavingOverlays] = useState(false);
   const [previewFrame, setPreviewFrame] = useState(null);
   const [enabledFormats, setEnabledFormats] = useState({ "16:9": true, "1:1": true, "4:5": true, "9:16": true });
+  const [uploadingFormat, setUploadingFormat] = useState(null);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
 
   const toggleFormat = (ratio) => {
     setEnabledFormats(prev => {
@@ -6503,6 +6506,41 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
     });
   };
   const enabledCount = Object.values(enabledFormats).filter(Boolean).length;
+
+  const handleTemplateUploadOnPage = async (e, formatRatio) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!newTemplateName.trim()) { alert("Enter a template name first"); return; }
+    setUploadStatus("Creating template...");
+    try {
+      const createRes = await fetch("/api/reformat-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newTemplateName.trim(), type: "image", format: formatRatio }),
+      });
+      const template = await createRes.json();
+      if (!template.id) { setUploadStatus("Error: " + (template.error || "Failed to create template")); return; }
+      setUploadStatus("Uploading image...");
+      const formData = new FormData();
+      formData.append("image", file);
+      const uploadRes = await fetch(`/api/reformat-templates/${template.id}/upload`, { method: "POST", body: formData });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}));
+        setUploadStatus("Upload failed: " + (err.error || "Unknown error"));
+        return;
+      }
+      setUploadStatus("Template uploaded!");
+      setNewTemplateName("");
+      setUploadingFormat(null);
+      e.target.value = "";
+      const updated = await fetch("/api/reformat-templates").then(r => r.json());
+      setTemplates(Array.isArray(updated) ? updated : []);
+      setSelectedTemplates(prev => ({ ...prev, [formatRatio]: template.id }));
+      setTimeout(() => setUploadStatus(""), 3000);
+    } catch (err) {
+      setUploadStatus("Error: " + err.message);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
@@ -7191,7 +7229,57 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                   </div>
                 );
               })}
+
+              {/* Upload tile */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", alignSelf: "center" }}>
+                <div onClick={() => { setUploadingFormat(uploadingFormat ? null : "picker"); setUploadStatus(""); }}
+                  style={{ minWidth: 72, minHeight: 72, padding: 10, borderRadius: 10, cursor: "pointer", textAlign: "center", border: "2px dashed " + (uploadingFormat ? t.green : t.border), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, transition: "border-color 0.15s" }}>
+                  <span style={{ fontSize: 22, color: uploadingFormat ? t.green : t.textFaint, lineHeight: 1 }}>+</span>
+                  <span style={{ fontSize: 9, color: uploadingFormat ? t.green : t.textFaint, fontWeight: 500 }}>Upload</span>
+                </div>
+              </div>
             </div>
+
+            {/* Inline upload form — expands below the panels row */}
+            {uploadingFormat && (
+              <div style={{ padding: 16, borderRadius: 10, border: "1px solid " + t.border, background: t.card, marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 500, color: t.text, marginBottom: 4 }}>Upload a new template</div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 10 }}>
+                  PNG/JPG at the format's native resolution. The video gets composited in the center automatically.
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
+                  <div>
+                    <label style={{ fontSize: 10, color: t.textFaint, display: "block", marginBottom: 2 }}>Format</label>
+                    <select value={uploadingFormat === "picker" ? "" : uploadingFormat} onChange={(e) => setUploadingFormat(e.target.value || "picker")}
+                      style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                      <option value="">Select format…</option>
+                      <option value="16:9">16:9 Landscape (1920×1080)</option>
+                      <option value="1:1">1:1 Square (1080×1080)</option>
+                      <option value="4:5">4:5 Feed (1080×1350)</option>
+                      <option value="9:16">9:16 Story (1080×1920)</option>
+                      <option value="all">All formats</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: t.textFaint, display: "block", marginBottom: 2 }}>Template name</label>
+                    <input type="text" value={newTemplateName} onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder="e.g. Intake Branded 9:16"
+                      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, width: 200, boxSizing: "border-box" }} />
+                  </div>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: (uploadingFormat && uploadingFormat !== "picker") ? t.green : t.border, color: (uploadingFormat && uploadingFormat !== "picker") ? (t.isLight ? "#fff" : "#000") : t.textFaint, fontSize: 12, fontWeight: 500, cursor: (uploadingFormat && uploadingFormat !== "picker") ? "pointer" : "not-allowed" }}>
+                    Choose PNG
+                    <input type="file" accept=".png,.jpg,.jpeg,.webp" style={{ display: "none" }}
+                      disabled={!uploadingFormat || uploadingFormat === "picker"}
+                      onChange={(e) => handleTemplateUploadOnPage(e, uploadingFormat)} />
+                  </label>
+                  <button onClick={() => { setUploadingFormat(null); setNewTemplateName(""); setUploadStatus(""); }}
+                    style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, fontSize: 12, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                </div>
+                {uploadStatus && <div style={{ fontSize: 11, color: uploadStatus.startsWith("Error") || uploadStatus.startsWith("Upload failed") ? (t.red || "#e55") : t.green, marginTop: 4 }}>{uploadStatus}</div>}
+              </div>
+            )}
           </div>
 
         {/* Text overlays */}
