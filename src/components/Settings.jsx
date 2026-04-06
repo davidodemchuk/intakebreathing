@@ -39,6 +39,8 @@ function SettingsPanel({
   const [savedTwilioToken, setSavedTwilioToken] = useState("");
   const [savedTwilioPhone, setSavedTwilioPhone] = useState("");
   const [savedDeepgramKey, setSavedDeepgramKey] = useState("");
+  const [mondayApiKey, setMondayApiKey] = useState("");
+  const [mondayBoardId, setMondayBoardId] = useState("");
   const [reformatTemplates, setReformatTemplates] = useState([]);
   const [tmplFormatTab, setTmplFormatTab] = useState("all");
   const [tmplUploadName, setTmplUploadName] = useState("");
@@ -50,12 +52,14 @@ function SettingsPanel({
 
   useEffect(() => {
     (async () => {
-      const [r, s, tk, p, dg] = await Promise.all([dbGetSetting("resend-api-key"), dbGetSetting("twilio-account-sid"), dbGetSetting("twilio-auth-token"), dbGetSetting("twilio-phone-number"), dbGetSetting("deepgram-api-key")]);
+      const [r, s, tk, p, dg, mKey, mBoard] = await Promise.all([dbGetSetting("resend-api-key"), dbGetSetting("twilio-account-sid"), dbGetSetting("twilio-auth-token"), dbGetSetting("twilio-phone-number"), dbGetSetting("deepgram-api-key"), dbGetSetting("monday-api-key"), dbGetSetting("monday-board-id")]);
       if (r) setSavedResend(r);
       if (s) setSavedTwilioSid(s);
       if (tk) setSavedTwilioToken(tk);
       if (p) setSavedTwilioPhone(p);
       if (dg) setSavedDeepgramKey(dg);
+      if (mKey) setMondayApiKey(mKey);
+      if (mBoard) setMondayBoardId(mBoard);
     })();
     loadTemplates();
   }, []);
@@ -277,6 +281,34 @@ function SettingsPanel({
                   setSavedDeepgramKey(v);
                   alert("Deepgram key saved");
                 }} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", cursor: "pointer" }}>Save</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Monday.com Integration */}
+          <div style={{ background: t.card, borderRadius: 12, border: "1px solid " + t.border, padding: 20, boxShadow: t.shadow, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 500, color: t.text, marginBottom: 4 }}>Monday.com Integration</div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 16 }}>Send finished exports directly to your Monday.com ad pipeline board.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>API Token</div>
+                <input type="password" value={mondayApiKey} onChange={(e) => setMondayApiKey(e.target.value)}
+                  placeholder="Your Monday.com API token (Profile → Admin → API)"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid " + (mondayApiKey ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: t.textFaint, marginBottom: 2 }}>Default Board ID</div>
+                <input type="text" value={mondayBoardId} onChange={(e) => setMondayBoardId(e.target.value)}
+                  placeholder="Board ID from the board URL"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid " + (mondayBoardId ? t.green + "50" : t.border), background: t.inputBg, color: t.inputText, fontSize: 12, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <button onClick={async () => {
+                  if (!mondayApiKey.trim()) { alert("Enter an API token first"); return; }
+                  await dbSetSetting("monday-api-key", mondayApiKey.trim());
+                  if (mondayBoardId.trim()) await dbSetSetting("monday-board-id", mondayBoardId.trim());
+                  alert("Monday.com settings saved");
+                }} style={{ padding: "8px 20px", borderRadius: 8, background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer" }}>Save Monday Settings</button>
               </div>
             </div>
           </div>

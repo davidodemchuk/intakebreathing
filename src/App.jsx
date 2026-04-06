@@ -6206,6 +6206,26 @@ function ReformatNotificationBar({ job, setJob, t }) {
   const [expanded, setExpanded] = useState(false);
   const startTimeRef = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
+  const [mondaySending, setMondaySending] = useState(false);
+
+  const sendToMonday = async (jobId) => {
+    setMondaySending(true);
+    try {
+      const res = await fetch("/api/send-to-monday", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, itemName: jobData.video_filename ? `@${jobData.video_filename} — Studio Export` : "Studio Export" }),
+      });
+      const data = await res.json();
+      if (data.error) { alert("Monday.com error: " + data.error); return; }
+      const updated = await fetch("/api/reformat-job/" + jobId).then(r => r.json());
+      setJobData(updated);
+    } catch (err) {
+      alert("Monday.com error: " + err.message);
+    } finally {
+      setMondaySending(false);
+    }
+  };
 
   useEffect(() => {
     startTimeRef.current = Date.now();
@@ -6288,10 +6308,17 @@ function ReformatNotificationBar({ job, setJob, t }) {
 
         <div style={{ display: "flex", gap: 8, marginLeft: 16, flexShrink: 0 }}>
           {isComplete && (
-            <a href={"/api/reformat-job/" + jobData.id + "/download"} download
-              style={{ background: t.green, color: t.isLight ? "#fff" : "#000", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-              Download ZIP
-            </a>
+            <>
+              <a href={"/api/reformat-job/" + jobData.id + "/download"} download
+                style={{ background: t.green, color: t.isLight ? "#fff" : "#000", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                Download ZIP
+              </a>
+              <button onClick={() => !jobData.monday_sent_at && !mondaySending && sendToMonday(jobData.id)}
+                disabled={!!jobData.monday_sent_at || mondaySending}
+                style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: 500, background: jobData.monday_sent_at ? t.cardAlt : "#6C3CE1", color: "#fff", border: "none", cursor: (jobData.monday_sent_at || mondaySending) ? "default" : "pointer", opacity: (jobData.monday_sent_at || mondaySending) ? 0.7 : 1 }}>
+                {mondaySending ? "Sending..." : jobData.monday_sent_at ? "✓ Sent to Monday" : "Send to Monday.com"}
+              </button>
+            </>
           )}
           <button onClick={() => setJob(null)}
             style={{ background: "transparent", border: "none", color: t.textFaint, fontSize: 18, cursor: "pointer", padding: "0 4px" }}>
@@ -6503,6 +6530,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [newTemplateName, setNewTemplateName] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
   const [selectedOverlayIndex, setSelectedOverlayIndex] = useState(null);
+  const [templatePacks, setTemplatePacks] = useState([]);
   const [captionData, setCaptionData] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [captionStyle, setCaptionStyle] = useState({ fontSize: 42, color: "#FFFFFF", highlightColor: "#00FEA9", background: "rgba(0,0,0,0.7)" });
@@ -6572,7 +6600,30 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
 
   useEffect(() => {
     fetch("/api/reformat-templates").then(r => r.ok ? r.json() : []).then(data => setTemplates(Array.isArray(data) ? data : [])).catch(() => {});
+    fetch("/api/template-packs").then(r => r.ok ? r.json() : []).then(data => setTemplatePacks(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
+
+  const applyPack = (pack) => {
+    const pt = pack.templates || {};
+    setSelectedTemplates(prev => ({
+      "16:9": pt["16:9"] || prev["16:9"],
+      "1:1":  pt["1:1"]  || prev["1:1"],
+      "4:5":  pt["4:5"]  || prev["4:5"],
+      "9:16": pt["9:16"] || prev["9:16"],
+    }));
+  };
+
+  const saveAsPack = async () => {
+    const name = prompt("Pack name (e.g. Valentine's Day 2026):");
+    if (!name) return;
+    await fetch("/api/template-packs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, templates: selectedTemplates }),
+    });
+    const updated = await fetch("/api/template-packs").then(r => r.json());
+    setTemplatePacks(Array.isArray(updated) ? updated : []);
+  };
 
   // Load saved overlays when template selection changes
   useEffect(() => {
@@ -7220,6 +7271,20 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
       {/* Per-format template picker + estimate + Reformat button */}
       {video?.cacheId && (
         <div>
+          {/* Template packs */}
+          {templatePacks.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: t.textFaint, marginBottom: 6 }}>Quick apply a template pack</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {templatePacks.map(pack => (
+                  <button key={pack.id} onClick={() => applyPack(pack)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "1px solid " + t.border, background: t.cardAlt, color: t.text }}>
+                    {pack.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 4-panel live preview */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -7418,6 +7483,13 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                 {uploadStatus && <div style={{ fontSize: 11, color: uploadStatus.startsWith("Error") || uploadStatus.startsWith("Upload failed") ? (t.red || "#e55") : t.green, marginTop: 4 }}>{uploadStatus}</div>}
               </div>
             )}
+          </div>
+
+          {/* Save as pack */}
+          <div style={{ marginTop: 8, textAlign: "right" }}>
+            <button onClick={saveAsPack} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textMuted, cursor: "pointer" }}>
+              Save current templates as a pack
+            </button>
           </div>
 
         {/* Caption editor — shown after transcription */}

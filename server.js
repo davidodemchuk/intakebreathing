@@ -1009,6 +1009,115 @@ app.delete("/api/reformat-templates/:id", async (req, res) => {
   }
 });
 
+// ── Template Packs ──
+
+app.get("/api/template-packs", async (req, res) => {
+  try {
+    const { data } = await supabaseServer.from("template_packs").select("*").eq("is_active", true).order("sort_order");
+    res.json(data || []);
+  } catch (e) { res.json([]); }
+});
+
+app.post("/api/template-packs", async (req, res) => {
+  const { name, description, templates } = req.body;
+  try {
+    const { data, error } = await supabaseServer.from("template_packs").insert({ name, description: description || null, templates: templates || {}, is_active: true }).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/template-packs/:id", async (req, res) => {
+  try {
+    await supabaseServer.from("template_packs").delete().eq("id", req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Monday.com Integration ──
+
+app.post("/api/send-to-monday", async (req, res) => {
+  const { jobId, boardId, groupId, itemName, columnValues } = req.body;
+
+  let mondayKeyValue;
+  try {
+    const { data } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-api-key").single();
+    mondayKeyValue = data?.value;
+  } catch (_) {}
+  if (!mondayKeyValue) return res.status(400).json({ error: "Monday.com API key not configured. Add it in Settings." });
+
+  const { data: job } = await supabaseServer.from("reformat_jobs").select("*").eq("id", jobId).single();
+  if (!job || job.status !== "complete") return res.status(400).json({ error: "Job not complete" });
+
+  try {
+    let targetBoard = boardId;
+    if (!targetBoard) {
+      try {
+        const { data: bd } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-board-id").single();
+        targetBoard = bd?.value;
+      } catch (_) {}
+    }
+    if (!targetBoard) return res.status(400).json({ error: "No Monday.com board configured" });
+
+    const safeName = (itemName || job.video_filename || "Studio Export").replace(/"/g, '\\"');
+    const colJson = JSON.stringify(columnValues || {}).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+    const createRes = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Authorization": mondayKeyValue, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: `mutation { create_item (board_id: ${targetBoard}, ${groupId ? `group_id: "${groupId}",` : ""} item_name: "${safeName}", column_values: "${colJson}") { id } }` }),
+    });
+    const createData = await createRes.json();
+    const itemId = createData.data?.create_item?.id;
+    if (!itemId) throw new Error("Failed to create Monday item: " + JSON.stringify(createData.errors || createData).substring(0, 200));
+
+    // Upload ZIP if it exists on disk
+    if (job.zip_path && fs.existsSync(job.zip_path)) {
+      try {
+        const FormData = (await import("form-data")).default;
+        const form = new FormData();
+        form.append("query", `mutation { add_file_to_column (file: "file", item_id: ${itemId}, column_id: "files") { id } }`);
+        form.append("variables[file]", fs.createReadStream(job.zip_path), path.basename(job.zip_path));
+        const uploadRes = await fetch("https://api.monday.com/v2/file", {
+          method: "POST",
+          headers: { "Authorization": mondayKeyValue, ...form.getHeaders() },
+          body: form,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.errors) console.warn("[monday] File upload warning:", JSON.stringify(uploadData.errors));
+      } catch (upErr) {
+        console.warn("[monday] File upload failed (item created):", upErr.message);
+      }
+    }
+
+    await supabaseServer.from("reformat_jobs").update({ monday_item_id: String(itemId), monday_sent_at: new Date().toISOString() }).eq("id", jobId);
+    res.json({ success: true, itemId, boardId: targetBoard });
+  } catch (err) {
+    console.error("[monday] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/monday-boards", async (req, res) => {
+  let mondayKeyValue;
+  try {
+    const { data } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-api-key").single();
+    mondayKeyValue = data?.value;
+  } catch (_) {}
+  if (!mondayKeyValue) return res.status(400).json({ error: "Monday.com API key not configured" });
+  try {
+    const r = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Authorization": mondayKeyValue, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "{ boards (limit: 50) { id name groups { id title } } }" }),
+    });
+    const data = await r.json();
+    res.json(data.data?.boards || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Auto-captions: audio extraction + Deepgram transcription ──
 
 app.post("/api/transcribe", async (req, res) => {
