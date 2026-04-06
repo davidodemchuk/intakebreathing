@@ -1036,131 +1036,160 @@ app.delete("/api/template-packs/:id", async (req, res) => {
 
 // ── Monday.com Integration ──
 
-app.post("/api/send-to-monday", async (req, res) => {
-  const { jobId, groupId, creatorHandle, videoDescription } = req.body;
-
+// Shared Monday.com send logic — used by the API endpoint and auto-send on job complete
+async function sendJobToMonday(jobId, creatorHandle, videoDescription, groupId) {
   let mondayKeyValue;
   try {
     const { data } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-api-key").single();
     mondayKeyValue = data?.value;
   } catch (_) {}
-  if (!mondayKeyValue) return res.status(400).json({ error: "Monday.com API key not configured. Add it in Settings." });
+  if (!mondayKeyValue) throw new Error("Monday.com API key not configured");
 
   let boardId;
   try {
     const { data: bd } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-board-id").single();
     boardId = bd?.value;
   } catch (_) {}
-  if (!boardId) return res.status(400).json({ error: "Monday.com board ID not configured. Add it in Settings." });
+  if (!boardId) throw new Error("Monday.com board ID not configured");
 
   const { data: job } = await supabaseServer.from("reformat_jobs").select("*").eq("id", jobId).single();
-  if (!job || job.status !== "complete") return res.status(400).json({ error: "Job not complete" });
+  if (!job) throw new Error("Job not found");
+
+  const apiKey = mondayKeyValue;
+
+  // Step 1: Discover columns and groups
+  const colQuery = `{ boards(ids: [${boardId}]) { columns { id title type } groups { id title } } }`;
+  const colRes = await fetch("https://api.monday.com/v2", {
+    method: "POST",
+    headers: { "Authorization": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: colQuery }),
+  });
+  const colData = await colRes.json();
+  const columns = colData.data?.boards?.[0]?.columns || [];
+  const groups  = colData.data?.boards?.[0]?.groups  || [];
+
+  const findCol = (...terms) => {
+    for (const term of terms) {
+      const col = columns.find(c => c.title.toLowerCase().includes(term.toLowerCase()));
+      if (col) return col;
+    }
+    return null;
+  };
+
+  const adTypeCol   = findCol("ad type", "ad_type");
+  const handleCol   = findCol("creator handle", "creator_handle", "handle");
+  const dateCol     = findCol("date added", "date_added", "date");
+  const priorityCol = findCol("priority");
+  const filesCol    = findCol("final files", "final_files", "files", "file");
+
+  // Step 2: Build column values
+  const handle = (creatorHandle || job.template_config?.creatorHandle || job.template_config?.variables?.creator_handle || job.video_filename || "").replace(/^@/, "");
+  const columnValues = {};
+
+  if (adTypeCol) {
+    if (adTypeCol.type === "status") {
+      columnValues[adTypeCol.id] = { label: "Creator" };
+    } else if (adTypeCol.type === "dropdown") {
+      columnValues[adTypeCol.id] = { labels: ["Creator"] };
+    } else {
+      columnValues[adTypeCol.id] = "Creator";
+    }
+  }
+  if (handleCol) {
+    columnValues[handleCol.id] = handle ? `@${handle}` : "";
+  }
+  if (dateCol) {
+    columnValues[dateCol.id] = { date: new Date().toISOString().split("T")[0] };
+  }
+  if (priorityCol && priorityCol.type === "status") {
+    columnValues[priorityCol.id] = { label: "Normal" };
+  }
+
+  // Step 3: Determine target group
+  let targetGroup = groupId || null;
+  if (!targetGroup && groups.length > 0) {
+    const monthNames = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+    const curMonth = monthNames[new Date().getMonth()];
+    const curYear  = String(new Date().getFullYear());
+    const monthGroup = groups.find(g => g.title.toLowerCase().includes(curMonth) && g.title.includes(curYear));
+    targetGroup = monthGroup?.id || groups[0]?.id;
+  }
+
+  // Step 4: Create item using GraphQL variables (avoids JSON escaping issues)
+  const descPart = videoDescription ? ` — ${videoDescription.substring(0, 50)}` : "";
+  const itemName = handle ? `@${handle}${descPart}` : (job.video_filename || "Studio Export");
+
+  const createQuery = `mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!, $groupId: String) {
+    create_item (board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id }
+  }`;
+  const createVars = {
+    boardId: String(boardId),
+    itemName: itemName.substring(0, 255),
+    columnValues: JSON.stringify(columnValues),
+    groupId: targetGroup || null,
+  };
+  const createRes = await fetch("https://api.monday.com/v2", {
+    method: "POST",
+    headers: { "Authorization": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: createQuery, variables: createVars }),
+  });
+  const createData = await createRes.json();
+  if (createData.errors) {
+    console.error("[monday] Create item errors:", JSON.stringify(createData.errors));
+    throw new Error("Monday API error: " + JSON.stringify(createData.errors).substring(0, 300));
+  }
+  const itemId = createData.data?.create_item?.id;
+  if (!itemId) throw new Error("Failed to create Monday item: " + JSON.stringify(createData).substring(0, 200));
+
+  // Step 5: Upload ZIP (non-fatal)
+  if (filesCol && job.zip_path && fs.existsSync(job.zip_path)) {
+    try {
+      const FormData = (await import("form-data")).default;
+      const form = new FormData();
+      form.append("query", `mutation ($file: File!) { add_file_to_column (file: $file, item_id: ${itemId}, column_id: "${filesCol.id}") { id } }`);
+      form.append("variables[file]", fs.createReadStream(job.zip_path), path.basename(job.zip_path));
+      const uploadRes = await fetch("https://api.monday.com/v2/file", {
+        method: "POST",
+        headers: { "Authorization": apiKey, ...form.getHeaders() },
+        body: form,
+      });
+      const uploadData = await uploadRes.json();
+      if (uploadData.errors) console.warn("[monday] File upload warning:", JSON.stringify(uploadData.errors));
+    } catch (upErr) {
+      console.warn("[monday] File upload failed (item was still created):", upErr.message);
+    }
+  }
+
+  // Step 6: Record on job
+  try {
+    await supabaseServer.from("reformat_jobs").update({
+      monday_item_id: String(itemId),
+      monday_sent_at: new Date().toISOString(),
+    }).eq("id", jobId);
+  } catch (e) {
+    console.warn("[monday] Failed to update job record:", e.message);
+  }
+
+  return { itemId, boardId };
+}
+
+app.post("/api/send-to-monday", async (req, res) => {
+  const { jobId, groupId, creatorHandle, videoDescription } = req.body;
+
+  // Verify job exists and is complete before exposing errors to client
+  let mondayKeyCheck;
+  try {
+    const { data } = await supabaseServer.from("app_settings").select("value").eq("key", "monday-api-key").single();
+    mondayKeyCheck = data?.value;
+  } catch (_) {}
+  if (!mondayKeyCheck) return res.status(400).json({ error: "Monday.com API key not configured. Add it in Settings." });
+
+  const { data: jobCheck } = await supabaseServer.from("reformat_jobs").select("status").eq("id", jobId).single();
+  if (!jobCheck || jobCheck.status !== "complete") return res.status(400).json({ error: "Job not complete" });
 
   try {
-    const apiKey = mondayKeyValue;
-
-    // Step 1: Discover column IDs and groups from the board
-    const colQuery = `{ boards(ids: [${boardId}]) { columns { id title type } groups { id title } } }`;
-    const colRes = await fetch("https://api.monday.com/v2", {
-      method: "POST",
-      headers: { "Authorization": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: colQuery }),
-    });
-    const colData = await colRes.json();
-    const columns = colData.data?.boards?.[0]?.columns || [];
-    const groups = colData.data?.boards?.[0]?.groups || [];
-
-    // Map column titles to IDs (case-insensitive partial match, first term wins)
-    const findCol = (...searchTerms) => {
-      for (const term of searchTerms) {
-        const col = columns.find(c => c.title.toLowerCase().includes(term.toLowerCase()));
-        if (col) return col;
-      }
-      return null;
-    };
-
-    const adTypeCol   = findCol("ad type", "ad_type");
-    const handleCol   = findCol("creator handle", "creator_handle", "handle");
-    const dateCol     = findCol("date added", "date_added", "date");
-    const priorityCol = findCol("priority");
-    const filesCol    = findCol("final files", "final_files", "files", "file");
-
-    // Build column values
-    const handle = creatorHandle || job.template_config?.variables?.creator_handle || job.video_filename || "";
-    const columnValues = {};
-
-    if (adTypeCol) {
-      columnValues[adTypeCol.id] = (adTypeCol.type === "status" || adTypeCol.type === "dropdown")
-        ? { label: "Creator" } : "Creator";
-    }
-    if (handleCol) {
-      columnValues[handleCol.id] = handle ? `@${handle.replace(/^@/, "")}` : "";
-    }
-    if (dateCol) {
-      columnValues[dateCol.id] = { date: new Date().toISOString().split("T")[0] };
-    }
-    if (priorityCol && priorityCol.type === "status") {
-      columnValues[priorityCol.id] = { label: "Normal" };
-    }
-
-    // Step 2: Determine target group (current month or first group)
-    let targetGroup = groupId;
-    if (!targetGroup && groups.length > 0) {
-      const monthNames = ["january","february","march","april","may","june","july","august","september","october","november","december"];
-      const curMonth = monthNames[new Date().getMonth()];
-      const curYear = String(new Date().getFullYear());
-      const monthGroup = groups.find(g => g.title.toLowerCase().includes(curMonth) && g.title.includes(curYear));
-      targetGroup = monthGroup?.id || groups[0]?.id;
-    }
-
-    // Step 3: Create item
-    const handleDisplay = handle ? `@${handle.replace(/^@/, "")}` : null;
-    const descPart = videoDescription ? ` — ${videoDescription.substring(0, 50)}` : "";
-    const itemName = (handleDisplay ? handleDisplay + descPart : job.video_filename || "Studio Export");
-    const escapedName = itemName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    const escapedValues = JSON.stringify(JSON.stringify(columnValues));
-
-    const createQuery = `mutation { create_item (board_id: ${boardId}${targetGroup ? `, group_id: "${targetGroup}"` : ""}, item_name: "${escapedName}", column_values: ${escapedValues}) { id } }`;
-    const createRes = await fetch("https://api.monday.com/v2", {
-      method: "POST",
-      headers: { "Authorization": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: createQuery }),
-    });
-    const createData = await createRes.json();
-    if (createData.errors) throw new Error("Monday API error: " + JSON.stringify(createData.errors).substring(0, 300));
-    const itemId = createData.data?.create_item?.id;
-    if (!itemId) throw new Error("Failed to create Monday item: " + JSON.stringify(createData).substring(0, 200));
-
-    // Step 4: Upload ZIP to discovered files column (non-fatal)
-    if (filesCol && job.zip_path && fs.existsSync(job.zip_path)) {
-      try {
-        const FormData = (await import("form-data")).default;
-        const form = new FormData();
-        form.append("query", `mutation ($file: File!) { add_file_to_column (file: $file, item_id: ${itemId}, column_id: "${filesCol.id}") { id } }`);
-        form.append("variables[file]", fs.createReadStream(job.zip_path), path.basename(job.zip_path));
-        const uploadRes = await fetch("https://api.monday.com/v2/file", {
-          method: "POST",
-          headers: { "Authorization": apiKey, ...form.getHeaders() },
-          body: form,
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadData.errors) console.warn("[monday] File upload warning:", JSON.stringify(uploadData.errors));
-      } catch (upErr) {
-        console.warn("[monday] File upload failed (item was still created):", upErr.message);
-      }
-    }
-
-    // Step 5: Record on job
-    try {
-      await supabaseServer.from("reformat_jobs").update({
-        monday_item_id: String(itemId),
-        monday_sent_at: new Date().toISOString(),
-      }).eq("id", jobId);
-    } catch (e) {
-      console.warn("[monday] Failed to update job record:", e.message);
-    }
-
-    res.json({ success: true, itemId, boardId });
+    const result = await sendJobToMonday(jobId, creatorHandle, videoDescription, groupId);
+    res.json({ success: true, ...result });
   } catch (err) {
     console.error("[monday] Error:", err.message);
     res.status(500).json({ error: err.message });
@@ -1595,6 +1624,19 @@ async function processReformatJob(jobId) {
   }).eq("id", jobId);
 
   console.log(`[job:${jobId}] Complete — ZIP ${(zipStats.size / 1048576).toFixed(1)}MB`);
+
+  // Auto-send to Monday.com if destination includes it
+  const destination = config.exportDestination;
+  if (destination === "monday" || destination === "both") {
+    try {
+      const creatorHandle = config.creatorHandle || config.variables?.creator_handle || job.video_filename || "";
+      const videoDescription = config.videoDescription || "";
+      await sendJobToMonday(jobId, creatorHandle, videoDescription, null);
+      console.log(`[job:${jobId}] Auto-sent to Monday.com`);
+    } catch (err) {
+      console.error(`[job:${jobId}] Auto-send to Monday failed (non-fatal):`, err.message);
+    }
+  }
 }
 
 app.post("/api/reformat-job", async (req, res) => {

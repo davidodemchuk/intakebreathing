@@ -6286,7 +6286,12 @@ function ReformatNotificationBar({ job, setJob, t }) {
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>
-              {isComplete ? "Video ready — Download ZIP"
+              {isComplete ? (() => {
+                  const dest = jobData.template_config?.exportDestination || "download";
+                  if (dest === "monday") return "Video ready — sending to Monday.com";
+                  if (dest === "both") return "Video ready — Download + Monday.com";
+                  return "Video ready — Download ZIP";
+                })()
                 : isFailed ? "Processing failed"
                 : isZipping ? "Zipping all formats..."
                 : `Processing... ${progress.formats_done || 0}/${progress.formats_total || 4} formats`}
@@ -6310,20 +6315,31 @@ function ReformatNotificationBar({ job, setJob, t }) {
           )}
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginLeft: 16, flexShrink: 0 }}>
-          {isComplete && (
-            <>
-              <a href={"/api/reformat-job/" + jobData.id + "/download"} download
-                style={{ background: t.green, color: t.isLight ? "#fff" : "#000", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-                Download ZIP
-              </a>
-              <button onClick={() => !jobData.monday_sent_at && !mondaySending && sendToMonday(jobData.id)}
-                disabled={!!jobData.monday_sent_at || mondaySending}
-                style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: 500, background: jobData.monday_sent_at ? t.cardAlt : "#6C3CE1", color: "#fff", border: "none", cursor: (jobData.monday_sent_at || mondaySending) ? "default" : "pointer", opacity: (jobData.monday_sent_at || mondaySending) ? 0.7 : 1 }}>
-                {mondaySending ? "Sending..." : jobData.monday_sent_at ? "✓ Sent to Monday" : "Send to Monday.com"}
-              </button>
-            </>
-          )}
+        <div style={{ display: "flex", gap: 8, marginLeft: 16, flexShrink: 0, alignItems: "center" }}>
+          {isComplete && (() => {
+            const dest = jobData.template_config?.exportDestination || "download";
+            const showDownload = dest === "download" || dest === "both";
+            const showMonday   = dest === "monday"   || dest === "both";
+            return (
+              <>
+                {showDownload && (
+                  <a href={"/api/reformat-job/" + jobData.id + "/download"} download
+                    style={{ background: t.green, color: "#fff", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                    Download ZIP
+                  </a>
+                )}
+                {showMonday && !jobData.monday_sent_at && (
+                  <button onClick={() => !mondaySending && sendToMonday(jobData.id)} disabled={mondaySending}
+                    style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: 500, background: "#6C3CE1", color: "#fff", border: "none", cursor: mondaySending ? "default" : "pointer", opacity: mondaySending ? 0.7 : 1 }}>
+                    {mondaySending ? "Sending..." : "Send to Monday.com"}
+                  </button>
+                )}
+                {showMonday && jobData.monday_sent_at && (
+                  <span style={{ fontSize: 13, color: "#6C3CE1", fontWeight: 500 }}>✓ Sent to Monday</span>
+                )}
+              </>
+            );
+          })()}
           <button onClick={() => setJob(null)}
             style={{ background: "transparent", border: "none", color: t.textFaint, fontSize: 18, cursor: "pointer", padding: "0 4px" }}>
             ×
@@ -6541,6 +6557,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [showCustomRatioInput, setShowCustomRatioInput] = useState(false);
   const [customRatioInput, setCustomRatioInput] = useState("");
   const [newTemplateFormat, setNewTemplateFormat] = useState("9:16");
+  const [exportDestination, setExportDestination] = useState("download");
   const [templatePacks, setTemplatePacks] = useState([]);
   const [captionData, setCaptionData] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -6991,6 +7008,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             cacheId: video.cacheId,
             videoUrls: video.videoUrls || [video.videoUrl],
             enabledFormats,
+            exportDestination,
+            creatorHandle: video.authorHandle || "",
+            videoDescription: video.caption || "",
           },
           textOverlays: textOverlays.filter(o => o.content.trim()),
           variables: {
@@ -7514,48 +7534,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
           </div>
         </div>
 
-        {/* Time estimate */}
-        {(() => {
-          const dur = video.cachedDuration || video.duration || 16;
-          const hasTextOverlays = textOverlays.some(o => o.content.trim());
-          const textOverhead = hasTextOverlays ? 2 : 0;
-          const allFmtEstimates = [
-            { ratio: "16:9", label: "16:9 Landscape" },
-            { ratio: "1:1", label: "1:1 Square" },
-            { ratio: "4:5", label: "4:5 Feed" },
-            { ratio: "9:16", label: "9:16 Story" },
-            ...customFormats.map(cf => ({ ratio: cf.ratio, label: cf.label })),
-          ].map(f => {
-            const tid = selectedTemplates[f.ratio];
-            const tmpl = tid ? templates.find(x => x.id === tid) : templates.find(x => x.is_default);
-            const isBlur = !tmpl || tmpl.type === "blur";
-            const seconds = (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
-            const method = isBlur ? "blur" : tmpl.type;
-            return { ...f, seconds, method, enabled: enabledFormats[f.ratio] };
-          });
-          const total = allFmtEstimates.filter(e => e.enabled).reduce((s, e) => s + e.seconds, 0) + 3;
-          const totalLabel = total < 60 ? total + "s" : Math.floor(total / 60) + "m " + (total % 60) + "s";
-          return (
-            <div style={{ padding: "14px 18px", borderRadius: 10, background: t.cardAlt, border: "1px solid " + t.border, marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Estimated processing time</span>
-                <span style={{ fontSize: 15, fontWeight: 500, color: t.green }}>{totalLabel}</span>
-              </div>
-              {allFmtEstimates.map(e => (
-                <div key={e.ratio} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: e.enabled ? t.textFaint : t.border, padding: "2px 0", textDecoration: e.enabled ? "none" : "line-through" }}>
-                  <span>{e.label} ({e.method})</span>
-                  <span>{e.enabled ? `~${e.seconds}s` : "skipped"}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.textFaint, padding: "2px 0", borderTop: "1px solid " + t.border + "40", marginTop: 4 }}>
-                <span>ZIP bundling</span>
-                <span>~3s</span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Reformat All button */}
+        {/* Export section */}
         {(() => {
           const dur = video.cachedDuration || video.duration || 16;
           const hasTextOverlays = textOverlays.some(o => o.content.trim());
@@ -7568,15 +7547,48 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             const isBlur = !tmpl || tmpl.type === "blur";
             return s + (isBlur ? Math.round(dur * 0.35) + 2 : 3) + textOverhead;
           }, 3);
-          const fmtLabels = allRatios.filter(r => enabledFormats[r]).join(" · ");
+          const destBtnStyle = (active, accent) => ({
+            flex: 1, padding: "14px 16px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+            border: active ? `2px solid ${accent}` : `2px solid ${t.border}`,
+            background: active ? accent + "10" : "transparent",
+          });
           return (
-            <>
+            <div style={{ padding: 20, borderRadius: 12, border: "1px solid " + t.border, background: t.card, marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 16 }}>
+                Estimated processing: <span style={{ color: t.green, fontWeight: 600 }}>~{totalEst}s</span> for <strong>{enabledCount}</strong> format{enabledCount !== 1 ? "s" : ""}
+              </div>
+
+              <div style={{ fontSize: 11, fontWeight: 500, color: t.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>After processing, I want to:</div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                <button onClick={() => setExportDestination("download")} style={destBtnStyle(exportDestination === "download", t.green)}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: exportDestination === "download" ? t.green : t.text }}>📥 Download ZIP</div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Download all formats to my computer</div>
+                </button>
+                <button onClick={() => setExportDestination("monday")} style={destBtnStyle(exportDestination === "monday", "#6C3CE1")}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: exportDestination === "monday" ? "#6C3CE1" : t.text }}>
+                    <span style={{ background: "#6C3CE1", color: "#fff", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 6 }}>monday</span>
+                    Send to Pipeline
+                  </div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Send to Monday.com ad pipeline board</div>
+                </button>
+                <button onClick={() => setExportDestination("both")} style={destBtnStyle(exportDestination === "both", t.green)}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: exportDestination === "both" ? t.green : t.text }}>
+                    📥 + <span style={{ background: "#6C3CE1", color: "#fff", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>monday</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>Download ZIP and send to Monday.com</div>
+                </button>
+              </div>
+
               <button type="button" onClick={() => handleReformatJob(totalEst)} disabled={jobSubmitting}
-                style={{ width: "100%", padding: "12px 24px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 600, cursor: jobSubmitting ? "not-allowed" : "pointer", opacity: jobSubmitting ? 0.7 : 1, marginBottom: 6 }}>
-                {jobSubmitting ? "Starting job..." : `Export ${enabledCount} format${enabledCount !== 1 ? "s" : ""} (${fmtLabels})`}
+                style={{ width: "100%", padding: "16px 24px", borderRadius: 12, border: "none", background: exportDestination === "monday" ? "#6C3CE1" : t.green, color: "#fff", fontSize: 16, fontWeight: 600, cursor: jobSubmitting ? "not-allowed" : "pointer", opacity: jobSubmitting ? 0.7 : 1, marginBottom: 6 }}>
+                {jobSubmitting ? "Starting job..." : (
+                  exportDestination === "download" ? `Export ${enabledCount} format${enabledCount !== 1 ? "s" : ""} — Download ZIP` :
+                  exportDestination === "monday"   ? `Export ${enabledCount} format${enabledCount !== 1 ? "s" : ""} — Send to Monday.com` :
+                                                     `Export ${enabledCount} format${enabledCount !== 1 ? "s" : ""} — Download + Monday.com`
+                )}
               </button>
-              <div style={{ fontSize: 11, color: t.textFaint, textAlign: "center" }}>Exports in background — you can navigate away</div>
-            </>
+              <div style={{ fontSize: 11, color: t.textFaint, textAlign: "center" }}>Processes in background — you can navigate away</div>
+            </div>
           );
         })()}
       </div>
