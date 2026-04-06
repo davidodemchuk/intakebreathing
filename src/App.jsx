@@ -2418,6 +2418,7 @@ async function processElevenPlatformApiResults(cleanHandle, igHandle, raw, exist
   let ttAvgShares = 0;
   let ttEngRate = null;
   let ttBestVideo = null;
+  let ttMedianViewsStored = null;
 
   if (ttVideos) {
     const vidRoot = ttVideos?.data ?? ttVideos;
@@ -2466,7 +2467,7 @@ async function processElevenPlatformApiResults(cleanHandle, igHandle, raw, exist
       ttAvgLikes = Math.round(totalL / count);
       ttAvgComments = Math.round(totalC / count);
       ttAvgShares = Math.round(totalS / count);
-      const ttMedianViewsStored = medianOf(ttRecentVideos.map(v => v.views || 0).filter(v => v > 0));
+      ttMedianViewsStored = medianOf(ttRecentVideos.map(v => v.views || 0).filter(v => v > 0));
       const ttFollowerCount = tiktokData?.followers;
       if (ttFollowerCount && ttFollowerCount > 0 && recent.length > 0) {
         const avgEng = ttAvgLikes + ttAvgComments + ttAvgShares;
