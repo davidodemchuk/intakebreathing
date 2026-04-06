@@ -759,7 +759,7 @@ const ROUTES = {
   "/channel-pipeline": "pipeline",
   "/influencer-buys": "influencer",
   "/tools": "tools",
-  "/tools/video-reformatter": "videotool",
+  "/studio": "videotool",
   "/settings": "settings",
   "/source-of-truth": "sourceOfTruth",
   "/change-requests": "changeRequests",
@@ -788,7 +788,7 @@ const VIEW_TO_PATH = {
   pipeline: "/channel-pipeline",
   influencer: "/influencer-buys",
   tools: "/tools",
-  videotool: "/tools/video-reformatter",
+  videotool: "/studio",
   settings: "/settings",
   sourceOfTruth: "/source-of-truth",
   changeRequests: "/change-requests",
@@ -6143,7 +6143,7 @@ function CampaignDetailView({ campaignId, navigate, t, S, creators, library, dbS
 }
 
 // ═══════════════════════════════════════════════════════════
-// DASHBOARD / TOOLS — Video Reformatter
+// DASHBOARD / TOOLS — Intake Studio
 // ═══════════════════════════════════════════════════════════
 
 function ComingSoonPage({ title, message, onBack }) {
@@ -6192,9 +6192,9 @@ function ToolsPage({ onBack, onOpenVideo }) {
         }}
       >
         <div style={{ marginBottom: 14 }}><CardIcon type="video" color={t.blue} /></div>
-        <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Video Reformatter</div>
+        <div style={{ fontSize: 18, fontWeight: 500, color: t.text, marginBottom: 4 }}>Intake Studio</div>
         <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}>
-          Paste a TikTok or Instagram URL or upload a file — download the original and use the ad format reference for Meta, YouTube, and TikTok placements
+          Brand your creator content — templates, captions, multi-format export for Meta, YouTube, and TikTok placements
         </div>
       </div>
     </div>
@@ -6265,7 +6265,7 @@ function ReformatNotificationBar({ job, setJob, t }) {
               {isComplete ? "Video ready — Download ZIP"
                 : isFailed ? "Processing failed"
                 : isZipping ? "Zipping all formats..."
-                : `Reformatting... ${progress.formats_done || 0}/${progress.formats_total || 4} formats`}
+                : `Processing... ${progress.formats_done || 0}/${progress.formats_total || 4} formats`}
             </div>
             <div style={{ fontSize: 11, color: t.textFaint }}>
               {isComplete
@@ -6339,7 +6339,7 @@ const FORMAT_PREVIEW_DIMS = {
   "9:16": { w: 1080, h: 1920, displayW: 135, displayH: 240 },
 };
 
-function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onUpdateOverlayPosition, onTemplateChange, templates, selectedTemplateId }) {
+function FormatPreview({ format, previewFrame, template, textOverlays, t, videoInfo, onUpdateOverlayPosition, onTemplateChange, templates, selectedTemplateId, selectedOverlayIndex, onSelectOverlay }) {
   const containerRef = useRef(null);
   const [dragging, setDragging] = useState(null);
 
@@ -6391,7 +6391,7 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
       <div style={{ fontSize: 11, fontWeight: 500, color: t.text }}>{format.label}</div>
       <div style={{ fontSize: 9, color: t.textFaint }}>{format.dims}</div>
 
-      <div ref={containerRef} style={{ position: "relative", width: dims.displayW, height: dims.displayH, borderRadius: 6, overflow: "hidden", border: "1px solid " + t.border, background: "#000", cursor: dragging !== null ? "grabbing" : "default", flexShrink: 0 }}>
+      <div ref={containerRef} onClick={() => onSelectOverlay?.(null)} style={{ position: "relative", width: dims.displayW, height: dims.displayH, borderRadius: 6, overflow: "hidden", border: "1px solid " + t.border, background: "#000", cursor: dragging !== null ? "grabbing" : "default", flexShrink: 0 }}>
         {/* Background */}
         {isBlur && previewFrame && <img src={previewFrame} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: `blur(${blurSigma}px) brightness(${brightness})` }} />}
         {isBlur && !previewFrame && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg,#1a1a2e,#444)" }} />}
@@ -6413,8 +6413,12 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
           const bgPad = overlay.background_color ? Math.max(1, Math.round((overlay.background_padding || 10) * scale)) : 0;
           const fontFamily = overlay.font_family ? `${overlay.font_family}, sans-serif` : "Roboto, sans-serif";
           const isDraggingThis = dragging?.index === origIdx;
+          const isSelected = selectedOverlayIndex === origIdx;
           return (
-            <div key={origIdx} onMouseDown={(e) => handleMouseDown(e, origIdx)} style={{
+            <div key={origIdx}
+              onMouseDown={(e) => handleMouseDown(e, origIdx)}
+              onClick={(e) => { e.stopPropagation(); onSelectOverlay?.(origIdx); }}
+              style={{
               position: "absolute", left: posX, top: posY,
               fontSize: scaledFont, fontFamily, fontWeight: overlay.font_weight || "700",
               color: overlay.font_color || "#fff",
@@ -6424,7 +6428,7 @@ function FormatPreview({ format, previewFrame, template, textOverlays, t, videoI
               cursor: isDraggingThis ? "grabbing" : "grab",
               userSelect: "none", whiteSpace: "nowrap", lineHeight: 1.2,
               textShadow: !overlay.background_color ? "0 1px 4px rgba(0,0,0,0.9)" : "none",
-              outline: isDraggingThis ? "1px dashed rgba(0,254,169,0.6)" : "none",
+              outline: isSelected ? "1px dashed " + t.green : isDraggingThis ? "1px dashed rgba(0,254,169,0.6)" : "none",
               outlineOffset: 3,
               maxWidth: dims.displayW - 8, overflow: "hidden", textOverflow: "ellipsis",
             }}>
@@ -6477,6 +6481,7 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   const [uploadingFormat, setUploadingFormat] = useState(null);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
+  const [selectedOverlayIndex, setSelectedOverlayIndex] = useState(null);
 
   const toggleFormat = (ratio) => {
     setEnabledFormats(prev => {
@@ -6929,8 +6934,10 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn 0.3s ease" }}>
       <button type="button" onClick={onBack} style={{ ...S.btnS, fontSize: 13, padding: "9px 18px", marginBottom: 20 }}>← Back to Tools</button>
-      <div style={{ fontSize: 24, fontWeight: 500, color: t.text, marginBottom: 6 }}>Video Reformatter</div>
-      <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 24 }}>Paste a URL to fetch a video, download the original, or reformat for different ad platforms.</div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: t.text, letterSpacing: "-0.02em" }}>Intake Studio</div>
+        <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>Transform creator content into branded, ad-ready assets</div>
+      </div>
 
       {/* URL input */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
@@ -7170,10 +7177,109 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
         <div>
           {/* 4-panel live preview */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Preview — what you'll get</div>
-              {previewFrame && <div style={{ fontSize: 10, color: t.textFaint }}>Drag text to reposition</div>}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: t.text }}>Preview — what you'll get</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={() => { addOverlay(); setSelectedOverlayIndex(textOverlays.length); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: t.green + "15", border: "1px solid " + t.green + "40", color: t.green, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                  <span style={{ fontSize: 16, fontWeight: 700 }}>T</span> Add Text
+                </button>
+                {previewFrame && <span style={{ fontSize: 11, color: t.textFaint }}>Drag text to reposition · click to select</span>}
+              </div>
             </div>
+
+            {/* Floating toolbar — shown when an overlay is selected */}
+            {selectedOverlayIndex !== null && textOverlays[selectedOverlayIndex] && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px 16px", marginBottom: 12, background: t.card, borderRadius: 10, border: "1px solid " + t.border, boxShadow: "0 2px 12px rgba(0,0,0,0.2)" }}>
+                {/* Variable pills */}
+                <div style={{ display: "flex", gap: 4, alignItems: "center", width: "100%", marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, color: t.textFaint }}>Insert:</span>
+                  {["{creator_handle}", "{campaign_name}", "{product}", "{date}"].map(v => (
+                    <button key={v} onClick={() => updateOverlay(selectedOverlayIndex, "content", (textOverlays[selectedOverlayIndex].content || "") + " " + v)}
+                      style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, border: "1px solid " + t.border, background: t.cardAlt, color: t.green, cursor: "pointer", fontFamily: "monospace" }}>{v}</button>
+                  ))}
+                </div>
+
+                {/* Text input */}
+                <input type="text" value={textOverlays[selectedOverlayIndex].content}
+                  onChange={(e) => updateOverlay(selectedOverlayIndex, "content", e.target.value)}
+                  placeholder="Type your text..." autoFocus
+                  style={{ flex: 1, minWidth: 180, padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 14, fontWeight: 500 }} />
+
+                {/* Font family */}
+                <select value={textOverlays[selectedOverlayIndex].font_family || "Roboto"}
+                  onChange={(e) => updateOverlay(selectedOverlayIndex, "font_family", e.target.value)}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Roboto Condensed">Roboto Condensed</option>
+                  <option value="Montserrat">Montserrat</option>
+                </select>
+
+                {/* Font weight */}
+                <select value={textOverlays[selectedOverlayIndex].font_weight || "700"}
+                  onChange={(e) => updateOverlay(selectedOverlayIndex, "font_weight", e.target.value)}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12, width: 80 }}>
+                  <option value="400">Regular</option><option value="500">Medium</option><option value="600">Semi Bold</option>
+                  <option value="700">Bold</option><option value="800">Extra Bold</option><option value="900">Black</option>
+                </select>
+
+                {/* Font size +/- */}
+                <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  <button onClick={() => updateOverlay(selectedOverlayIndex, "font_size", Math.max(12, (textOverlays[selectedOverlayIndex].font_size || 36) - 4))}
+                    style={{ width: 24, height: 28, borderRadius: "6px 0 0 6px", border: "1px solid " + t.border, background: t.inputBg, color: t.text, cursor: "pointer", fontSize: 14 }}>−</button>
+                  <input type="number" value={textOverlays[selectedOverlayIndex].font_size || 36}
+                    onChange={(e) => updateOverlay(selectedOverlayIndex, "font_size", Math.max(12, Number(e.target.value)))}
+                    style={{ width: 44, height: 28, textAlign: "center", border: "1px solid " + t.border, borderLeft: "none", borderRight: "none", background: t.inputBg, color: t.inputText, fontSize: 12 }} />
+                  <button onClick={() => updateOverlay(selectedOverlayIndex, "font_size", Math.min(200, (textOverlays[selectedOverlayIndex].font_size || 36) + 4))}
+                    style={{ width: 24, height: 28, borderRadius: "0 6px 6px 0", border: "1px solid " + t.border, background: t.inputBg, color: t.text, cursor: "pointer", fontSize: 14 }}>+</button>
+                </div>
+
+                {/* Color swatches */}
+                <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                  {["#FFFFFF", "#000000", "#00FEA9", "#FF4444", "#FFD700", "#63B7BA"].map(c => (
+                    <div key={c} onClick={() => updateOverlay(selectedOverlayIndex, "font_color", c)} style={{ width: 22, height: 22, borderRadius: 4, background: c, cursor: "pointer", border: textOverlays[selectedOverlayIndex].font_color === c ? "2px solid " + t.green : "1px solid " + t.border, flexShrink: 0 }} />
+                  ))}
+                  <input type="text" value={textOverlays[selectedOverlayIndex].font_color || "#FFFFFF"}
+                    onChange={(e) => { if (/^#[0-9A-Fa-f]{0,6}$/.test(e.target.value)) updateOverlay(selectedOverlayIndex, "font_color", e.target.value); }}
+                    style={{ width: 65, padding: "2px 6px", borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 10, fontFamily: "monospace" }} />
+                </div>
+
+                {/* Background */}
+                <select value={textOverlays[selectedOverlayIndex].background_color || "none"}
+                  onChange={(e) => updateOverlay(selectedOverlayIndex, "background_color", e.target.value === "none" ? null : e.target.value)}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                  <option value="none">No BG</option>
+                  <option value="rgba(0,0,0,0.7)">Dark</option>
+                  <option value="rgba(255,255,255,0.85)">Light</option>
+                  <option value="rgba(0,254,169,0.9)">Green</option>
+                </select>
+
+                {/* Timing */}
+                <select value={textOverlays[selectedOverlayIndex].timing || "full"}
+                  onChange={(e) => updateOverlay(selectedOverlayIndex, "timing", e.target.value)}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                  <option value="full">Full video</option>
+                  <option value="first_3s">First 3s</option>
+                  <option value="last_2s">Last 2s</option>
+                </select>
+
+                {/* Apply to format */}
+                <select value={textOverlays[selectedOverlayIndex].applyTo || "all"}
+                  onChange={(e) => updateOverlay(selectedOverlayIndex, "applyTo", e.target.value)}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
+                  <option value="all">All formats</option>
+                  <option value="16:9">16:9 only</option>
+                  <option value="1:1">1:1 only</option>
+                  <option value="4:5">4:5 only</option>
+                  <option value="9:16">9:16 only</option>
+                </select>
+
+                {/* Delete */}
+                <button onClick={() => { removeOverlay(selectedOverlayIndex); setSelectedOverlayIndex(null); }}
+                  style={{ padding: "6px 10px", borderRadius: 6, border: "none", background: (t.red || "#ef4444") + "20", color: t.red || "#ef4444", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>
+                  Delete
+                </button>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
               {[
                 { ratio: "16:9", label: "16:9 Landscape", dims: "1920×1080" },
@@ -7204,6 +7310,8 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
                         onTemplateChange={handleTemplateChange}
                         templates={templates}
                         selectedTemplateId={templateId}
+                        selectedOverlayIndex={selectedOverlayIndex}
+                        onSelectOverlay={setSelectedOverlayIndex}
                       />
                     </div>
                   </div>
@@ -7262,147 +7370,22 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             )}
           </div>
 
-        {/* Text overlays */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>Text Overlays <span style={{ fontSize: 11, color: t.textFaint, fontWeight: 400 }}>(optional)</span></div>
-            <button onClick={addOverlay} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.green + "40", background: t.green + "08", color: t.green, cursor: "pointer", fontWeight: 500 }}>+ Add text</button>
-          </div>
-
-          {textOverlays.map((overlay, i) => (
-            <div key={i} style={{ padding: 14, borderRadius: 10, border: "1px solid " + t.border, background: t.cardAlt, marginBottom: 8 }}>
-              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Text</label>
-                  <input type="text" value={overlay.content} onChange={(e) => updateOverlay(i, "content", e.target.value)}
-                    placeholder="{creator_handle} · {campaign_name} · {date}"
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 13, boxSizing: "border-box" }} />
-                  <div style={{ fontSize: 9, color: t.textFaint, marginTop: 3 }}>
-                    Variables: {"{creator_handle}"} &nbsp; {"{campaign_name}"} &nbsp; {"{product}"} &nbsp; {"{date}"}
-                  </div>
-                </div>
-                <button onClick={() => removeOverlay(i)} style={{ alignSelf: "flex-start", marginTop: 18, fontSize: 11, color: t.red || "#e55", background: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}>Remove</button>
+        {/* Text overlay list — mini summary chips so user knows what's added */}
+        {textOverlays.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+            {textOverlays.map((o, i) => (
+              <div key={i} onClick={() => setSelectedOverlayIndex(i === selectedOverlayIndex ? null : i)}
+                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, border: "1px solid " + (selectedOverlayIndex === i ? t.green : t.border), background: selectedOverlayIndex === i ? t.green + "15" : t.cardAlt, cursor: "pointer", fontSize: 11, color: selectedOverlayIndex === i ? t.green : t.text, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 700, fontSize: 10 }}>T</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{o.content || "(empty)"}</span>
               </div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {/* Font family */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Font</label>
-                  <select value={overlay.font_family || "Roboto"} onChange={(e) => updateOverlay(i, "font_family", e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    {BRAND_FONTS.map(f => <option key={f.name} value={f.name}>{f.label}</option>)}
-                  </select>
-                </div>
-
-                {/* Font weight */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Weight</label>
-                  <select value={overlay.font_weight || "700"} onChange={(e) => updateOverlay(i, "font_weight", e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    {(BRAND_FONTS.find(f => f.name === (overlay.font_family || "Roboto"))?.weights || ["400","700"]).map(w => (
-                      <option key={w} value={w}>{WEIGHT_LABELS[w] || w}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Font size — free number input */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Size (px)</label>
-                  <input type="number" min={8} max={200} value={overlay.font_size || 36}
-                    onChange={(e) => updateOverlay(i, "font_size", Math.max(8, Number(e.target.value) || 36))}
-                    style={{ width: 64, padding: "6px 8px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }} />
-                </div>
-
-                {/* Color swatches + hex input */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Color</label>
-                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                    {["#FFFFFF", "#000000", "#00FEA9", "#FF6B6B", "#63B7BA"].map(c => (
-                      <div key={c} onClick={() => updateOverlay(i, "font_color", c)} style={{
-                        width: 22, height: 22, borderRadius: 4, background: c, cursor: "pointer",
-                        border: overlay.font_color === c ? "2px solid " + t.green : "1px solid " + t.border,
-                        flexShrink: 0,
-                      }} />
-                    ))}
-                    <input type="text" value={overlay.font_color || "#FFFFFF"}
-                      onChange={(e) => updateOverlay(i, "font_color", e.target.value)}
-                      style={{ width: 72, padding: "4px 6px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 11 }} />
-                  </div>
-                </div>
-
-                {/* Background pill */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Background</label>
-                  <select value={overlay.background_color || "none"} onChange={(e) => updateOverlay(i, "background_color", e.target.value === "none" ? null : e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    <option value="none">None</option>
-                    <option value="rgba(0,0,0,0.6)">Dark pill</option>
-                    <option value="rgba(255,255,255,0.8)">Light pill</option>
-                    <option value="rgba(0,254,169,0.9)">Green pill</option>
-                  </select>
-                </div>
-
-                {/* Timing */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>When</label>
-                  <select value={overlay.timing} onChange={(e) => updateOverlay(i, "timing", e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    <option value="full">Full video</option>
-                    <option value="first_3s">First 3 seconds</option>
-                    <option value="last_2s">Last 2 seconds</option>
-                  </select>
-                </div>
-
-                {/* Apply to format */}
-                <div>
-                  <label style={{ fontSize: 10, color: t.textFaint, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Formats</label>
-                  <select value={overlay.applyTo || "all"} onChange={(e) => updateOverlay(i, "applyTo", e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, fontSize: 12 }}>
-                    <option value="all">All formats</option>
-                    <option value="16:9">16:9 only</option>
-                    <option value="1:1">1:1 only</option>
-                    <option value="4:5">4:5 only</option>
-                    <option value="9:16">9:16 only</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Per-format size overrides */}
-              <details style={{ marginTop: 6 }}>
-                <summary style={{ fontSize: 10, color: t.textFaint, cursor: "pointer", userSelect: "none" }}>Per-format size overrides</summary>
-                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                  {["16:9", "1:1", "4:5", "9:16"].map(ratio => (
-                    <div key={ratio} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: t.textFaint, marginBottom: 2 }}>{ratio}</div>
-                      <input type="number" value={overlay.fontSizeOverrides?.[ratio] || ""}
-                        placeholder={String(overlay.font_size || 36)}
-                        onChange={(e) => {
-                          const overrides = { ...(overlay.fontSizeOverrides || {}) };
-                          if (e.target.value) overrides[ratio] = Number(e.target.value);
-                          else delete overrides[ratio];
-                          updateOverlay(i, "fontSizeOverrides", overrides);
-                        }}
-                        style={{ width: 45, padding: "3px 4px", fontSize: 10, borderRadius: 4, border: "1px solid " + t.border, background: t.inputBg, color: t.inputText, textAlign: "center" }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </div>
-          ))}
-
-          {textOverlays.length > 0 && (
-            <div style={{ fontSize: 11, color: t.textFaint, fontStyle: "italic", marginBottom: 6 }}>
-              Drag text directly on the preview panels to position it. Each format can have its own text position.
-            </div>
-          )}
-          {textOverlays.length > 0 && (
+            ))}
             <button onClick={saveOverlaysToTemplate} disabled={savingOverlays}
-              style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, cursor: savingOverlays ? "not-allowed" : "pointer", opacity: savingOverlays ? 0.6 : 1 }}>
-              {savingOverlays ? "Saving..." : "Save overlay config to selected template"}
+              style={{ fontSize: 10, padding: "4px 10px", borderRadius: 20, border: "1px solid " + t.border, background: "transparent", color: t.textFaint, cursor: savingOverlays ? "not-allowed" : "pointer", opacity: savingOverlays ? 0.6 : 1 }}>
+              {savingOverlays ? "Saving..." : "Save to template"}
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Time estimate */}
         {(() => {
@@ -7464,9 +7447,9 @@ function VideoReformatter({ onBack, setActiveReformatJob }) {
             <>
               <button type="button" onClick={() => handleReformatJob(totalEst)} disabled={jobSubmitting}
                 style={{ width: "100%", padding: "12px 24px", borderRadius: 8, border: "none", background: t.green, color: t.isLight ? "#fff" : "#000", fontSize: 14, fontWeight: 600, cursor: jobSubmitting ? "not-allowed" : "pointer", opacity: jobSubmitting ? 0.7 : 1, marginBottom: 6 }}>
-                {jobSubmitting ? "Starting job..." : `Reformat ${enabledCount} format${enabledCount !== 1 ? "s" : ""} (${fmtLabels})`}
+                {jobSubmitting ? "Starting job..." : `Export ${enabledCount} format${enabledCount !== 1 ? "s" : ""} (${fmtLabels})`}
               </button>
-              <div style={{ fontSize: 11, color: t.textFaint, textAlign: "center" }}>Processes in background — you can navigate away</div>
+              <div style={{ fontSize: 11, color: t.textFaint, textAlign: "center" }}>Exports in background — you can navigate away</div>
             </>
           );
         })()}
@@ -11161,7 +11144,7 @@ export default function App() {
                   <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 500, color: ug.title, letterSpacing: "-0.02em" }}>Tools & Settings</div>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400, color: ug.sub }}>5 items</div>
                 </div>
-                {[{ label: "Tools", desc: "Video reformatter and team utilities", nav: "tools" }, { label: "IB-Ai Source of Truth", desc: "Products, claims, scoring, outreach rules", nav: "sourceOfTruth" }, { label: "Settings", desc: "API keys, team access, integrations", nav: "settings" }].map((item, i) => (
+                {[{ label: "Tools", desc: "Intake Studio and team utilities", nav: "tools" }, { label: "IB-Ai Source of Truth", desc: "Products, claims, scoring, outreach rules", nav: "sourceOfTruth" }, { label: "Settings", desc: "API keys, team access, integrations", nav: "settings" }].map((item, i) => (
                   <div key={i} onClick={() => navigate(item.nav)} style={{ background: ug.cardBg, border: "1px solid " + ug.cardBorder, borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = ug.cardHBorder; e.currentTarget.style.background = ug.cardHBg; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = ug.cardBorder; e.currentTarget.style.background = ug.cardBg; }}>
                     <div style={{ fontSize: 15, fontWeight: 500, color: ug.title }}>{item.label}</div>
                     <div style={{ fontSize: 12, color: ug.sub, marginTop: 4 }}>{item.desc}</div>
@@ -12637,7 +12620,7 @@ export default function App() {
             pipeline: "Channel Pipeline",
             influencer: "Influencer Buys",
             tools: "Tools",
-            videotool: "Video Tool",
+            videotool: "Intake Studio",
             settings: "Settings",
             creatorDashboard: "Creator Portal — Dashboard",
             creatorProfile: "Creator Portal — Profile",

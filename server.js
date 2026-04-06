@@ -1207,7 +1207,7 @@ async function processReformatJob(jobId) {
 
   const zipFilename = `${job.video_filename}_all_formats.zip`;
   const zipPath = path.join(outputDir, zipFilename);
-  const folderName = job.video_filename + "_reformats";
+  const folderName = job.video_filename + "_studio_export";
 
   await new Promise((resolve, reject) => {
     const output = fs.createWriteStream(zipPath);
